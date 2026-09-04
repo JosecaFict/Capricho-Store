@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Scaffold reference: home-storefront.png</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alef:wght@700&display=swap">
+  <link rel="stylesheet" href="layout.css">
+  <style>html,body{margin:0}body{background:#f4f4f4}.region{box-sizing:border-box}.region.text p{white-space:pre-wrap}</style>
+</head>
+<body>
+<!-- Reference only. Every region sits at its measured box inside a comp-aspect frame. Take the boxes (layout.css), keep your own semantic structure. -->
+<main class="comp-frame" style="max-width:1505px">
+  <div class="r-navigation region chrome" data-region="navigation"><!-- single-line public navigation on a silver-white ground --></div>
+  <div class="r-brand region text" data-region="brand"><!-- CAPRICHO wordmark --><p style="font-size:var(--r-brand-font);line-height:1.05;margin:0">brand</p></div>
+  <div class="r-nav-primary region control" data-region="nav-primary"><!-- public navigation links; implementation uses only Inicio and Catálogo: rebuild the control's chrome from the crop (comp-spec.mjs --crop nav-primary); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-nav-session region control" data-region="nav-session"><!-- session actions; implementation uses Ingresar and Crear cuenta: rebuild the control's chrome from the crop (comp-spec.mjs --crop nav-session); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-hero-title region text" data-region="hero-title"><!-- large three-line Spanish fashion headline --><p style="font-size:var(--r-hero-title-font);font-family:var(--r-hero-title-family),sans-serif;font-weight:var(--r-hero-title-weight);line-height:1.05;margin:0">hero-title</p></div>
+  <div class="r-hero-copy region text" data-region="hero-copy"><!-- short supporting sentence --><p style="line-height:1.05;margin:0">hero-copy</p></div>
+  <div class="r-hero-action region control" data-region="hero-action"><!-- single cobalt catalog action: rebuild the control's chrome from the crop (comp-spec.mjs --crop hero-action); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <figure class="r-hero-photo region plate" data-region="hero-photo"><img src="..\..\..\assets\plates\hero-photo.png" alt="" style="width:100%;height:100%;object-fit:contain;object-position:center"></figure>
+  <figure class="r-men-photo region plate" data-region="men-photo"><img src="..\..\..\assets\plates\men-photo.png" alt="" style="width:100%;height:100%;object-fit:contain;object-position:center"></figure>
+  <figure class="r-women-photo region plate" data-region="women-photo"><img src="..\..\..\assets\plates\women-photo.png" alt="" style="width:100%;height:100%;object-fit:contain;object-position:center"></figure>
+  <div class="r-men-label region text" data-region="men-label"><!-- Hombre audience label --><p style="line-height:1.05;margin:0">men-label</p></div>
+  <div class="r-women-label region text" data-region="women-label"><!-- Mujer audience label --><p style="line-height:1.05;margin:0">women-label</p></div>
+  <figure class="r-catalog-preview region plate" data-region="catalog-preview"><img src="..\..\..\assets\plates\catalog-preview.png" alt="" style="width:100%;height:100%;object-fit:contain;object-position:center"></figure>
+</main>
+</body>
+</html>

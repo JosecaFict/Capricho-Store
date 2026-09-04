@@ -1,0 +1,2 @@
+"""Capricho Store backend application."""
+

@@ -1,0 +1,3 @@
+Alembic is configured for the existing PostgreSQL schema `capricho`.
+No table-creating migration has been generated or executed.
+

@@ -1,0 +1,5 @@
+{
+  "prompt": "High-fidelity desktop web homepage comp for Capricho Store at 1440x1000. Modular storefront with a 72px single-line navigation, one wide editorial image band, two offset large image tiles labeled Hombre and Mujer, a compact headline and catalog action, and the beginning of a restrained product strip. Cold-luxury retail palette: silver-white, graphite, one cobalt accent, chrome rack-inspired rules, bold contemporary grotesk and consistent 12px geometry. Official product content is limited to POLERA, CAMISA and POLO for HOMBRE or MUJER, plus BLUSA only for MUJER. Category and audience remain separate dimensions. No footwear, pants, dresses, jumpsuits, jackets, accessories, skirts, shorts, bags, other categories, promotions, discounts, fake claims, shopping cart, purchase buttons, gradients, glass, warm beige, serif type, excessive cards or watermark.",
+  "approved": true,
+  "approval_scope": "Composition, proportion, palette and hierarchy only. Any footwear, bag, jacket or invented category visible in the generated reference is explicitly rejected as content and must not appear in the frontend."
+}

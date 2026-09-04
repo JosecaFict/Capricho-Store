@@ -1,0 +1,116 @@
+from collections.abc import AsyncIterator, Callable, Coroutine
+from dataclasses import dataclass
+from typing import Annotated, Any
+from uuid import uuid4
+
+from fastapi import Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import decode_access_token
+from app.db.audit_context import AuditContext, apply_audit_context
+from app.db.session import get_db_session
+from app.modules.auth.exceptions import (
+    InactiveUserError,
+    InvalidCredentialsError,
+    PermissionDeniedError,
+)
+from app.modules.auth.models import Usuario
+from app.modules.auth.repository import AuthRepository
+from app.modules.auth.service import AuthService
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentPrincipal:
+    user: Usuario
+    roles: frozenset[str]
+    permissions: frozenset[str]
+    session_id: str
+
+
+def build_request_audit_context(
+    request: Request,
+    *,
+    user_id: int | None = None,
+    session_id: str | None = None,
+) -> AuditContext:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    ip = forwarded_for.split(",", maxsplit=1)[0].strip() if forwarded_for else None
+    if ip is None and request.client is not None:
+        ip = request.client.host
+
+    return AuditContext(
+        usuario_id=user_id,
+        sesion_id=session_id or request.headers.get("x-session-id") or str(uuid4()),
+        ip=ip,
+        user_agent=request.headers.get("user-agent"),
+        origen="API",
+        request_id=request.headers.get("x-request-id") or str(uuid4()),
+    )
+
+
+async def get_auth_service(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncIterator[AuthService]:
+    yield AuthService(session=session, repository=AuthRepository(session))
+
+
+async def get_current_principal(
+    request: Request,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> CurrentPrincipal:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise InvalidCredentialsError
+
+    try:
+        claims = decode_access_token(credentials.credentials)
+    except ValueError as exc:
+        raise InvalidCredentialsError from exc
+
+    repository = AuthRepository(session)
+    user = await repository.get_user_by_id(claims.user_id)
+    if user is None:
+        raise InvalidCredentialsError
+    if user.estado != "ACTIVO":
+        raise InactiveUserError(user.estado)
+
+    roles = await repository.get_role_names(user.id_usuario)
+    permissions = await repository.get_effective_permissions(user.id_usuario)
+    await apply_audit_context(
+        session,
+        build_request_audit_context(
+            request,
+            user_id=user.id_usuario,
+            session_id=claims.session_id,
+        ),
+    )
+    return CurrentPrincipal(
+        user=user,
+        roles=frozenset(roles),
+        permissions=frozenset(permissions),
+        session_id=claims.session_id,
+    )
+
+
+PermissionDependency = Callable[
+    [CurrentPrincipal],
+    Coroutine[Any, Any, CurrentPrincipal],
+]
+
+
+def require_permission(permission_code: str) -> PermissionDependency:
+    async def dependency(
+        principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    ) -> CurrentPrincipal:
+        if permission_code not in principal.permissions:
+            raise PermissionDeniedError
+        return principal
+
+    return dependency
+

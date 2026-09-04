@@ -1,0 +1,43 @@
+import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { AuthService } from '../../core/auth/auth.service';
+
+@Component({
+  selector: 'app-account',
+  imports: [RouterLink],
+  template: `
+    <section class="account-page page-shell">
+      @if (auth.currentUser(); as user) {
+        <div class="account-heading">
+          <p>Mi cuenta</p>
+          <h1>{{ user.nombres }} {{ user.apellidos }}</h1>
+          <span class="status-chip">{{ user.estado }}</span>
+        </div>
+        <dl class="account-details">
+          <div>
+            <dt>Correo</dt>
+            <dd>{{ user.correo }}</dd>
+          </div>
+          <div>
+            <dt>Teléfono</dt>
+            <dd>{{ user.telefono || 'No registrado' }}</dd>
+          </div>
+          <div>
+            <dt>CI</dt>
+            <dd>{{ user.ci || 'No registrado' }}</dd>
+          </div>
+          <div>
+            <dt>Rol</dt>
+            <dd>{{ user.roles.join(', ') || 'Cliente' }}</dd>
+          </div>
+        </dl>
+        <a class="button button--secondary" routerLink="/catalogo">Explorar catálogo</a>
+      } @else {
+        <p>Cargando tu cuenta…</p>
+      }
+    </section>
+  `,
+})
+export class Account {
+  readonly auth = inject(AuthService);
+}

@@ -1,0 +1,747 @@
+import { CommonModule } from '@angular/common';
+import { Component, inject, OnInit, signal } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { forkJoin } from 'rxjs';
+import { PermissionService } from '../../core/permissions/permission.service';
+import { ApiErrorService } from '../../core/services/api-error.service';
+import { AdminApiService, Entity } from './admin-api.service';
+
+const MASTER: any = {
+  categories: {
+    label: 'Categorías',
+    id: 'id_categoria',
+    fields: [
+      ['nombre', 'Nombre', 'text'],
+      ['descripcion', 'Descripción', 'text'],
+      ['activo', 'Activo', 'checkbox'],
+    ],
+  },
+  brands: {
+    label: 'Marcas',
+    id: 'id_marca',
+    fields: [
+      ['nombre', 'Nombre', 'text'],
+      ['descripcion', 'Descripción', 'text'],
+      ['pais_origen', 'País de origen', 'text'],
+      ['activo', 'Activo', 'checkbox'],
+    ],
+  },
+  colors: {
+    label: 'Colores',
+    id: 'id_color',
+    fields: [
+      ['nombre', 'Nombre', 'text'],
+      ['codigo_hex', 'Código hexadecimal', 'color'],
+      ['activo', 'Activo', 'checkbox'],
+    ],
+  },
+  seasons: {
+    label: 'Temporadas',
+    id: 'id_temporada',
+    fields: [
+      ['nombre', 'Nombre', 'text'],
+      ['anio', 'Año', 'number'],
+      ['fecha_inicio', 'Inicio', 'date'],
+      ['fecha_fin', 'Fin', 'date'],
+      ['activo', 'Activo', 'checkbox'],
+    ],
+  },
+  collections: {
+    label: 'Colecciones',
+    id: 'id_coleccion',
+    fields: [
+      ['nombre', 'Nombre', 'text'],
+      ['id_temporada', 'ID temporada', 'number'],
+      ['descripcion', 'Descripción', 'text'],
+      ['activo', 'Activo', 'checkbox'],
+    ],
+  },
+};
+
+@Component({
+  selector: 'app-master-data',
+  imports: [CommonModule, ReactiveFormsModule],
+  template: `<div class="admin-page">
+    <header class="admin-page-heading">
+      <div>
+        <p class="eyebrow">Catálogo</p>
+        <h1>Datos maestros</h1>
+        <p>Categorías oficiales, marcas, colores, temporadas y colecciones.</p>
+      </div>
+    </header>
+    <div class="admin-tabs" role="tablist">
+      @for (k of keys; track k) {
+        <button [class.active]="active() === k" (click)="select(k)">{{ cfg(k).label }}</button>
+      }
+    </div>
+    @if (message()) {
+      <div class="notice" [class.notice--error]="error()">{{ message() }}</div>
+    }
+    <section class="admin-editor">
+      <header>
+        <h2>{{ editing() ? 'Editar' : 'Nuevo' }} · {{ cfg(active()).label }}</h2>
+      </header>
+      <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
+        @for (f of cfg(active()).fields; track f[0]) {
+          <label class="field"
+            ><span>{{ f[1] }}</span>
+            @if (f[2] === 'checkbox') {
+              <input type="checkbox" [formControlName]="f[0]" />
+            } @else {
+              <input [type]="f[2]" [formControlName]="f[0]" />
+            }
+          </label>
+        }
+        <div class="admin-form-actions">
+          <button class="button button--primary" [disabled]="form.invalid">Guardar</button>
+          @if (editing()) {
+            <button type="button" class="button button--quiet" (click)="reset()">Cancelar</button>
+          }
+        </div>
+      </form>
+    </section>
+    <div class="admin-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Detalle</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (x of items(); track x[cfg(active()).id]) {
+            <tr>
+              <td>
+                <strong>{{ x['nombre'] }}</strong>
+              </td>
+              <td>
+                {{ x['descripcion'] || x['pais_origen'] || x['codigo_hex'] || x['anio'] || '—' }}
+              </td>
+              <td>{{ x['activo'] ? 'ACTIVO' : 'INACTIVO' }}</td>
+              <td class="admin-row-actions">
+                @if (canEdit()) {
+                  <button (click)="edit(x)">Editar</button>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4">Sin registros.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>`,
+})
+export class MasterDataAdmin implements OnInit {
+  private api = inject(AdminApiService);
+  private fb = inject(FormBuilder);
+  private errs = inject(ApiErrorService);
+  private perms = inject(PermissionService);
+  keys = Object.keys(MASTER);
+  active = signal('categories');
+  items = signal<Entity[]>([]);
+  editing = signal<number | null>(null);
+  message = signal('');
+  error = signal(false);
+  canEdit = () => this.perms.hasAny(['productos.crear', 'productos.editar']);
+  form = this.fb.group({
+    nombre: ['', Validators.required],
+    descripcion: [''],
+    pais_origen: [''],
+    codigo_hex: ['#000000'],
+    anio: [null as number | null],
+    fecha_inicio: [''],
+    fecha_fin: [''],
+    id_temporada: [null as number | null],
+    activo: [true],
+  });
+  ngOnInit() {
+    this.load();
+  }
+  cfg(k: string) {
+    return MASTER[k];
+  }
+  select(k: string) {
+    this.active.set(k);
+    this.reset();
+    this.load();
+  }
+  load() {
+    this.api
+      .list(this.active())
+      .subscribe({ next: (v) => this.items.set(v), error: (e) => this.fail(e) });
+  }
+  reset() {
+    this.editing.set(null);
+    this.form.reset({ activo: true, codigo_hex: '#000000' });
+  }
+  edit(x: Entity) {
+    this.editing.set(x[this.cfg(this.active()).id]);
+    this.form.patchValue(x as any);
+    scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  save() {
+    const allowed = this.cfg(this.active()).fields.map((x: any) => x[0]);
+    const raw = this.form.getRawValue() as Entity;
+    const payload = Object.fromEntries(
+      Object.entries(raw).filter(([k, v]) => allowed.includes(k) && v !== '' && v !== null),
+    );
+    const req = this.editing()
+      ? this.api.patch(`${this.active()}/${this.editing()}`, payload)
+      : this.api.post(this.active(), payload);
+    req.subscribe({
+      next: () => {
+        this.reset();
+        this.load();
+        this.message.set('Registro guardado.');
+        this.error.set(false);
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+  fail(e: unknown) {
+    this.error.set(true);
+    this.message.set(this.errs.message(e));
+  }
+}
+
+@Component({
+  selector: 'app-products-admin',
+  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  template: `<div class="admin-page">
+    <header class="admin-page-heading">
+      <div>
+        <p class="eyebrow">Catálogo</p>
+        <h1>Productos</h1>
+        <p>Precio, público, variantes y disponibilidad editorial.</p>
+      </div>
+      @if (canCreate()) {
+        <button class="button button--primary" (click)="open()">Nuevo producto</button>
+      }
+    </header>
+    @if (message()) {
+      <div class="notice notice--error">{{ message() }}</div>
+    }
+    @if (show()) {
+      <section class="admin-editor">
+        <header>
+          <h2>{{ editing() ? 'Editar' : 'Crear' }} producto</h2>
+          <button class="button button--quiet" (click)="show.set(false)">Cerrar</button>
+        </header>
+        <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
+          <label class="field"><span>Nombre</span><input formControlName="nombre" /></label
+          ><label class="field"
+            ><span>Categoría</span
+            ><select formControlName="id_categoria" (change)="enforceAudience()">
+              <option value="">Seleccionar</option>
+              @for (c of categories(); track c['id_categoria']) {
+                <option [value]="c['id_categoria']">{{ c['nombre'] }}</option>
+              }
+            </select></label
+          ><label class="field"
+            ><span>Marca</span
+            ><select formControlName="id_marca">
+              <option value="">Seleccionar</option>
+              @for (m of brands(); track m['id_marca']) {
+                <option [value]="m['id_marca']">{{ m['nombre'] }}</option>
+              }
+            </select></label
+          ><label class="field"
+            ><span>Público</span
+            ><select formControlName="publico_objetivo">
+              <option>HOMBRE</option>
+              <option>MUJER</option>
+            </select></label
+          ><label class="field field--wide"
+            ><span>Descripción</span
+            ><textarea formControlName="descripcion" rows="3"></textarea></label
+          ><label class="check-field"
+            ><input type="checkbox" formControlName="permite_vestidor" /> Vestidor habilitado</label
+          ><label class="check-field"
+            ><input type="checkbox" formControlName="activo" /> Activo</label
+          >
+          <div class="admin-form-actions">
+            <button class="button button--primary" [disabled]="form.invalid">
+              Guardar producto
+            </button>
+          </div>
+        </form>
+      </section>
+    }
+    <div class="admin-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Categoría / público</th>
+            <th>Precio</th>
+            <th>Variantes</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of products(); track p['id_producto']) {
+            <tr>
+              <td>
+                <strong>{{ p['nombre'] }}</strong
+                ><small>{{ p['marca'] }}</small>
+              </td>
+              <td>{{ p['categoria'] }} · {{ p['publico_objetivo'] }}</td>
+              <td>{{ p['precio_actual'] == null ? 'Sin precio' : 'Bs ' + p['precio_actual'] }}</td>
+              <td>{{ p['variantes']?.length || 0 }}</td>
+              <td>{{ p['activo'] ? 'ACTIVO' : 'INACTIVO' }}</td>
+              <td class="admin-row-actions">
+                <a [routerLink]="['/admin/productos', p['id_producto']]">Gestionar</a>
+                @if (canEdit()) {
+                  <button (click)="edit(p)">Editar</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>`,
+})
+export class ProductsAdmin implements OnInit {
+  private api = inject(AdminApiService);
+  private fb = inject(FormBuilder);
+  private errs = inject(ApiErrorService);
+  private perms = inject(PermissionService);
+  products = signal<Entity[]>([]);
+  categories = signal<Entity[]>([]);
+  brands = signal<Entity[]>([]);
+  show = signal(false);
+  editing = signal<number | null>(null);
+  message = signal('');
+  canCreate = () => this.perms.has('productos.crear');
+  canEdit = () => this.perms.has('productos.editar');
+  form = this.fb.group({
+    id_categoria: [null as number | null, Validators.required],
+    id_marca: [null as number | null, Validators.required],
+    nombre: ['', Validators.required],
+    descripcion: [''],
+    publico_objetivo: ['MUJER', Validators.required],
+    permite_vestidor: [true],
+    activo: [true],
+  });
+  ngOnInit() {
+    forkJoin({
+      categories: this.api.list('categories'),
+      brands: this.api.list('brands'),
+    }).subscribe((v) => {
+      this.categories.set(v.categories);
+      this.brands.set(v.brands);
+    });
+    this.load();
+  }
+  load() {
+    this.api.products({ activo: undefined, page_size: 100 }).subscribe({
+      next: (v) => this.products.set(v.items),
+      error: (e) => this.message.set(this.errs.message(e)),
+    });
+  }
+  open() {
+    this.editing.set(null);
+    this.form.reset({ publico_objetivo: 'MUJER', permite_vestidor: true, activo: true });
+    this.show.set(true);
+  }
+  edit(p: Entity) {
+    this.editing.set(p['id_producto']);
+    this.form.patchValue(p as any);
+    this.show.set(true);
+    scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  enforceAudience() {
+    const c = this.categories().find((x) => x['id_categoria'] == this.form.value.id_categoria);
+    if (c?.['nombre'] === 'BLUSA') this.form.controls.publico_objetivo.setValue('MUJER');
+  }
+  save() {
+    this.enforceAudience();
+    const req = this.editing()
+      ? this.api.patch(`products/${this.editing()}`, this.form.getRawValue())
+      : this.api.post('products', this.form.getRawValue());
+    req.subscribe({
+      next: () => {
+        this.show.set(false);
+        this.load();
+      },
+      error: (e) => this.message.set(this.errs.message(e)),
+    });
+  }
+}
+
+@Component({
+  selector: 'app-product-admin-detail',
+  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  template: `<div class="admin-page">
+    <a class="back-link" routerLink="/admin/productos">← Productos</a>
+    @if (product(); as p) {
+      <header class="admin-page-heading">
+        <div>
+          <p class="eyebrow">{{ p['categoria'] }} · {{ p['publico_objetivo'] }}</p>
+          <h1>{{ p['nombre'] }}</h1>
+          <p>{{ p['marca'] }} · {{ p['activo'] ? 'Activo' : 'Inactivo' }}</p>
+        </div>
+        <strong class="admin-price">{{
+          p['precio_actual'] == null ? 'Sin precio' : 'Bs ' + p['precio_actual']
+        }}</strong>
+      </header>
+      <div class="admin-detail-grid">
+        <section class="admin-panel">
+          <h2>Precio</h2>
+          <form [formGroup]="priceForm" (ngSubmit)="setPrice()" class="admin-inline-form">
+            <label class="field"
+              ><span>Nuevo precio</span
+              ><input type="number" min="0" step=".01" formControlName="precio" /></label
+            ><button class="button button--primary">Actualizar</button>
+          </form>
+          <div class="admin-timeline">
+            @for (x of prices(); track x['id_historial_precio']) {
+              <p>
+                <strong>Bs {{ x['precio'] }}</strong
+                ><small
+                  >{{ x['fecha_inicio'] | date: 'medium' }}
+                  {{ x['fecha_fin'] ? '— cerrado' : '— actual' }}</small
+                >
+              </p>
+            }
+          </div>
+        </section>
+        <section class="admin-panel">
+          <h2>Variantes</h2>
+          <form
+            [formGroup]="variantForm"
+            (ngSubmit)="addVariant()"
+            class="admin-form-grid admin-form-grid--two"
+          >
+            <label class="field"
+              ><span>Talla</span
+              ><select formControlName="id_talla">
+                @for (s of sizes(); track s['id_talla']) {
+                  <option [value]="s['id_talla']">{{ s['codigo'] }}</option>
+                }
+              </select></label
+            ><label class="field"
+              ><span>Color</span
+              ><select formControlName="id_color">
+                @for (c of colors(); track c['id_color']) {
+                  <option [value]="c['id_color']">{{ c['nombre'] }}</option>
+                }
+              </select></label
+            ><label class="field"><span>SKU</span><input formControlName="sku" /></label
+            ><label class="field"
+              ><span>Código de barras</span><input formControlName="codigo_barras" /></label
+            ><button class="button button--secondary">Añadir variante</button>
+          </form>
+          <div class="permission-list">
+            @for (v of p['variantes']; track v['id_variante']) {
+              <div>
+                <span
+                  ><strong>{{ v['sku'] }}</strong
+                  ><small>{{ v['talla'] }} · {{ v['color'] }}</small></span
+                ><span>{{ v['activo'] ? 'ACTIVA' : 'INACTIVA' }}</span>
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+      <section class="admin-panel">
+        <h2>Imágenes y medidas</h2>
+        <p class="admin-help">
+          La API registra referencias de almacenamiento; Angular no sube archivos directamente.
+        </p>
+        <form [formGroup]="imageForm" (ngSubmit)="addImage()" class="admin-form-grid">
+          <label class="field"><span>Public ID</span><input formControlName="public_id" /></label
+          ><label class="field"
+            ><span>URL segura</span><input type="url" formControlName="secure_url" /></label
+          ><label class="field"
+            ><span>Tipo</span
+            ><select formControlName="tipo">
+              <option>CATALOGO</option>
+              <option>MINIATURA</option>
+              <option>PROMOCIONAL</option>
+            </select></label
+          ><label class="field"
+            ><span>Orden</span><input type="number" min="1" formControlName="orden" /></label
+          ><label class="check-field"
+            ><input type="checkbox" formControlName="es_principal" /> Principal</label
+          ><button class="button button--secondary">Registrar imagen</button>
+        </form>
+        <div class="admin-image-list">
+          @for (i of images(); track i['id_imagen']) {
+            <span
+              ><a [href]="i['secure_url']" target="_blank" rel="noopener"
+                >{{ i['tipo'] }} · {{ i['public_id'] }}</a
+              >
+              <button class="button button--quiet" (click)="toggleImage(i)">
+                {{ i['es_principal'] ? 'Quitar principal' : 'Marcar principal' }}
+              </button></span
+            >
+          }
+        </div>
+      </section>
+      <div class="admin-detail-grid">
+        <section class="admin-panel">
+          <h2>Medidas por talla</h2>
+          <form
+            [formGroup]="measurementForm"
+            (ngSubmit)="saveMeasurement()"
+            class="admin-form-grid admin-form-grid--two"
+          >
+            <label class="field"
+              ><span>Talla</span
+              ><select formControlName="id_talla">
+                @for (s of sizes(); track s['id_talla']) {
+                  <option [value]="s['id_talla']">{{ s['codigo'] }}</option>
+                }
+              </select></label
+            >
+            <label class="field"
+              ><span>Hombros (cm)</span
+              ><input type="number" step=".01" formControlName="ancho_hombros_cm"
+            /></label>
+            <label class="field"
+              ><span>Pecho (cm)</span
+              ><input type="number" step=".01" formControlName="ancho_pecho_cm"
+            /></label>
+            <label class="field"
+              ><span>Largo (cm)</span
+              ><input type="number" step=".01" formControlName="largo_prenda_cm"
+            /></label>
+            <label class="field"
+              ><span>Manga (cm)</span
+              ><input type="number" step=".01" formControlName="largo_manga_cm"
+            /></label>
+            <button class="button button--secondary">Guardar medidas</button>
+          </form>
+          <div class="permission-list">
+            @for (m of measurements(); track m['id_medida']) {
+              <div>
+                <strong>{{ m['talla'] }}</strong
+                ><span
+                  >{{ m['ancho_pecho_cm'] || '—' }} cm pecho · {{ m['largo_prenda_cm'] || '—' }} cm
+                  largo</span
+                >
+              </div>
+            }
+          </div>
+        </section>
+        <section class="admin-panel">
+          <h2>Temporadas y colecciones</h2>
+          <form [formGroup]="relationForm" class="admin-inline-form">
+            <label class="field"
+              ><span>Temporada</span
+              ><select formControlName="id_temporada">
+                <option value="">Seleccionar</option>
+                @for (s of seasons(); track s['id_temporada']) {
+                  <option [value]="s['id_temporada']">{{ s['nombre'] }}</option>
+                }
+              </select></label
+            ><button type="button" class="button button--secondary" (click)="addSeason()">
+              Asociar
+            </button>
+          </form>
+          <div class="admin-lot-trace">
+            @for (s of productSeasons(); track s['id_temporada']) {
+              <span
+                >{{ s['nombre'] }}
+                <button (click)="removeSeason(s['id_temporada'])" aria-label="Quitar temporada">
+                  ×
+                </button></span
+              >
+            }
+          </div>
+          <form [formGroup]="relationForm" class="admin-inline-form">
+            <label class="field"
+              ><span>Colección</span
+              ><select formControlName="id_coleccion">
+                <option value="">Seleccionar</option>
+                @for (c of collections(); track c['id_coleccion']) {
+                  <option [value]="c['id_coleccion']">{{ c['nombre'] }}</option>
+                }
+              </select></label
+            ><button type="button" class="button button--secondary" (click)="addCollection()">
+              Asociar
+            </button>
+          </form>
+          <div class="admin-lot-trace">
+            @for (c of productCollections(); track c['id_coleccion']) {
+              <span
+                >{{ c['nombre'] }}
+                <button (click)="removeCollection(c['id_coleccion'])" aria-label="Quitar colección">
+                  ×
+                </button></span
+              >
+            }
+          </div>
+        </section>
+      </div>
+    } @else {
+      <div class="admin-skeleton"></div>
+    }
+    @if (message()) {
+      <div class="notice" [class.notice--error]="error()">{{ message() }}</div>
+    }
+  </div>`,
+})
+export class ProductAdminDetail implements OnInit {
+  private api = inject(AdminApiService);
+  private route = inject(ActivatedRoute);
+  private fb = inject(FormBuilder);
+  private errs = inject(ApiErrorService);
+  id = Number(this.route.snapshot.paramMap.get('id'));
+  product = signal<Entity | null>(null);
+  prices = signal<Entity[]>([]);
+  images = signal<Entity[]>([]);
+  sizes = signal<Entity[]>([]);
+  colors = signal<Entity[]>([]);
+  measurements = signal<Entity[]>([]);
+  seasons = signal<Entity[]>([]);
+  collections = signal<Entity[]>([]);
+  productSeasons = signal<Entity[]>([]);
+  productCollections = signal<Entity[]>([]);
+  message = signal('');
+  error = signal(false);
+  priceForm = this.fb.group({
+    precio: [null as number | null, [Validators.required, Validators.min(0)]],
+  });
+  variantForm = this.fb.group({
+    id_talla: [null as number | null, Validators.required],
+    id_color: [null as number | null, Validators.required],
+    sku: ['', Validators.required],
+    codigo_barras: [''],
+    activo: [true],
+  });
+  imageForm = this.fb.group({
+    proveedor_storage: ['CLOUDINARY'],
+    public_id: ['', Validators.required],
+    secure_url: ['', [Validators.required]],
+    tipo: ['CATALOGO'],
+    orden: [1],
+    es_principal: [false],
+  });
+  measurementForm = this.fb.group({
+    id_talla: [null as number | null, Validators.required],
+    ancho_hombros_cm: [null as number | null],
+    ancho_pecho_cm: [null as number | null],
+    largo_prenda_cm: [null as number | null],
+    largo_manga_cm: [null as number | null],
+  });
+  relationForm = this.fb.group({
+    id_temporada: [null as number | null],
+    id_coleccion: [null as number | null],
+  });
+  ngOnInit() {
+    this.load();
+  }
+  load() {
+    forkJoin({
+      product: this.api.get(`products/${this.id}`),
+      prices: this.api.list(`products/${this.id}/price-history`),
+      images: this.api.list(`products/${this.id}/images`),
+      sizes: this.api.list('sizes'),
+      colors: this.api.list('colors'),
+      measurements: this.api.list(`products/${this.id}/measurements`),
+      seasons: this.api.list('seasons'),
+      collections: this.api.list('collections'),
+      productSeasons: this.api.list(`products/${this.id}/seasons`),
+      productCollections: this.api.list(`products/${this.id}/collections`),
+    }).subscribe({
+      next: (v) => {
+        this.product.set(v.product);
+        this.prices.set(v.prices);
+        this.images.set(v.images);
+        this.sizes.set(v.sizes);
+        this.colors.set(v.colors);
+        this.measurements.set(v.measurements);
+        this.seasons.set(v.seasons);
+        this.collections.set(v.collections);
+        this.productSeasons.set(v.productSeasons);
+        this.productCollections.set(v.productCollections);
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+  setPrice() {
+    this.api.post(`products/${this.id}/price`, this.priceForm.getRawValue()).subscribe({
+      next: () => {
+        this.ok('Precio actualizado.');
+        this.load();
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+  addVariant() {
+    this.api.post(`products/${this.id}/variants`, this.variantForm.getRawValue()).subscribe({
+      next: () => {
+        this.ok('Variante creada.');
+        this.variantForm.reset({ activo: true });
+        this.load();
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+  addImage() {
+    this.api.post(`products/${this.id}/images`, this.imageForm.getRawValue()).subscribe({
+      next: () => {
+        this.ok('Imagen registrada.');
+        this.load();
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+  toggleImage(image: Entity) {
+    this.api
+      .patch(`product-images/${image['id_imagen']}`, { es_principal: !image['es_principal'] })
+      .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
+  }
+  saveMeasurement() {
+    const { id_talla, ...payload } = this.measurementForm.getRawValue();
+    this.api.put(`products/${this.id}/measurements/${id_talla}`, payload).subscribe({
+      next: () => {
+        this.ok('Medidas guardadas.');
+        this.load();
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+  addSeason() {
+    const id = this.relationForm.value.id_temporada;
+    if (!id) return;
+    this.api
+      .post(`products/${this.id}/seasons`, { id_temporada: id })
+      .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
+  }
+  removeSeason(id: number) {
+    this.api
+      .delete(`products/${this.id}/seasons/${id}`)
+      .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
+  }
+  addCollection() {
+    const id = this.relationForm.value.id_coleccion;
+    if (!id) return;
+    this.api
+      .post(`products/${this.id}/collections`, { id_coleccion: id })
+      .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
+  }
+  removeCollection(id: number) {
+    this.api
+      .delete(`products/${this.id}/collections/${id}`)
+      .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
+  }
+  ok(m: string) {
+    this.error.set(false);
+    this.message.set(m);
+  }
+  fail(e: unknown) {
+    this.error.set(true);
+    this.message.set(this.errs.message(e));
+  }
+}
