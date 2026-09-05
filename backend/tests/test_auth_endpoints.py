@@ -9,6 +9,7 @@ from app.modules.auth.dependencies import (
     CurrentPrincipal,
     get_auth_service,
     get_current_principal,
+    get_password_recovery_service,
 )
 from app.modules.auth.exceptions import (
     EmailAlreadyRegisteredError,
@@ -16,7 +17,12 @@ from app.modules.auth.exceptions import (
     InvalidCredentialsError,
 )
 from app.modules.auth.models import Usuario
-from app.modules.auth.schemas import TokenResponse, UserResponse
+from app.modules.auth.schemas import (
+    MessageResponse,
+    PasswordRecoveryVerifyResponse,
+    TokenResponse,
+    UserResponse,
+)
 
 REGISTER_PAYLOAD = {
     "nombres": "Ana",
@@ -24,7 +30,7 @@ REGISTER_PAYLOAD = {
     "correo": "ana@example.com",
     "telefono": "70000000",
     "ci": "1234567",
-    "password": "StrongPassword123",
+    "password": "StrongPassword123!",
 }
 
 
@@ -111,6 +117,22 @@ async def test_register_rejects_duplicate_email() -> None:
 
     assert status_code == 409
     assert body == {"detail": "Email already registered"}
+
+
+async def test_register_rejects_password_without_special_character() -> None:
+    service = AsyncMock()
+    payload = {**REGISTER_PAYLOAD, "password": "StrongPassword123"}
+
+    status_code, body = await request_with_service(
+        "POST",
+        "/api/v1/auth/register",
+        service,
+        json=payload,
+    )
+
+    assert status_code == 422
+    assert "carácter especial" in str(body)
+    service.register_customer.assert_not_awaited()
 
 
 async def test_login_successfully() -> None:
@@ -216,3 +238,81 @@ async def test_me_without_token() -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid credentials"}
 
+
+async def request_with_recovery_service(
+    path: str,
+    service: AsyncMock,
+    payload: dict[str, str],
+) -> tuple[int, dict]:
+    async def override_service() -> AsyncIterator[AsyncMock]:
+        yield service
+
+    app.dependency_overrides[get_password_recovery_service] = override_service
+    try:
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(path, json=payload)
+    finally:
+        app.dependency_overrides.clear()
+    return response.status_code, response.json()
+
+
+async def test_password_recovery_request_uses_generic_response() -> None:
+    service = AsyncMock()
+    service.request_code.return_value = MessageResponse(
+        message="Si el correo está registrado, recibirás un código."
+    )
+
+    status_code, body = await request_with_recovery_service(
+        "/api/v1/auth/password-recovery/request",
+        service,
+        {"correo": "ana@example.com"},
+    )
+
+    assert status_code == 200
+    assert "correo" in body["message"]
+    service.request_code.assert_awaited_once()
+
+
+async def test_password_recovery_verifies_six_digit_code() -> None:
+    service = AsyncMock()
+    service.verify_code.return_value = PasswordRecoveryVerifyResponse(
+        reset_token="temporary.jwt.token",
+        expires_in=600,
+    )
+
+    status_code, body = await request_with_recovery_service(
+        "/api/v1/auth/password-recovery/verify",
+        service,
+        {"correo": "ana@example.com", "codigo": "123456"},
+    )
+
+    assert status_code == 200
+    assert body["reset_token"] == "temporary.jwt.token"
+
+
+async def test_password_recovery_rejects_malformed_code() -> None:
+    service = AsyncMock()
+
+    status_code, _ = await request_with_recovery_service(
+        "/api/v1/auth/password-recovery/verify",
+        service,
+        {"correo": "ana@example.com", "codigo": "12345a"},
+    )
+
+    assert status_code == 422
+    service.verify_code.assert_not_awaited()
+
+
+async def test_password_reset_rejects_weak_password() -> None:
+    service = AsyncMock()
+
+    status_code, body = await request_with_recovery_service(
+        "/api/v1/auth/password-recovery/reset",
+        service,
+        {"reset_token": "temporary.jwt.token", "password": "weakpass"},
+    )
+
+    assert status_code == 422
+    assert "mayúscula" in str(body)
+    service.reset_password.assert_not_awaited()

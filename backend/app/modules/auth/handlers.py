@@ -3,8 +3,11 @@ from fastapi.responses import JSONResponse
 
 from app.modules.auth.exceptions import (
     EmailAlreadyRegisteredError,
+    EmailDeliveryError,
     InactiveUserError,
     InvalidCredentialsError,
+    InvalidPasswordRecoveryCodeError,
+    InvalidPasswordResetTokenError,
     PermissionDeniedError,
     SecurityConfigurationError,
 )
@@ -58,10 +61,45 @@ async def security_configuration_handler(
     )
 
 
+async def invalid_password_recovery_code_handler(
+    _: Request,
+    __: InvalidPasswordRecoveryCodeError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": "El código es incorrecto, venció o alcanzó el límite de intentos."},
+    )
+
+
+async def invalid_password_reset_token_handler(
+    _: Request,
+    __: InvalidPasswordResetTokenError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": "La autorización para cambiar la contraseña no es válida o venció."},
+    )
+
+
+async def email_delivery_handler(_: Request, __: EmailDeliveryError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "No pudimos enviar el código. Intenta nuevamente en unos minutos."},
+    )
+
+
 def register_auth_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(EmailAlreadyRegisteredError, email_already_registered_handler)
     app.add_exception_handler(InvalidCredentialsError, invalid_credentials_handler)
     app.add_exception_handler(InactiveUserError, inactive_user_handler)
     app.add_exception_handler(PermissionDeniedError, permission_denied_handler)
     app.add_exception_handler(SecurityConfigurationError, security_configuration_handler)
-
+    app.add_exception_handler(
+        InvalidPasswordRecoveryCodeError,
+        invalid_password_recovery_code_handler,
+    )
+    app.add_exception_handler(
+        InvalidPasswordResetTokenError,
+        invalid_password_reset_token_handler,
+    )
+    app.add_exception_handler(EmailDeliveryError, email_delivery_handler)

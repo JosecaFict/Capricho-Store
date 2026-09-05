@@ -23,3 +23,14 @@ class PermissionDeniedError(AuthError):
 class SecurityConfigurationError(AuthError):
     pass
 
+
+class InvalidPasswordRecoveryCodeError(AuthError):
+    pass
+
+
+class InvalidPasswordResetTokenError(AuthError):
+    pass
+
+
+class EmailDeliveryError(AuthError):
+    pass

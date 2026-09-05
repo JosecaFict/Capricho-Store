@@ -34,6 +34,34 @@ class Settings(BaseSettings):
         le=1440,
     )
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
+    redis_url: str | None = Field(default=None, alias="REDIS_URL")
+    brevo_api_key: str | None = Field(default=None, alias="BREVO_API_KEY")
+    brevo_sender_email: str | None = Field(default=None, alias="BREVO_SENDER_EMAIL")
+    brevo_sender_name: str = Field(default="Capricho Store", alias="BREVO_SENDER_NAME")
+    password_reset_otp_expire_minutes: int = Field(
+        default=10,
+        alias="PASSWORD_RESET_OTP_EXPIRE_MINUTES",
+        ge=5,
+        le=30,
+    )
+    password_reset_otp_max_attempts: int = Field(
+        default=5,
+        alias="PASSWORD_RESET_OTP_MAX_ATTEMPTS",
+        ge=3,
+        le=10,
+    )
+    password_reset_request_cooldown_seconds: int = Field(
+        default=60,
+        alias="PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS",
+        ge=30,
+        le=600,
+    )
+    password_reset_token_expire_minutes: int = Field(
+        default=10,
+        alias="PASSWORD_RESET_TOKEN_EXPIRE_MINUTES",
+        ge=5,
+        le=30,
+    )
     database_schema: Literal["capricho"] = "capricho"
 
     @field_validator("database_url")

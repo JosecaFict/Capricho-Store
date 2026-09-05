@@ -268,6 +268,9 @@ h3 {
 .site-nav .nav-signup::after {
   display: none;
 }
+.site-nav .nav-admin {
+  color: var(--accent-dark);
+}
 .nav-action:hover {
   color: var(--accent);
 }
@@ -619,6 +622,152 @@ h3 {
 }
 .field-error {
   color: var(--danger);
+}
+app-password-field {
+  display: block;
+}
+.password-control {
+  position: relative;
+}
+.password-control input {
+  padding-right: 3.25rem;
+}
+.password-visibility {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  place-items: center;
+  transform: translateY(-50%);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.password-visibility:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+.password-visibility svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+.password-requirements {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 0.8rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  list-style: none;
+}
+.password-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.password-requirements li > span:first-child {
+  position: relative;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #858b93;
+  border-radius: 50%;
+}
+.password-requirements li.is-met {
+  color: var(--ink);
+}
+.password-requirements li.is-met > span:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.password-requirements li.is-met > span:first-child::after {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  width: 3px;
+  height: 6px;
+  border-right: 1.5px solid #fff;
+  border-bottom: 1.5px solid #fff;
+  content: '';
+  transform: rotate(45deg);
+}
+.auth-assist-link {
+  justify-self: end;
+  margin-top: -0.75rem;
+  color: var(--accent-dark);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.auth-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.recovery-restart {
+  margin-top: 1rem;
+}
+.text-button {
+  min-height: 44px;
+  padding: 0.45rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-dark);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.text-button:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.otp-input {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-align: center;
+}
+.recovery-complete {
+  text-align: center;
+}
+.recovery-complete svg {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 1.5rem;
+  padding: 0.65rem;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+.recovery-complete p {
+  margin-bottom: 2rem;
+  color: var(--ink-soft);
 }
 input,
 select {
@@ -1042,6 +1191,11 @@ td {
   max-width: 760px;
   margin-bottom: 2rem;
 }
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
 
 @media (hover: hover) and (pointer: fine) {
   .audience-tile:hover img,
@@ -1294,6 +1448,9 @@ td {
     width: min(100% - 32px, 580px);
   }
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .password-requirements {
     grid-template-columns: 1fr;
   }
   .field--wide {

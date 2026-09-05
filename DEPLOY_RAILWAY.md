@@ -85,6 +85,14 @@ SECRET_KEY=REEMPLAZAR_POR_UNA_CLAVE_ALEATORIA
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 CORS_ORIGINS=
+REDIS_URL=${{Redis.REDIS_URL}}
+BREVO_API_KEY=REEMPLAZAR_POR_API_KEY_DE_BREVO
+BREVO_SENDER_EMAIL=no-reply@tu-dominio.com
+BREVO_SENDER_NAME=Capricho Store
+PASSWORD_RESET_OTP_EXPIRE_MINUTES=10
+PASSWORD_RESET_OTP_MAX_ATTEMPTS=5
+PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS=60
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=10
 ```
 
 Si el servicio PostgreSQL tiene otro nombre, reemplaza `Postgres` por ese nombre
@@ -111,6 +119,19 @@ CORS_ORIGINS=https://web-capricho.example.com
 ```
 
 Para varios orígenes, sepáralos con comas.
+
+### Recuperación de contraseña con Brevo
+
+1. Agrega un servicio Redis al mismo proyecto y ambiente de Railway.
+2. Usa la referencia privada `REDIS_URL=${{Redis.REDIS_URL}}`; no expongas Redis
+   públicamente.
+3. En Brevo crea una API key y verifica la dirección que usarás como remitente.
+4. Guarda la API key únicamente en las variables del backend.
+
+El código OTP dura 10 minutos, admite hasta 5 intentos y no se almacena en
+texto plano. El endpoint de solicitud devuelve el mismo mensaje exista o no el
+correo, para no revelar cuentas registradas. No se agrega ninguna tabla al
+esquema PostgreSQL: Redis conserva solo el estado temporal del proceso.
 
 ## 6. Desplegar y generar dominio
 

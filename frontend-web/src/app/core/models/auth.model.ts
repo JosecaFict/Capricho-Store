@@ -14,6 +14,29 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface PasswordRecoveryRequest {
+  correo: string;
+}
+
+export interface PasswordRecoveryVerifyRequest {
+  correo: string;
+  codigo: string;
+}
+
+export interface PasswordRecoveryVerifyResponse {
+  reset_token: string;
+  expires_in: number;
+}
+
+export interface PasswordResetRequest {
+  reset_token: string;
+  password: string;
+}
+
+export interface MessageResponse {
+  message: string;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: 'bearer';

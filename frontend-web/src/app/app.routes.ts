@@ -35,6 +35,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/auth/register').then((m) => m.Register),
       },
       {
+        path: 'recuperar-contrasena',
+        title: 'Recuperar contraseña | Capricho Store',
+        loadComponent: () =>
+          import('./features/auth/password-recovery').then((m) => m.PasswordRecovery),
+      },
+      {
         path: 'cuenta',
         title: 'Mi cuenta | Capricho Store',
         canActivate: [authGuard],

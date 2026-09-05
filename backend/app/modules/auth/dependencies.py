@@ -5,8 +5,10 @@ from uuid import uuid4
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.security import decode_access_token
 from app.db.audit_context import AuditContext, apply_audit_context
 from app.db.session import get_db_session
@@ -16,6 +18,8 @@ from app.modules.auth.exceptions import (
     PermissionDeniedError,
 )
 from app.modules.auth.models import Usuario
+from app.modules.auth.password_recovery import BrevoEmailClient, RedisPasswordResetStore
+from app.modules.auth.password_recovery_service import PasswordRecoveryService
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.service import AuthService
 
@@ -55,6 +59,36 @@ async def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AsyncIterator[AuthService]:
     yield AuthService(session=session, repository=AuthRepository(session))
+
+
+async def get_password_recovery_service(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncIterator[PasswordRecoveryService]:
+    settings = get_settings()
+    if not settings.redis_url:
+        from app.modules.auth.exceptions import SecurityConfigurationError
+
+        raise SecurityConfigurationError("REDIS_URL is missing")
+    if not settings.brevo_api_key or not settings.brevo_sender_email:
+        from app.modules.auth.exceptions import SecurityConfigurationError
+
+        raise SecurityConfigurationError("Brevo configuration is missing")
+
+    redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        yield PasswordRecoveryService(
+            session=session,
+            repository=AuthRepository(session),
+            store=RedisPasswordResetStore(redis_client),
+            email_client=BrevoEmailClient(
+                api_key=settings.brevo_api_key,
+                sender_email=settings.brevo_sender_email,
+                sender_name=settings.brevo_sender_name,
+            ),
+            settings=settings,
+        )
+    finally:
+        await redis_client.aclose()
 
 
 async def get_current_principal(
@@ -113,4 +147,3 @@ def require_permission(permission_code: str) -> PermissionDependency:
         return principal
 
     return dependency
-

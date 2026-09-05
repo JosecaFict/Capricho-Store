@@ -59,6 +59,11 @@ class AuthRepository:
         self.session.add(user)
         await self.session.flush()
 
+    async def update_password(self, user: Usuario, password_hash: str) -> None:
+        user.password_hash = password_hash
+        self.session.add(user)
+        await self.session.flush()
+
     async def get_role_names(self, user_id: int) -> set[str]:
         statement = (
             select(Rol.nombre)
@@ -97,4 +102,3 @@ class AuthRepository:
         role_permissions = await self.get_role_permission_codes(user_id)
         overrides = await self.get_user_permission_overrides(user_id)
         return resolve_effective_permissions(role_permissions, overrides)
-

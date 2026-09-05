@@ -6,21 +6,20 @@ import { AuthService } from '../../core/auth/auth.service';
 import { UserResponse } from '../../core/models/auth.model';
 import { ADMIN_PERMISSIONS } from '../../core/permissions/permission.service';
 import { ApiErrorService } from '../../core/services/api-error.service';
+import { PasswordField } from './password-field';
 
 export function resolveLoginDestination(user: UserResponse, returnUrl: string | null): string {
   const requestedPath = returnUrl?.trim();
   if (requestedPath?.startsWith('/') && !requestedPath.startsWith('//')) {
     return requestedPath;
   }
-  const hasAdminAccess = ADMIN_PERMISSIONS.some((permission) =>
-    user.permisos.includes(permission),
-  );
+  const hasAdminAccess = ADMIN_PERMISSIONS.some((permission) => user.permisos.includes(permission));
   return hasAdminAccess ? '/admin' : '/cuenta';
 }
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, PasswordField],
   template: `
     <section class="auth-page">
       <div class="auth-visual" aria-hidden="true">
@@ -57,23 +56,21 @@ export function resolveLoginDestination(user: UserResponse, returnUrl: string | 
               <p class="field-error">Ingresa un correo electrónico válido.</p>
             }
           </div>
-          <div class="field">
-            <label for="login-password">Contraseña</label>
-            <input
-              id="login-password"
-              type="password"
-              formControlName="password"
-              autocomplete="current-password"
-              [attr.aria-invalid]="invalid('password')"
-            />
-            @if (invalid('password')) {
-              <p class="field-error">La contraseña es obligatoria.</p>
-            }
-          </div>
+          <app-password-field
+            fieldId="login-password"
+            label="Contraseña"
+            autocomplete="current-password"
+            [control]="form.controls.password"
+            [invalid]="invalid('password')"
+            [errorText]="invalid('password') ? 'La contraseña es obligatoria.' : ''"
+          />
+          <a class="auth-assist-link" routerLink="/recuperar-contrasena">
+            ¿Olvidaste tu contraseña?
+          </a>
           <button
             class="button button--primary button--full"
             type="submit"
-            [disabled]="submitting()"
+            [disabled]="form.invalid || submitting()"
           >
             {{ submitting() ? 'Ingresando…' : 'Ingresar' }}
           </button>

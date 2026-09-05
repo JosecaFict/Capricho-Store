@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
+from app.core.security import validate_password_strength
+
 
 class RegisterRequest(BaseModel):
     nombres: str = Field(min_length=1, max_length=100)
@@ -27,6 +29,12 @@ class RegisterRequest(BaseModel):
             return None
         stripped = value.strip()
         return stripped or None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: SecretStr) -> SecretStr:
+        validate_password_strength(value.get_secret_value())
+        return value
 
 
 class LoginRequest(BaseModel):
@@ -53,3 +61,32 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
+
+
+class PasswordRecoveryRequest(BaseModel):
+    correo: EmailStr
+
+
+class PasswordRecoveryVerifyRequest(BaseModel):
+    correo: EmailStr
+    codigo: str = Field(pattern=r"^\d{6}$")
+
+
+class PasswordRecoveryVerifyResponse(BaseModel):
+    reset_token: str
+    expires_in: int
+
+
+class PasswordResetRequest(BaseModel):
+    reset_token: str = Field(min_length=1)
+    password: SecretStr = Field(min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: SecretStr) -> SecretStr:
+        validate_password_strength(value.get_secret_value())
+        return value
+
+
+class MessageResponse(BaseModel):
+    message: str

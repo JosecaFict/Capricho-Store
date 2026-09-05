@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
+import { PermissionService } from '../../core/permissions/permission.service';
 
 @Component({
   selector: 'app-account',
@@ -31,7 +32,12 @@ import { AuthService } from '../../core/auth/auth.service';
             <dd>{{ user.roles.join(', ') || 'Cliente' }}</dd>
           </div>
         </dl>
-        <a class="button button--secondary" routerLink="/catalogo">Explorar catálogo</a>
+        <div class="account-actions">
+          @if (permissions.hasAdminAccess()) {
+            <a class="button button--primary" routerLink="/admin">Ir al panel administrativo</a>
+          }
+          <a class="button button--secondary" routerLink="/catalogo">Explorar catálogo</a>
+        </div>
       } @else {
         <p>Cargando tu cuenta…</p>
       }
@@ -40,4 +46,5 @@ import { AuthService } from '../../core/auth/auth.service';
 })
 export class Account {
   readonly auth = inject(AuthService);
+  readonly permissions = inject(PermissionService);
 }

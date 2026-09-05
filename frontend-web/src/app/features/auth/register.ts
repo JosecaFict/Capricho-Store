@@ -5,10 +5,15 @@ import { finalize } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { RegisterRequest } from '../../core/models/auth.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
+import {
+  matchingPasswordsValidator,
+  PasswordField,
+  strongPasswordValidator,
+} from './password-field';
 
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, PasswordField],
   template: `
     <section class="auth-page auth-page--register">
       <div class="auth-visual" aria-hidden="true">
@@ -29,9 +34,10 @@ import { ApiErrorService } from '../../core/services/api-error.service';
               formControlName="nombres"
               autocomplete="given-name"
               [attr.aria-invalid]="invalid('nombres')"
+              [attr.aria-describedby]="invalid('nombres') ? 'names-error' : null"
             />
             @if (invalid('nombres')) {
-              <p class="field-error">Ingresa tus nombres.</p>
+              <p class="field-error" id="names-error">Ingresa tus nombres.</p>
             }
           </div>
           <div class="field">
@@ -41,9 +47,10 @@ import { ApiErrorService } from '../../core/services/api-error.service';
               formControlName="apellidos"
               autocomplete="family-name"
               [attr.aria-invalid]="invalid('apellidos')"
+              [attr.aria-describedby]="invalid('apellidos') ? 'lastnames-error' : null"
             />
             @if (invalid('apellidos')) {
-              <p class="field-error">Ingresa tus apellidos.</p>
+              <p class="field-error" id="lastnames-error">Ingresa tus apellidos.</p>
             }
           </div>
           <div class="field field--wide">
@@ -54,9 +61,12 @@ import { ApiErrorService } from '../../core/services/api-error.service';
               formControlName="correo"
               autocomplete="email"
               [attr.aria-invalid]="invalid('correo')"
+              [attr.aria-describedby]="invalid('correo') ? 'register-email-error' : null"
             />
             @if (invalid('correo')) {
-              <p class="field-error">Ingresa un correo electrónico válido.</p>
+              <p class="field-error" id="register-email-error">
+                Ingresa un correo electrónico válido.
+              </p>
             }
           </div>
           <div class="field">
@@ -73,24 +83,27 @@ import { ApiErrorService } from '../../core/services/api-error.service';
             <label for="ci">CI <span>opcional</span></label
             ><input id="ci" formControlName="ci" maxlength="30" />
           </div>
-          <div class="field field--wide">
-            <label for="register-password">Contraseña</label
-            ><input
-              id="register-password"
-              type="password"
-              formControlName="password"
-              autocomplete="new-password"
-              [attr.aria-invalid]="invalid('password')"
-            />
-            <p class="field-help">Mínimo 8 caracteres.</p>
-            @if (invalid('password')) {
-              <p class="field-error">La contraseña debe tener entre 8 y 128 caracteres.</p>
-            }
-          </div>
+          <app-password-field
+            class="field--wide"
+            fieldId="register-password"
+            label="Contraseña"
+            [control]="form.controls.password"
+            [showRequirements]="true"
+            [invalid]="invalid('password')"
+            [errorText]="invalid('password') ? 'Cumple todos los requisitos indicados.' : ''"
+          />
+          <app-password-field
+            class="field--wide"
+            fieldId="register-password-confirmation"
+            label="Confirmar contraseña"
+            [control]="form.controls.passwordConfirmation"
+            [invalid]="confirmationInvalid()"
+            [errorText]="confirmationInvalid() ? 'Las contraseñas deben coincidir.' : ''"
+          />
           <button
             class="button button--primary button--full field--wide"
             type="submit"
-            [disabled]="submitting()"
+            [disabled]="form.invalid || submitting()"
           >
             {{ submitting() ? 'Creando cuenta…' : 'Crear cuenta' }}
           </button>
@@ -107,18 +120,30 @@ export class Register {
   private readonly router = inject(Router);
   readonly submitting = signal(false);
   readonly errorMessage = signal('');
-  readonly form = this.fb.nonNullable.group({
-    nombres: ['', [Validators.required, Validators.maxLength(100)]],
-    apellidos: ['', [Validators.required, Validators.maxLength(100)]],
-    correo: ['', [Validators.required, Validators.email]],
-    telefono: ['', Validators.maxLength(30)],
-    ci: ['', Validators.maxLength(30)],
-    password: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(128)]],
-  });
+  readonly form = this.fb.nonNullable.group(
+    {
+      nombres: ['', [Validators.required, Validators.maxLength(100)]],
+      apellidos: ['', [Validators.required, Validators.maxLength(100)]],
+      correo: ['', [Validators.required, Validators.email]],
+      telefono: ['', Validators.maxLength(30)],
+      ci: ['', Validators.maxLength(30)],
+      password: ['', [Validators.required, Validators.maxLength(128), strongPasswordValidator]],
+      passwordConfirmation: ['', Validators.required],
+    },
+    { validators: matchingPasswordsValidator },
+  );
 
   invalid(name: keyof typeof this.form.controls): boolean {
     const control = this.form.controls[name];
     return control.invalid && (control.touched || this.form.touched);
+  }
+
+  confirmationInvalid(): boolean {
+    const confirmation = this.form.controls.passwordConfirmation;
+    return (
+      (confirmation.invalid || this.form.hasError('passwordMismatch')) &&
+      (confirmation.touched || this.form.touched)
+    );
   }
 
   submit(): void {
@@ -126,7 +151,10 @@ export class Register {
     if (this.form.invalid || this.submitting()) return;
     const value = this.form.getRawValue();
     const payload: RegisterRequest = {
-      ...value,
+      nombres: value.nombres,
+      apellidos: value.apellidos,
+      correo: value.correo,
+      password: value.password,
       telefono: value.telefono.trim() || null,
       ci: value.ci.trim() || null,
     };

@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
+import { PermissionService } from '../../core/permissions/permission.service';
 
 @Component({
   selector: 'app-site-header',
@@ -33,10 +34,17 @@ import { AuthService } from '../../core/auth/auth.service';
           >Inicio</a
         >
         <a routerLink="/catalogo" routerLinkActive="active" (click)="closeMenu()">Catálogo</a>
-        @if (auth.currentUser(); as user) {
-          <a routerLink="/cuenta" routerLinkActive="active" (click)="closeMenu()">{{
-            user.nombres
-          }}</a>
+        @if (auth.currentUser()) {
+          @if (permissions.hasAdminAccess()) {
+            <a
+              class="nav-admin"
+              routerLink="/admin"
+              routerLinkActive="active"
+              (click)="closeMenu()"
+              >Panel administrativo</a
+            >
+          }
+          <a routerLink="/cuenta" routerLinkActive="active" (click)="closeMenu()">Mi cuenta</a>
           <button class="nav-action" type="button" (click)="logout()">Cerrar sesión</button>
         } @else {
           <a routerLink="/login" routerLinkActive="active" (click)="closeMenu()">Ingresar</a>
@@ -48,6 +56,7 @@ import { AuthService } from '../../core/auth/auth.service';
 })
 export class SiteHeader {
   readonly auth = inject(AuthService);
+  readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
   readonly menuOpen = signal(false);
 
