@@ -3,7 +3,20 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
+import { UserResponse } from '../../core/models/auth.model';
+import { ADMIN_PERMISSIONS } from '../../core/permissions/permission.service';
 import { ApiErrorService } from '../../core/services/api-error.service';
+
+export function resolveLoginDestination(user: UserResponse, returnUrl: string | null): string {
+  const requestedPath = returnUrl?.trim();
+  if (requestedPath?.startsWith('/') && !requestedPath.startsWith('//')) {
+    return requestedPath;
+  }
+  const hasAdminAccess = ADMIN_PERMISSIONS.some((permission) =>
+    user.permisos.includes(permission),
+  );
+  return hasAdminAccess ? '/admin' : '/cuenta';
+}
 
 @Component({
   selector: 'app-login',
@@ -104,8 +117,10 @@ export class Login {
         finalize(() => this.submitting.set(false)),
       )
       .subscribe({
-        next: () =>
-          void this.router.navigateByUrl(this.route.snapshot.queryParamMap.get('returnUrl') ?? '/'),
+        next: (user) =>
+          void this.router.navigateByUrl(
+            resolveLoginDestination(user, this.route.snapshot.queryParamMap.get('returnUrl')),
+          ),
         error: (error) =>
           this.errorMessage.set(this.errors.message(error, 'Correo o contraseña incorrectos.')),
       });
