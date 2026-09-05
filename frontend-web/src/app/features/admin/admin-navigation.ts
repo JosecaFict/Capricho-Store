@@ -62,4 +62,14 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
       },
     ],
   },
+  {
+    label: 'Seguridad',
+    items: [
+      {
+        label: 'Bitácora',
+        path: '/admin/seguridad/bitacora',
+        permissions: ['permisos.asignar'],
+      },
+    ],
+  },
 ];

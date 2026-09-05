@@ -24,6 +24,13 @@ export class AdminApiService {
   get(path: string) {
     return this.http.get<Entity>(`${API_BASE_URL}/${path}`);
   }
+  query(path: string, params?: Record<string, string | number | boolean | undefined>) {
+    let p = new HttpParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') p = p.set(key, String(value));
+    });
+    return this.http.get<Entity>(`${API_BASE_URL}/${path}`, { params: p });
+  }
   post(path: string, payload: unknown) {
     return this.http.post<Entity>(`${API_BASE_URL}/${path}`, payload);
   }
@@ -34,7 +41,7 @@ export class AdminApiService {
     return this.http.put<Entity>(`${API_BASE_URL}/${path}`, payload);
   }
   delete(path: string) {
-    return this.http.delete<void>(`${API_BASE_URL}/${path}`);
+    return this.http.delete<Entity>(`${API_BASE_URL}/${path}`);
   }
   products(params?: Record<string, string | number | boolean | undefined>) {
     let p = new HttpParams();

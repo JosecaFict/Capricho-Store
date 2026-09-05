@@ -137,6 +137,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/operations-admin').then((m) => m.TraceAdmin),
       },
       {
+        path: 'seguridad/bitacora',
+        title: 'Bitácora de seguridad | Capricho Store',
+        canActivate: [requireAnyPermission('permisos.asignar')],
+        loadComponent: () => import('./features/admin/audit-admin').then((m) => m.AuditAdmin),
+      },
+      {
         path: '**',
         loadComponent: () =>
           import('./features/admin/admin-status-pages').then((m) => m.AdminNotFound),

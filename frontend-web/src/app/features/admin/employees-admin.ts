@@ -2,7 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { finalize, forkJoin } from 'rxjs';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { PermissionService } from '../../core/permissions/permission.service';
 import { AdminApiService, Entity } from './admin-api.service';
@@ -248,7 +248,7 @@ export class EmployeesAdmin implements OnInit {
         </div>
         <span class="status-chip">{{ e['estado_laboral'] }}</span>
       </header>
-      <div class="admin-detail-grid">
+      <div class="admin-detail-grid admin-detail-grid--employee">
         <section class="admin-panel">
           <h2>Perfil laboral</h2>
           <dl class="admin-definition">
@@ -271,7 +271,7 @@ export class EmployeesAdmin implements OnInit {
           </dl>
         </section>
         @if (canAssign()) {
-          <section class="admin-panel">
+          <section class="admin-panel admin-panel--permissions">
             <h2>Rol y permisos</h2>
             <form [formGroup]="roleForm" (ngSubmit)="changeRole()" class="admin-inline-form">
               <label class="field"
@@ -287,30 +287,104 @@ export class EmployeesAdmin implements OnInit {
               </button>
             </form>
             @if (summary(); as s) {
-              <div class="permission-summary">
-                <p>
-                  <strong>Heredados:</strong> {{ s['permisos_heredados']?.join(', ') || 'Ninguno' }}
-                </p>
-                <p>
-                  <strong>Otorgados:</strong>
-                  {{ s['permisos_individuales_otorgados']?.join(', ') || 'Ninguno' }}
-                </p>
-                <p>
-                  <strong>Revocados:</strong>
-                  {{ s['permisos_individuales_revocados']?.join(', ') || 'Ninguno' }}
-                </p>
+              <div class="permission-summary" aria-label="Resumen de permisos">
+                <div>
+                  <span>Rol asignado</span>
+                  <strong>{{ s['roles_asignados']?.join(', ') || 'Sin rol' }}</strong>
+                </div>
+                <div>
+                  <span>Acceso efectivo</span>
+                  <strong>{{ s['permisos_efectivos']?.length || 0 }}</strong>
+                </div>
+                <div>
+                  <span>Concedidos</span>
+                  <strong class="permission-count--allowed"
+                    >+{{ s['permisos_individuales_otorgados']?.length || 0 }}</strong
+                  >
+                </div>
+                <div>
+                  <span>Revocados</span>
+                  <strong class="permission-count--denied"
+                    >−{{ s['permisos_individuales_revocados']?.length || 0 }}</strong
+                  >
+                </div>
               </div>
-              <div class="permission-list">
-                @for (p of permissions(); track p['id_permiso']) {
-                  <div>
-                    <span
-                      ><strong>{{ p['nombre'] }}</strong
-                      ><small>{{ p['codigo'] }} · {{ p['modulo'] }}</small></span
-                    ><span class="admin-row-actions"
-                      ><button (click)="override(p, true)">Otorgar</button
-                      ><button (click)="override(p, false)">Revocar</button></span
-                    >
-                  </div>
+              <p class="permission-help">
+                <strong>Según rol</strong> conserva la configuración del rol. Una concesión o
+                revocación individual tiene prioridad sobre ella.
+              </p>
+              <label class="permission-search">
+                <span>Buscar permiso</span>
+                <input
+                  type="search"
+                  placeholder="Nombre, código o módulo"
+                  [value]="permissionSearch()"
+                  (input)="permissionSearch.set($any($event.target).value)"
+                />
+              </label>
+              <div class="permission-groups">
+                @for (group of permissionGroups(); track group.module) {
+                  <details class="permission-group" open>
+                    <summary>
+                      <span>{{ group.module }}</span>
+                      <small>{{ group.permissions.length }} permisos</small>
+                    </summary>
+                    <div class="permission-list">
+                      @for (p of group.permissions; track p['id_permiso']) {
+                        <article class="permission-item" [class.is-saving]="isSaving(p)">
+                          <div class="permission-copy">
+                            <strong>{{ p['nombre'] }}</strong>
+                            <small>{{ p['codigo'] }}</small>
+                          </div>
+                          <div
+                            class="permission-result"
+                            [class.permission-result--allowed]="isEffective(p)"
+                            [class.permission-result--denied]="!isEffective(p)"
+                          >
+                            <strong>{{ isEffective(p) ? '✓ Permitido' : '⊘ Denegado' }}</strong>
+                            <small>{{ permissionSource(p) }}</small>
+                          </div>
+                          <div
+                            class="permission-selector"
+                            role="group"
+                            [attr.aria-label]="'Configuración individual de ' + p['nombre']"
+                          >
+                            <button
+                              type="button"
+                              [class.is-selected]="overrideState(p) === 'role'"
+                              [attr.aria-pressed]="overrideState(p) === 'role'"
+                              [disabled]="isSaving(p) || overrideState(p) === 'role'"
+                              (click)="setPermissionState(p, 'role')"
+                            >
+                              Según rol
+                            </button>
+                            <button
+                              type="button"
+                              class="permission-option--allow"
+                              [class.is-selected]="overrideState(p) === 'allow'"
+                              [attr.aria-pressed]="overrideState(p) === 'allow'"
+                              [disabled]="isSaving(p) || overrideState(p) === 'allow'"
+                              (click)="setPermissionState(p, 'allow')"
+                            >
+                              ✓ Permitir
+                            </button>
+                            <button
+                              type="button"
+                              class="permission-option--deny"
+                              [class.is-selected]="overrideState(p) === 'deny'"
+                              [attr.aria-pressed]="overrideState(p) === 'deny'"
+                              [disabled]="isSaving(p) || overrideState(p) === 'deny'"
+                              (click)="setPermissionState(p, 'deny')"
+                            >
+                              ⊘ Denegar
+                            </button>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  </details>
+                } @empty {
+                  <p class="admin-empty">No hay permisos que coincidan con la búsqueda.</p>
                 }
               </div>
             }
@@ -321,7 +395,9 @@ export class EmployeesAdmin implements OnInit {
       <div class="admin-skeleton"></div>
     }
     @if (message()) {
-      <div class="notice" [class.notice--error]="isError()">{{ message() }}</div>
+      <div class="notice" [class.notice--error]="isError()" role="status" aria-live="polite">
+        {{ message() }}
+      </div>
     }
   </div>`,
 })
@@ -336,9 +412,25 @@ export class EmployeeDetail implements OnInit {
   roles = signal<Entity[]>([]);
   permissions = signal<Entity[]>([]);
   summary = signal<Entity | null>(null);
+  permissionSearch = signal('');
+  savingPermissionIds = signal<ReadonlySet<number>>(new Set());
   message = signal('');
   isError = signal(false);
   canAssign = computed(() => this.perms.has('permisos.asignar'));
+  permissionGroups = computed(() => {
+    const query = this.permissionSearch().trim().toLocaleLowerCase('es');
+    const groups = new Map<string, Entity[]>();
+    for (const permission of this.permissions()) {
+      const searchable =
+        `${permission['nombre']} ${permission['codigo']} ${permission['modulo']}`.toLocaleLowerCase(
+          'es',
+        );
+      if (query && !searchable.includes(query)) continue;
+      const module = String(permission['modulo'] || 'OTROS');
+      groups.set(module, [...(groups.get(module) ?? []), permission]);
+    }
+    return [...groups].map(([module, permissions]) => ({ module, permissions }));
+  });
   roleForm = this.fb.group({ id_rol: [null as number | null, Validators.required] });
   ngOnInit() {
     this.load();
@@ -369,14 +461,60 @@ export class EmployeeDetail implements OnInit {
       error: (e) => this.fail(e),
     });
   }
-  override(p: Entity, otorgado: boolean) {
-    this.api.put(`employees/${this.id}/permissions/${p['id_permiso']}`, { otorgado }).subscribe({
-      next: (v) => {
-        this.summary.set(v);
-        this.ok(otorgado ? 'Permiso otorgado.' : 'Permiso revocado.');
-      },
-      error: (e) => this.fail(e),
-    });
+  overrideState(p: Entity): 'role' | 'allow' | 'deny' {
+    const code = String(p['codigo']);
+    if (this.summary()?.['permisos_individuales_otorgados']?.includes(code)) return 'allow';
+    if (this.summary()?.['permisos_individuales_revocados']?.includes(code)) return 'deny';
+    return 'role';
+  }
+  isEffective(p: Entity) {
+    return Boolean(this.summary()?.['permisos_efectivos']?.includes(String(p['codigo'])));
+  }
+  permissionSource(p: Entity) {
+    const state = this.overrideState(p);
+    if (state === 'allow') return 'Concesión individual';
+    if (state === 'deny') return 'Revocación individual';
+    if (this.summary()?.['permisos_heredados']?.includes(String(p['codigo']))) {
+      return `Por rol ${this.summary()?.['roles_asignados']?.join(', ') || ''}`.trim();
+    }
+    return 'Sin acceso en el rol';
+  }
+  isSaving(p: Entity) {
+    return this.savingPermissionIds().has(Number(p['id_permiso']));
+  }
+  setPermissionState(p: Entity, state: 'role' | 'allow' | 'deny') {
+    if (this.isSaving(p) || this.overrideState(p) === state) return;
+    const permissionId = Number(p['id_permiso']);
+    this.savingPermissionIds.update((ids) => new Set(ids).add(permissionId));
+    const request =
+      state === 'role'
+        ? this.api.delete(`employees/${this.id}/permissions/${permissionId}`)
+        : this.api.put(`employees/${this.id}/permissions/${permissionId}`, {
+            otorgado: state === 'allow',
+          });
+    request
+      .pipe(
+        finalize(() =>
+          this.savingPermissionIds.update((ids) => {
+            const next = new Set(ids);
+            next.delete(permissionId);
+            return next;
+          }),
+        ),
+      )
+      .subscribe({
+        next: (v) => {
+          this.summary.set(v);
+          const action =
+            state === 'role'
+              ? 'restablecido según el rol'
+              : state === 'allow'
+                ? 'permitido individualmente'
+                : 'denegado individualmente';
+          this.ok(`${p['nombre']}: ${action}.`);
+        },
+        error: (e) => this.fail(e),
+      });
   }
   ok(m: string) {
     this.isError.set(false);

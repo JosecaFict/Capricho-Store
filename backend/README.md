@@ -99,7 +99,10 @@ GET   /api/v1/roles                                      permisos.asignar
 GET   /api/v1/permissions                                permisos.asignar
 GET   /api/v1/employees/{id}/permissions                 permisos.asignar
 PUT   /api/v1/employees/{id}/permissions/{id_permiso}    permisos.asignar
+DELETE /api/v1/employees/{id}/permissions/{id_permiso}   permisos.asignar
 PUT   /api/v1/employees/{id}/role                        permisos.asignar
+GET   /api/v1/audit-logs                                 permisos.asignar
+GET   /api/v1/audit-logs/{id}                            permisos.asignar
 ```
 
 No existe endpoint `DELETE`. La desactivación se realiza con:

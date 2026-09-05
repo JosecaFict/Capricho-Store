@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import (
@@ -170,6 +170,19 @@ class EmployeeRepository:
             override.otorgado = granted
             override.id_asignado_por = assigned_by
             override.fecha_asignacion = datetime.now(UTC)
+        await self.session.flush()
+
+    async def delete_permission_override(
+        self,
+        *,
+        user_id: int,
+        permission_id: int,
+    ) -> None:
+        statement = delete(UsuarioPermiso).where(
+            UsuarioPermiso.id_usuario == user_id,
+            UsuarioPermiso.id_permiso == permission_id,
+        )
+        await self.session.execute(statement)
         await self.session.flush()
 
     async def assign_employee_role(self, *, user_id: int, role: Rol) -> None:

@@ -139,6 +139,27 @@ async def set_employee_permission(
     )
 
 
+@router.delete(
+    "/employees/{employee_id}/permissions/{permission_id}",
+    response_model=EmployeePermissionSummary,
+)
+async def clear_employee_permission(
+    employee_id: int,
+    permission_id: int,
+    request: Request,
+    principal: Annotated[
+        CurrentPrincipal,
+        Depends(require_permission("permisos.asignar")),
+    ],
+    service: Annotated[EmployeeService, Depends(get_employee_service)],
+) -> EmployeePermissionSummary:
+    return await service.clear_permission_override(
+        employee_id,
+        permission_id,
+        audit_context=audit_context_for(request, principal),
+    )
+
+
 @router.put("/employees/{employee_id}/role", response_model=EmployeeResponse)
 async def change_employee_role(
     employee_id: int,
@@ -156,4 +177,3 @@ async def change_employee_role(
         actor=principal,
         audit_context=audit_context_for(request, principal),
     )
-

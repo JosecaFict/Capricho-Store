@@ -209,6 +209,30 @@ class EmployeeService:
             raise
         return summary
 
+    async def clear_permission_override(
+        self,
+        employee_id: int,
+        permission_id: int,
+        *,
+        audit_context: AuditContext,
+    ) -> EmployeePermissionSummary:
+        try:
+            await apply_audit_context(self.session, audit_context)
+            record = await self._require_employee(employee_id)
+            permission = await self.repository.get_permission(permission_id)
+            if permission is None:
+                raise ResourceNotFoundError("Permission not found")
+            await self.repository.delete_permission_override(
+                user_id=record.user.id_usuario,
+                permission_id=permission.id_permiso,
+            )
+            summary = await self._permission_summary(record)
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
+        return summary
+
     async def change_role(
         self,
         employee_id: int,

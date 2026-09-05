@@ -336,6 +336,22 @@ async def test_revoke_inherited_permission() -> None:
     assert "ventas.crear" not in body["permisos_efectivos"]
 
 
+async def test_clear_individual_permission_override() -> None:
+    service = AsyncMock()
+    service.clear_permission_override.return_value = make_permission_summary()
+
+    response = await call_employee_endpoint(
+        "DELETE",
+        "/api/v1/employees/7/permissions/2",
+        principal=make_principal("permisos.asignar"),
+        service=service,
+    )
+
+    assert response.status_code == 200
+    service.clear_permission_override.assert_awaited_once()
+    assert service.clear_permission_override.await_args.args[:2] == (7, 2)
+
+
 async def test_deactivate_employee_without_deleting_history() -> None:
     service = AsyncMock()
     service.update_employee.return_value = make_employee_response(
@@ -356,15 +372,10 @@ async def test_deactivate_employee_without_deleting_history() -> None:
     assert response.json()["estado_laboral"] == "INACTIVO"
 
 
-def test_employee_api_has_no_physical_delete() -> None:
-    employee_paths = {
-        path: operations
-        for path, operations in app.openapi()["paths"].items()
-        if path.startswith("/api/v1/employees")
-    }
+def test_employee_api_has_no_physical_employee_delete() -> None:
+    employee_item = app.openapi()["paths"]["/api/v1/employees/{employee_id}"]
 
-    assert employee_paths
-    assert all("delete" not in operations for operations in employee_paths.values())
+    assert "delete" not in employee_item
 
 
 async def test_password_hash_never_appears_in_employee_response() -> None:
@@ -381,4 +392,3 @@ async def test_password_hash_never_appears_in_employee_response() -> None:
     assert response.status_code == 200
     assert "password" not in response.json()
     assert "password_hash" not in response.json()
-
