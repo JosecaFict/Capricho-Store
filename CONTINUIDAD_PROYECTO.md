@@ -37,8 +37,10 @@ Capricho-Store/
 ├── frontend-web/                             Angular
 ├── mobile/                                   Flutter Android/iOS
 ├── assets/                                   referencias/activos del proyecto
-├── capricho_store_postgresql_completo_v2.sql base PostgreSQL v2
-├── capricho_store_correcciones_v2.sql        correcciones v2
+├── database/
+│   ├── capricho_store_postgresql_completo_v2.sql base canónica PostgreSQL v2
+│   └── archive/capricho_store_correcciones_v2.sql historial incremental
+├── DEPLOY_RAILWAY.md                         guía de despliegue
 ├── PRODUCT.md                                alcance funcional
 ├── DESIGN.md                                 sistema visual
 ├── CONTINUIDAD_PROYECTO.md                   este documento
@@ -71,11 +73,13 @@ imágenes, banners, tarjetas, placeholders o pruebas.
 ### Archivos de referencia
 
 ```text
-capricho_store_postgresql_completo_v2.sql
-capricho_store_correcciones_v2.sql
+database/capricho_store_postgresql_completo_v2.sql
+database/archive/capricho_store_correcciones_v2.sql
 ```
 
-La base ya fue ejecutada correctamente en PostgreSQL 17. En el equipo inicial
+La base ya fue ejecutada correctamente en PostgreSQL 17. El archivo completo
+v2 contiene las correcciones integradas y es el único que se ejecuta en una
+instalación nueva. El archivo de `archive/` es solo histórico. En el equipo inicial
 la conexión local utiliza el puerto `5433`, pero cada computadora puede tener
 otro puerto. Esa diferencia se configura únicamente en `backend/.env`.
 
@@ -179,6 +183,18 @@ user-agent, origen y request ID. Los triggers PostgreSQL registran la bitácora.
 - No existe eliminación física de empleados; se desactivan para conservar
   trazabilidad.
 
+El primer dueño se crea una sola vez mediante un comando interno, porque los
+endpoints de empleados ya exigen permisos administrativos:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m app.scripts.bootstrap_owner
+```
+
+El comando es interactivo, no modifica clientes existentes y se niega a crear
+un segundo usuario `ADMIN`.
+
 #### Catálogo
 
 - Categorías, marcas, tallas, colores, temporadas y colecciones.
@@ -271,15 +287,14 @@ ruff check . --no-cache
 ### Estado de calidad del backend
 
 - Existen 9 archivos de pruebas.
-- Pytest recolecta 108 pruebas.
-- En la revisión del 4 de septiembre de 2026, las 108 llegaron a `100%` sin
-  mostrar fallos, pero el proceso de Pytest no terminó por sí solo y fue
-  interrumpido después de esperar. El siguiente equipo debe investigar la
-  finalización pendiente del proceso antes de considerar la suite completamente
-  limpia.
+- Pytest recolecta 116 pruebas, incluidas las del bootstrap del dueño y la
+  configuración de producción.
+- `pytest -q -p no:cacheprovider`: 116 pruebas aprobadas en la revisión del 4 de
+  septiembre de 2026.
 - `ruff check . --no-cache`: correcto, sin observaciones.
-- Se usa `--no-cache` porque el entorno controlado tuvo un problema de permisos
-  al crear `backend/.ruff_cache`; esto no representa un error del código.
+- Se desactivó el cache provider de Pytest y se usó `--no-cache` en Ruff porque
+  el entorno controlado no permitió crear carpetas de caché; esto no representa
+  un error del código.
 
 ## 6. Frontend Web Angular
 
@@ -468,8 +483,6 @@ sentirse parte del mismo producto, respetando los patrones nativos de cada una.
 
 ### Backend
 
-- Investigar por qué Pytest llega a 100 % pero el proceso queda abierto en el
-  entorno actual.
 - No generar migraciones Alembic hasta acordar una estrategia de baseline.
 - Los módulos de carrito, reservas, ventas, pedidos, pagos y delivery todavía
   no forman parte de la API implementada.
@@ -494,9 +507,8 @@ sentirse parte del mismo producto, respetando los patrones nativos de cada una.
 
 ## 10. Preparar el repositorio GitHub
 
-Actualmente no existe un `.gitignore` en la raíz. Cada subproyecto tiene su
-propio `.gitignore`, pero antes de usar `git add .` se recomienda crear uno en la
-raíz que excluya al menos:
+Ya existe un `.gitignore` en la raíz, además de los archivos específicos de cada
+subproyecto. Antes de usar `git add .`, confirma que excluya al menos:
 
 ```gitignore
 .npm-cache/
@@ -586,12 +598,11 @@ Después preparar cada subproyecto con sus propias instrucciones anteriores.
 
 ## 12. Orden recomendado para continuar
 
-1. Crear `.gitignore` raíz y publicar el estado actual en un repositorio
-   privado o público sin secretos.
+1. Revisar `.gitignore` y publicar el estado actual en un repositorio privado o
+   público sin secretos.
 2. Clonar en la laptop y configurar PostgreSQL/FastAPI.
 3. Verificar `/health` y `/ready`.
-4. Ejecutar las verificaciones de backend y resolver el cierre pendiente de
-   Pytest si se reproduce.
+4. Ejecutar las verificaciones del backend.
 5. Ejecutar Angular y comprobar la parte pública y administrativa.
 6. Instalar Android Studio/SDK y ejecutar Flutter en emulador.
 7. Trabajar por módulos pequeños y sincronizar mediante Git.

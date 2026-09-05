@@ -33,14 +33,31 @@ class Settings(BaseSettings):
         ge=1,
         le=1440,
     )
+    cors_origins: str = Field(default="", alias="CORS_ORIGINS")
     database_schema: Literal["capricho"] = "capricho"
 
     @field_validator("database_url")
     @classmethod
     def validate_async_database_url(cls, value: str) -> str:
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
         if not value.startswith("postgresql+asyncpg://"):
             raise ValueError("DATABASE_URL must use the postgresql+asyncpg driver")
         return value
+
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, value: str) -> str:
+        origins = [origin.strip().rstrip("/") for origin in value.split(",") if origin.strip()]
+        if any(not origin.startswith(("http://", "https://")) for origin in origins):
+            raise ValueError("CORS_ORIGINS must contain comma-separated HTTP(S) origins")
+        return ",".join(origins)
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return self.cors_origins.split(",") if self.cors_origins else []
 
 
 @lru_cache

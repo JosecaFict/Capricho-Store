@@ -1,0 +1,30 @@
+# Local tooling
+.npm-cache/
+.impeccable/
+
+# Secrets and Python
+backend/.env
+backend/.venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/**/__pycache__/
+*.py[cod]
+
+# Angular
+frontend-web/node_modules/
+frontend-web/dist/
+frontend-web/.angular/
+frontend-web/coverage/
+
+# Flutter
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins-dependencies
+mobile/coverage/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log

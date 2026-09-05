@@ -39,6 +39,21 @@ uvicorn app.main:app --reload
 
 La documentación interactiva estará en `http://127.0.0.1:8000/docs`.
 
+## Railway
+
+El despliegue de producción está definido en `railway.json`. Al conectar este
+monorepositorio configura en Railway:
+
+```text
+Root Directory: /backend
+Config File Path: /backend/railway.json
+```
+
+La URL estándar de PostgreSQL proporcionada por Railway se convierte
+automáticamente al driver asíncrono `asyncpg`. Los orígenes Web autorizados se
+configuran con `CORS_ORIGINS`, separados por comas. El procedimiento completo
+está documentado en `../DEPLOY_RAILWAY.md`.
+
 ## Comprobar endpoints
 
 ```powershell
@@ -100,6 +115,22 @@ Esto conserva el historial y establece tanto `usuario.estado` como
 
 Los cambios sensibles establecen el contexto transaccional `app.*`; los triggers de
 PostgreSQL escriben en la tabla oficial `capricho.bitacora`. FastAPI no duplica esos registros.
+
+### Crear el primer dueño
+
+El registro público crea únicamente clientes. Para resolver el primer acceso
+administrativo, ejecuta una sola vez el comando interno:
+
+```powershell
+python -m app.scripts.bootstrap_owner
+```
+
+El asistente muestra las sucursales, solicita los datos del dueño y pide la
+contraseña de forma oculta. Si la base todavía no tiene sucursales, también
+solicita los datos de la ciudad y sucursal inicial. Crea todo en una sola
+transacción y se niega a crear otro dueño cuando ya existe una cuenta `ADMIN`;
+los empleados posteriores se crean desde la administración Web o mediante los
+endpoints protegidos.
 
 ## Catálogo
 
@@ -179,7 +210,7 @@ inventario.movimiento   stock mínimo, ajustes y transferencias
 ## Calidad
 
 ```powershell
-pytest
+pytest -q -p no:cacheprovider
 ruff check .
 ```
 
