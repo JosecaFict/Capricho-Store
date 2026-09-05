@@ -455,13 +455,28 @@ export class ProductsAdmin implements OnInit {
       <section class="admin-panel">
         <h2>Imágenes y medidas</h2>
         <p class="admin-help">
-          La API registra referencias de almacenamiento; Angular no sube archivos directamente.
+          Sube una imagen JPG, PNG o WebP de hasta 5 MB. Se almacenará en Cloudinary.
         </p>
         <form [formGroup]="imageForm" (ngSubmit)="addImage()" class="admin-form-grid">
-          <label class="field"><span>Public ID</span><input formControlName="public_id" /></label
-          ><label class="field"
-            ><span>URL segura</span><input type="url" formControlName="secure_url" /></label
-          ><label class="field"
+          <label class="field field--wide"
+            ><span>Archivo de imagen</span
+            ><input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              (change)="selectImage($event)"
+              required
+          /></label>
+          @if (imagePreview()) {
+            <figure class="admin-image-preview field--wide">
+              <img
+                [src]="imagePreview()"
+                alt="Vista previa de la imagen seleccionada"
+                (error)="handleImageError($event, true)"
+              />
+              <figcaption>{{ selectedImage()?.name }}</figcaption>
+            </figure>
+          }
+          <label class="field"
             ><span>Tipo</span
             ><select formControlName="tipo">
               <option>CATALOGO</option>
@@ -472,14 +487,22 @@ export class ProductsAdmin implements OnInit {
             ><span>Orden</span><input type="number" min="1" formControlName="orden" /></label
           ><label class="check-field"
             ><input type="checkbox" formControlName="es_principal" /> Principal</label
-          ><button class="button button--secondary">Registrar imagen</button>
+          ><button
+            class="button button--secondary"
+            [disabled]="imageForm.invalid || !selectedImage() || uploadingImage()"
+          >
+            {{ uploadingImage() ? 'Subiendo...' : 'Subir imagen' }}
+          </button>
         </form>
         <div class="admin-image-list">
           @for (i of images(); track i['id_imagen']) {
-            <span
-              ><a [href]="i['secure_url']" target="_blank" rel="noopener"
-                >{{ i['tipo'] }} · {{ i['public_id'] }}</a
-              >
+            <span>
+              <img
+                [src]="i['secure_url']"
+                [alt]="'Imagen ' + i['tipo'] + ' del producto'"
+                (error)="handleImageError($event)"
+              />
+              <a [href]="i['secure_url']" target="_blank" rel="noopener">{{ i['tipo'] }}</a>
               <button class="button button--quiet" (click)="toggleImage(i)">
                 {{ i['es_principal'] ? 'Quitar principal' : 'Marcar principal' }}
               </button></span
@@ -607,6 +630,9 @@ export class ProductAdminDetail implements OnInit {
   collections = signal<Entity[]>([]);
   productSeasons = signal<Entity[]>([]);
   productCollections = signal<Entity[]>([]);
+  selectedImage = signal<File | null>(null);
+  imagePreview = signal<string | null>(null);
+  uploadingImage = signal(false);
   message = signal('');
   error = signal(false);
   priceForm = this.fb.group({
@@ -620,11 +646,8 @@ export class ProductAdminDetail implements OnInit {
     activo: [true],
   });
   imageForm = this.fb.group({
-    proveedor_storage: ['CLOUDINARY'],
-    public_id: ['', Validators.required],
-    secure_url: ['', [Validators.required]],
     tipo: ['CATALOGO'],
-    orden: [1],
+    orden: [1, [Validators.required, Validators.min(1)]],
     es_principal: [false],
   });
   measurementForm = this.fb.group({
@@ -688,13 +711,45 @@ export class ProductAdminDetail implements OnInit {
       error: (e) => this.fail(e),
     });
   }
+  selectImage(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+    const previous = this.imagePreview();
+    if (previous) URL.revokeObjectURL(previous);
+    this.selectedImage.set(file);
+    this.imagePreview.set(file ? URL.createObjectURL(file) : null);
+  }
+  handleImageError(event: Event, selectedFile = false) {
+    (event.target as HTMLImageElement).hidden = true;
+    if (selectedFile) {
+      this.error.set(true);
+      this.message.set('No se pudo obtener una vista previa. Selecciona otra imagen.');
+    }
+  }
   addImage() {
-    this.api.post(`products/${this.id}/images`, this.imageForm.getRawValue()).subscribe({
+    const file = this.selectedImage();
+    if (!file || this.imageForm.invalid || this.uploadingImage()) return;
+    const raw = this.imageForm.getRawValue();
+    const payload = new FormData();
+    payload.append('file', file);
+    payload.append('tipo', raw.tipo || 'CATALOGO');
+    payload.append('orden', String(raw.orden || 1));
+    payload.append('es_principal', String(Boolean(raw.es_principal)));
+    this.uploadingImage.set(true);
+    this.api.postForm(`products/${this.id}/images/upload`, payload).subscribe({
       next: () => {
-        this.ok('Imagen registrada.');
+        this.uploadingImage.set(false);
+        const preview = this.imagePreview();
+        if (preview) URL.revokeObjectURL(preview);
+        this.selectedImage.set(null);
+        this.imagePreview.set(null);
+        this.imageForm.reset({ tipo: 'CATALOGO', orden: 1, es_principal: false });
+        this.ok('Imagen subida correctamente.');
         this.load();
       },
-      error: (e) => this.fail(e),
+      error: (e) => {
+        this.uploadingImage.set(false);
+        this.fail(e);
+      },
     });
   }
   toggleImage(image: Entity) {

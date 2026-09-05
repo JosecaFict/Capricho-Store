@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 from sqlalchemy import Select, and_, asc, desc, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.auth.models import Sucursal
 from app.modules.catalog.models import (
     Categoria,
     Coleccion,
@@ -42,6 +43,14 @@ class VariantRecord:
     hex_code: str | None
     available_stock: int | None
     minimum_stock: int | None
+
+
+@dataclass(frozen=True)
+class VariantOptionRecord:
+    variant: VarianteProducto
+    product_name: str
+    size: str
+    color: str
 
 
 @dataclass(frozen=True)
@@ -86,6 +95,22 @@ class CatalogRepository:
 
     async def flush(self) -> None:
         await self.session.flush()
+
+    async def list_active_branches(self) -> list[Sucursal]:
+        statement = select(Sucursal).where(Sucursal.activo.is_(True)).order_by(Sucursal.nombre)
+        return list((await self.session.scalars(statement)).all())
+
+    async def list_active_variant_options(self) -> list[VariantOptionRecord]:
+        statement = (
+            select(VarianteProducto, Producto.nombre, Talla.codigo, Color.nombre)
+            .join(Producto, Producto.id_producto == VarianteProducto.id_producto)
+            .join(Talla, Talla.id_talla == VarianteProducto.id_talla)
+            .join(Color, Color.id_color == VarianteProducto.id_color)
+            .where(VarianteProducto.activo.is_(True), Producto.activo.is_(True))
+            .order_by(Producto.nombre, Talla.orden, Color.nombre)
+        )
+        rows = (await self.session.execute(statement)).all()
+        return [VariantOptionRecord(*row) for row in rows]
 
     @staticmethod
     def _product_core_statement() -> Select[tuple[Producto, str, str, Decimal | None]]:

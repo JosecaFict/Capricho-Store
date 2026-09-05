@@ -143,6 +143,13 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/operations-admin').then((m) => m.TraceAdmin),
       },
       {
+        path: 'seguridad/roles-permisos',
+        title: 'Roles y permisos | Capricho Store',
+        canActivate: [requireAnyPermission('permisos.asignar')],
+        loadComponent: () =>
+          import('./features/admin/employees-admin').then((m) => m.RolesPermissionsAdmin),
+      },
+      {
         path: 'seguridad/bitacora',
         title: 'Bitácora de seguridad | Capricho Store',
         canActivate: [requireAnyPermission('permisos.asignar')],

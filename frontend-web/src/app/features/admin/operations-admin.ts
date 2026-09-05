@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { PermissionService } from '../../core/permissions/permission.service';
 import { AdminApiService, Entity } from './admin-api.service';
@@ -268,11 +269,21 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
         <header><h2>Nueva orden</h2></header>
         <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
           <label class="field"
-            ><span>ID proveedor</span
-            ><input type="number" min="1" formControlName="id_proveedor" /></label
+            ><span>Proveedor</span
+            ><select formControlName="id_proveedor">
+              <option value="">Seleccionar proveedor</option>
+              @for (supplier of suppliers(); track supplier['id_proveedor']) {
+                <option [value]="supplier['id_proveedor']">{{ supplier['razon_social'] }}</option>
+              }
+            </select></label
           ><label class="field"
-            ><span>ID sucursal</span
-            ><input type="number" min="1" formControlName="id_sucursal" /></label
+            ><span>Sucursal</span
+            ><select formControlName="id_sucursal">
+              <option value="">Seleccionar sucursal</option>
+              @for (branch of branches(); track branch['id_sucursal']) {
+                <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+              }
+            </select></label
           ><label class="field"
             ><span>Fecha estimada</span
             ><input type="date" formControlName="fecha_estimada" /></label
@@ -283,8 +294,13 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
             @for (row of details.controls; track $index) {
               <div [formGroupName]="$index">
                 <label class="field"
-                  ><span>ID variante</span
-                  ><input type="number" formControlName="id_variante" /></label
+                  ><span>Producto y variante</span
+                  ><select formControlName="id_variante">
+                    <option value="">Seleccionar variante</option>
+                    @for (variant of variants(); track variant['id_variante']) {
+                      <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
+                    }
+                  </select></label
                 ><label class="field"
                   ><span>Cantidad</span
                   ><input type="number" min="1" formControlName="cantidad" /></label
@@ -324,7 +340,7 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
             <span>{{ o['fecha_orden'] | date: 'mediumDate' }}</span>
           </header>
           <p>
-            Proveedor {{ o['id_proveedor'] }} · Sucursal {{ o['id_sucursal'] }} ·
+            {{ supplierName(o['id_proveedor']) }} · {{ branchName(o['id_sucursal']) }} ·
             {{ o['detalles']?.length }} líneas
           </p>
           @if (canManage()) {
@@ -343,6 +359,9 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
   private permissions = inject(PermissionService);
   canManage = () => this.permissions.has('proveedores.gestionar');
   orders = signal<Entity[]>([]);
+  suppliers = signal<Entity[]>([]);
+  branches = signal<Entity[]>([]);
+  variants = signal<Entity[]>([]);
   show = signal(false);
   form = this.fb.group({
     id_proveedor: [null as number | null, Validators.required],
@@ -359,9 +378,34 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
     this.addRow();
   }
   load() {
-    this.api
-      .list('purchase-orders')
-      .subscribe({ next: (v) => this.orders.set(v), error: (e) => this.fail(e) });
+    forkJoin({
+      orders: this.api.list('purchase-orders'),
+      suppliers: this.api.list('suppliers'),
+      branches: this.api.list('branches'),
+      variants: this.api.list('variants'),
+    }).subscribe({
+      next: (v) => {
+        this.orders.set(v.orders);
+        this.suppliers.set(v.suppliers);
+        this.branches.set(v.branches);
+        this.variants.set(v.variants);
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+  variantLabel(variant: Entity) {
+    return `${variant['producto']} - ${variant['talla']} / ${variant['color']} (${variant['sku']})`;
+  }
+  supplierName(id: number) {
+    return (
+      this.suppliers().find((supplier) => supplier['id_proveedor'] === id)?.['razon_social'] ??
+      `Proveedor ${id}`
+    );
+  }
+  branchName(id: number) {
+    return (
+      this.branches().find((branch) => branch['id_sucursal'] === id)?.['nombre'] ?? `Sucursal ${id}`
+    );
   }
   addRow() {
     this.details.push(
@@ -424,8 +468,15 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
       <section class="admin-editor">
         <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
           <label class="field"
-            ><span>ID orden de compra</span
-            ><input type="number" min="1" formControlName="id_orden_compra" /></label
+            ><span>Orden de compra</span
+            ><select formControlName="id_orden_compra" (change)="selectOrder()">
+              <option value="">Seleccionar orden</option>
+              @for (order of availableOrders(); track order['id_orden_compra']) {
+                <option [value]="order['id_orden_compra']">
+                  Orden #{{ order['id_orden_compra'] }} - {{ order['estado'] }}
+                </option>
+              }
+            </select></label
           ><label class="field field--wide"
             ><span>Observación</span><textarea formControlName="observacion"></textarea>
           </label>
@@ -433,8 +484,13 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
             @for (row of details.controls; track $index) {
               <div [formGroupName]="$index">
                 <label class="field"
-                  ><span>ID variante</span
-                  ><input type="number" formControlName="id_variante" /></label
+                  ><span>Producto y variante</span
+                  ><select formControlName="id_variante">
+                    <option value="">Seleccionar variante</option>
+                    @for (variant of variants(); track variant['id_variante']) {
+                      <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
+                    }
+                  </select></label
                 ><label class="field"
                   ><span>Cantidad recibida</span
                   ><input type="number" min="1" formControlName="cantidad_recibida" /></label
@@ -475,7 +531,7 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
             <tr>
               <td>#{{ r['id_recepcion'] }}</td>
               <td>#{{ r['id_orden_compra'] }}</td>
-              <td>{{ r['id_sucursal'] }}</td>
+              <td>{{ branchName(r['id_sucursal']) }}</td>
               <td>{{ r['fecha_recepcion'] | date: 'short' }}</td>
               <td>{{ r['estado'] }}</td>
             </tr>
@@ -487,6 +543,11 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
 })
 export class ReceiptsAdmin extends BaseAdmin implements OnInit {
   items = signal<Entity[]>([]);
+  orders = signal<Entity[]>([]);
+  variants = signal<Entity[]>([]);
+  branches = signal<Entity[]>([]);
+  availableOrders = () =>
+    this.orders().filter((order) => !['RECIBIDA', 'CANCELADA'].includes(order['estado']));
   show = signal(false);
   form = this.fb.group({
     id_orden_compra: [null as number | null, Validators.required],
@@ -498,21 +559,52 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
   }
   ngOnInit() {
     this.load();
-    this.addRow();
   }
   load() {
-    this.api
-      .list('receipts')
-      .subscribe({ next: (v) => this.items.set(v), error: (e) => this.fail(e) });
+    forkJoin({
+      receipts: this.api.list('receipts'),
+      orders: this.api.list('purchase-orders'),
+      variants: this.api.list('variants'),
+      branches: this.api.list('branches'),
+    }).subscribe({
+      next: (v) => {
+        this.items.set(v.receipts);
+        this.orders.set(v.orders);
+        this.variants.set(v.variants);
+        this.branches.set(v.branches);
+      },
+      error: (e) => this.fail(e),
+    });
   }
-  addRow() {
+  addRow(detail?: Entity) {
     this.details.push(
       this.fb.group({
-        id_variante: [null, Validators.required],
-        cantidad_recibida: [1, [Validators.required, Validators.min(1)]],
-        costo_unitario: [0, [Validators.required, Validators.min(0)]],
+        id_variante: [detail?.['id_variante'] ?? null, Validators.required],
+        cantidad_recibida: [
+          detail?.['cantidad_solicitada'] ?? 1,
+          [Validators.required, Validators.min(1)],
+        ],
+        costo_unitario: [
+          detail?.['costo_unitario_estimado'] ?? 0,
+          [Validators.required, Validators.min(0)],
+        ],
         numero_lote: [''],
       }),
+    );
+  }
+  selectOrder() {
+    this.details.clear();
+    const selected = this.orders().find(
+      (order) => Number(order['id_orden_compra']) === Number(this.form.value.id_orden_compra),
+    );
+    for (const detail of selected?.['detalles'] ?? []) this.addRow(detail);
+  }
+  variantLabel(variant: Entity) {
+    return `${variant['producto']} - ${variant['talla']} / ${variant['color']} (${variant['sku']})`;
+  }
+  branchName(id: number) {
+    return (
+      this.branches().find((branch) => branch['id_sucursal'] === id)?.['nombre'] ?? `Sucursal ${id}`
     );
   }
   save() {
@@ -714,16 +806,54 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
         <form [formGroup]="transfer" (ngSubmit)="createTransfer()" class="admin-form-grid">
           <label class="field"
             ><span>Sucursal origen</span
-            ><input type="number" min="1" formControlName="id_sucursal_origen" /></label
+            ><select formControlName="id_sucursal_origen">
+              <option value="">Seleccionar sucursal</option>
+              @for (branch of branches(); track branch['id_sucursal']) {
+                <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+              }
+            </select></label
           ><label class="field"
             ><span>Sucursal destino</span
-            ><input type="number" min="1" formControlName="id_sucursal_destino" /></label
-          ><label class="field"
-            ><span>ID variante</span
-            ><input type="number" min="1" formControlName="id_variante" /></label
-          ><label class="field"
-            ><span>Cantidad</span><input type="number" min="1" formControlName="cantidad" /></label
-          ><button class="button button--primary">Crear transferencia</button>
+            ><select formControlName="id_sucursal_destino">
+              <option value="">Seleccionar sucursal</option>
+              @for (branch of branches(); track branch['id_sucursal']) {
+                <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+              }
+            </select></label
+          >
+          <div formArrayName="detalles" class="admin-repeater field--wide">
+            @for (row of transferDetails.controls; track $index) {
+              <div [formGroupName]="$index">
+                <label class="field"
+                  ><span>Producto y variante</span
+                  ><select formControlName="id_variante">
+                    <option value="">Seleccionar variante</option>
+                    @for (variant of variants(); track variant['id_variante']) {
+                      <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
+                    }
+                  </select></label
+                ><label class="field"
+                  ><span>Cantidad</span
+                  ><input type="number" min="1" formControlName="cantidad" /></label
+                ><button
+                  type="button"
+                  class="button button--quiet"
+                  [disabled]="transferDetails.length === 1"
+                  (click)="transferDetails.removeAt($index)"
+                >
+                  Quitar
+                </button>
+              </div>
+            }
+          </div>
+          <div class="admin-form-actions">
+            <button type="button" class="button button--secondary" (click)="addTransferRow()">
+              Añadir línea
+            </button>
+            <button class="button button--primary" [disabled]="transfer.invalid">
+              Crear transferencia
+            </button>
+          </div>
         </form>
       </section>
     }
@@ -768,17 +898,24 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
   canMove = () => this.permissions.has('inventario.movimiento');
   mode = signal('lots');
   items = signal<Entity[]>([]);
+  branches = signal<Entity[]>([]);
+  variants = signal<Entity[]>([]);
   show = signal(false);
   transfer = this.fb.group({
     id_sucursal_origen: [null as number | null, Validators.required],
     id_sucursal_destino: [null as number | null, Validators.required],
-    id_variante: [null as number | null, Validators.required],
-    cantidad: [1, [Validators.required, Validators.min(1)]],
+    detalles: this.fb.array([]),
   });
+  get transferDetails() {
+    return this.transfer.controls.detalles as FormArray;
+  }
   ngOnInit() {
     this.route.data.subscribe((d) => {
       this.mode.set(d['mode']);
       this.load();
+      if (d['mode'] === 'transfers' && this.transferDetails.length === 0) {
+        this.addTransferRow();
+      }
     });
   }
   title() {
@@ -803,9 +940,24 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
         : 'inventory/transfers';
   }
   load() {
-    this.api
-      .list(this.path())
-      .subscribe({ next: (v) => this.items.set(v), error: (e) => this.fail(e) });
+    if (this.mode() !== 'transfers') {
+      this.api
+        .list(this.path())
+        .subscribe({ next: (v) => this.items.set(v), error: (e) => this.fail(e) });
+      return;
+    }
+    forkJoin({
+      items: this.api.list(this.path()),
+      branches: this.api.list('branches'),
+      variants: this.api.list('variants'),
+    }).subscribe({
+      next: (v) => {
+        this.items.set(v.items);
+        this.branches.set(v.branches);
+        this.variants.set(v.variants);
+      },
+      error: (e) => this.fail(e),
+    });
   }
   identity(x: Entity) {
     return x['id_lote'] ?? x['id_movimiento'] ?? x['id_transferencia'];
@@ -821,14 +973,35 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
       return `Sucursal ${x['id_sucursal']} · Variante ${x['id_variante']} · ${x['cantidad_disponible']} de ${x['cantidad_inicial']} · Bs ${x['costo_unitario']}`;
     if (this.mode() === 'movements')
       return `Inventario ${x['id_inventario']} · ${x['cantidad']} unidades · ${x['referencia_tipo'] || 'Sin referencia'}`;
-    return `Sucursal ${x['id_sucursal_origen']} → ${x['id_sucursal_destino']} · ${x['detalles']?.length} línea(s)`;
+    return `${this.branchName(x['id_sucursal_origen'])} a ${this.branchName(x['id_sucursal_destino'])} · ${x['detalles']?.length} línea(s)`;
+  }
+  addTransferRow() {
+    this.transferDetails.push(
+      this.fb.group({
+        id_variante: [null as number | null, Validators.required],
+        cantidad: [1, [Validators.required, Validators.min(1)]],
+      }),
+    );
+  }
+  variantLabel(variant: Entity) {
+    return `${variant['producto']} - ${variant['talla']} / ${variant['color']} (${variant['sku']})`;
+  }
+  branchName(id: number) {
+    return (
+      this.branches().find((branch) => branch['id_sucursal'] === id)?.['nombre'] ?? `Sucursal ${id}`
+    );
   }
   createTransfer() {
     const v = this.transfer.getRawValue();
+    if (v.id_sucursal_origen === v.id_sucursal_destino) {
+      this.error.set(true);
+      this.message.set('Selecciona sucursales de origen y destino diferentes.');
+      return;
+    }
     const payload = {
       id_sucursal_origen: v.id_sucursal_origen,
       id_sucursal_destino: v.id_sucursal_destino,
-      detalles: [{ id_variante: v.id_variante, cantidad: v.cantidad }],
+      detalles: v.detalles,
     };
     this.api.post('inventory/transfers', payload).subscribe({
       next: () => {

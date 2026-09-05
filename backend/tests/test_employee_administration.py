@@ -14,7 +14,11 @@ from app.modules.employees.exceptions import (
     ResourceConflictError,
     ResourceNotFoundError,
 )
-from app.modules.employees.schemas import EmployeePermissionSummary, EmployeeResponse
+from app.modules.employees.schemas import (
+    EmployeePermissionSummary,
+    EmployeeResponse,
+    RolePermissionSummary,
+)
 
 EMPLOYEE_PAYLOAD = {
     "nombres": "Carlos",
@@ -392,3 +396,38 @@ async def test_password_hash_never_appears_in_employee_response() -> None:
     assert response.status_code == 200
     assert "password" not in response.json()
     assert "password_hash" not in response.json()
+
+
+async def test_get_role_permissions() -> None:
+    service = AsyncMock()
+    service.get_role_permissions.return_value = RolePermissionSummary(
+        id_rol=4,
+        nombre="CAJERO",
+        permisos=["productos.ver", "ventas.crear"],
+    )
+    response = await call_employee_endpoint(
+        "GET",
+        "/api/v1/roles/4/permissions",
+        principal=make_principal("permisos.asignar"),
+        service=service,
+    )
+    assert response.status_code == 200
+    assert response.json()["permisos"] == ["productos.ver", "ventas.crear"]
+
+
+async def test_update_role_permission() -> None:
+    service = AsyncMock()
+    service.set_role_permission.return_value = RolePermissionSummary(
+        id_rol=4,
+        nombre="CAJERO",
+        permisos=["productos.ver"],
+    )
+    response = await call_employee_endpoint(
+        "PUT",
+        "/api/v1/roles/4/permissions/2",
+        principal=make_principal("permisos.asignar"),
+        service=service,
+        json={"habilitado": True},
+    )
+    assert response.status_code == 200
+    assert service.set_role_permission.await_args.kwargs["enabled"] is True

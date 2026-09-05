@@ -16,6 +16,8 @@ from app.modules.employees.schemas import (
     PermissionOverrideRequest,
     PermissionResponse,
     RoleAssignmentRequest,
+    RolePermissionSummary,
+    RolePermissionUpdate,
     RoleResponse,
 )
 from app.modules.employees.service import EmployeeService
@@ -101,6 +103,36 @@ async def list_permissions(
     service: Annotated[EmployeeService, Depends(get_employee_service)],
 ) -> list[PermissionResponse]:
     return await service.list_permissions()
+
+
+@router.get("/roles/{role_id}/permissions", response_model=RolePermissionSummary)
+async def get_role_permissions(
+    role_id: int,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("permisos.asignar"))],
+    service: Annotated[EmployeeService, Depends(get_employee_service)],
+) -> RolePermissionSummary:
+    return await service.get_role_permissions(role_id, actor=principal)
+
+
+@router.put(
+    "/roles/{role_id}/permissions/{permission_id}",
+    response_model=RolePermissionSummary,
+)
+async def set_role_permission(
+    role_id: int,
+    permission_id: int,
+    payload: RolePermissionUpdate,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("permisos.asignar"))],
+    service: Annotated[EmployeeService, Depends(get_employee_service)],
+) -> RolePermissionSummary:
+    return await service.set_role_permission(
+        role_id,
+        permission_id,
+        enabled=payload.habilitado,
+        actor=principal,
+        audit_context=audit_context_for(request, principal),
+    )
 
 
 @router.get(

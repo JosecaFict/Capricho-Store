@@ -41,8 +41,14 @@ import { AdminApiService, Entity } from './admin-api.service';
             /></label>
           }
           <label class="field"
-            ><span>ID sucursal</span><input type="number" min="1" formControlName="id_sucursal"
-          /></label>
+            ><span>Sucursal</span
+            ><select formControlName="id_sucursal">
+              <option value="">Seleccionar sucursal</option>
+              @for (branch of branches(); track branch['id_sucursal']) {
+                <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+              }
+            </select></label
+          >
           @if (!editingId()) {
             <label class="field"
               ><span>Rol</span
@@ -173,6 +179,7 @@ export class EmployeesAdmin implements OnInit {
   private fb = inject(FormBuilder);
   employees = signal<Entity[]>([]);
   roles = signal<Entity[]>([]);
+  branches = signal<Entity[]>([]);
   employeeSearch = signal('');
   roleFilter = signal('');
   statusFilter = signal('');
@@ -229,6 +236,10 @@ export class EmployeesAdmin implements OnInit {
   });
   ngOnInit() {
     this.reload();
+    this.api.list('branches').subscribe({
+      next: (branches) => this.branches.set(branches),
+      error: (error) => this.fail(error),
+    });
     if (this.perms.has('permisos.asignar'))
       this.api.list('roles').subscribe({ next: (v) => this.roles.set(v) });
   }
@@ -591,5 +602,175 @@ export class EmployeeDetail implements OnInit {
   fail(e: unknown) {
     this.isError.set(true);
     this.message.set(this.errors.message(e));
+  }
+}
+
+@Component({
+  selector: 'app-roles-permissions-admin',
+  imports: [CommonModule],
+  template: `<div class="admin-page">
+    <header class="admin-page-heading">
+      <div>
+        <p class="eyebrow">Seguridad</p>
+        <h1>Roles y permisos</h1>
+        <p>Define el acceso base de cada tipo de empleado.</p>
+      </div>
+    </header>
+    @if (message()) {
+      <div class="notice" [class.notice--error]="isError()" role="status">{{ message() }}</div>
+    }
+    <nav class="role-tabs" aria-label="Roles de empleados">
+      @for (role of roles(); track role['id_rol']) {
+        <button
+          type="button"
+          [class.is-active]="selectedRole()?.['id_rol'] === role['id_rol']"
+          [attr.aria-current]="selectedRole()?.['id_rol'] === role['id_rol'] ? 'page' : null"
+          (click)="selectRole(role)"
+        >
+          {{ roleLabel(role['nombre']) }}
+        </button>
+      }
+    </nav>
+    @if (selectedRole()) {
+      <label class="permission-search">
+        <span>Buscar permiso</span>
+        <input
+          type="search"
+          placeholder="Nombre, código o módulo"
+          [value]="search()"
+          (input)="search.set($any($event.target).value)"
+        />
+      </label>
+      <div class="role-permission-groups">
+        @for (group of groups(); track group.module) {
+          <section class="role-permission-group">
+            <header>
+              <h2>{{ group.module }}</h2>
+              <span>{{ enabledCount(group.permissions) }} de {{ group.permissions.length }}</span>
+            </header>
+            <div>
+              @for (permission of group.permissions; track permission['id_permiso']) {
+                <label class="role-permission-row">
+                  <span>
+                    <strong>{{ permission['nombre'] }}</strong>
+                    <small>{{ permission['codigo'] }}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    [checked]="isEnabled(permission)"
+                    [disabled]="isSaving(permission) || isProtected(permission)"
+                    (change)="toggle(permission, $any($event.target).checked)"
+                  />
+                </label>
+              }
+            </div>
+          </section>
+        } @empty {
+          <p class="admin-empty">No hay permisos que coincidan con la búsqueda.</p>
+        }
+      </div>
+    }
+  </div>`,
+})
+export class RolesPermissionsAdmin implements OnInit {
+  private api = inject(AdminApiService);
+  private errors = inject(ApiErrorService);
+  roles = signal<Entity[]>([]);
+  permissions = signal<Entity[]>([]);
+  selectedRole = signal<Entity | null>(null);
+  assignedCodes = signal<ReadonlySet<string>>(new Set());
+  savingIds = signal<ReadonlySet<number>>(new Set());
+  search = signal('');
+  message = signal('');
+  isError = signal(false);
+  groups = computed(() => {
+    const query = this.search().trim().toLocaleLowerCase('es');
+    const grouped = new Map<string, Entity[]>();
+    for (const permission of this.permissions()) {
+      const text =
+        `${permission['nombre']} ${permission['codigo']} ${permission['modulo']}`.toLocaleLowerCase(
+          'es',
+        );
+      if (query && !text.includes(query)) continue;
+      const module = String(permission['modulo'] || 'OTROS');
+      grouped.set(module, [...(grouped.get(module) ?? []), permission]);
+    }
+    return [...grouped].map(([module, permissions]) => ({ module, permissions }));
+  });
+  ngOnInit() {
+    forkJoin({
+      roles: this.api.list('roles'),
+      permissions: this.api.list('permissions'),
+    }).subscribe({
+      next: ({ roles, permissions }) => {
+        const managed = roles.filter((role) =>
+          ['ADMIN', 'ENCARGADO_SUCURSAL', 'CAJERO', 'AUXILIAR_INVENTARIO'].includes(role['nombre']),
+        );
+        this.roles.set(managed);
+        this.permissions.set(permissions);
+        if (managed.length) this.selectRole(managed[0]);
+      },
+      error: (error) => this.fail(error),
+    });
+  }
+  selectRole(role: Entity) {
+    this.selectedRole.set(role);
+    this.api.get(`roles/${role['id_rol']}/permissions`).subscribe({
+      next: (summary) => this.assignedCodes.set(new Set(summary['permisos'] ?? [])),
+      error: (error) => this.fail(error),
+    });
+  }
+  isEnabled(permission: Entity) {
+    return this.assignedCodes().has(String(permission['codigo']));
+  }
+  isSaving(permission: Entity) {
+    return this.savingIds().has(Number(permission['id_permiso']));
+  }
+  isProtected(permission: Entity) {
+    return (
+      this.selectedRole()?.['nombre'] === 'ADMIN' && permission['codigo'] === 'permisos.asignar'
+    );
+  }
+  enabledCount(permissions: Entity[]) {
+    return permissions.filter((permission) => this.isEnabled(permission)).length;
+  }
+  toggle(permission: Entity, enabled: boolean) {
+    const role = this.selectedRole();
+    if (!role || this.isSaving(permission)) return;
+    const permissionId = Number(permission['id_permiso']);
+    this.savingIds.update((ids) => new Set(ids).add(permissionId));
+    this.api
+      .put(`roles/${role['id_rol']}/permissions/${permissionId}`, { habilitado: enabled })
+      .pipe(
+        finalize(() =>
+          this.savingIds.update((ids) => {
+            const next = new Set(ids);
+            next.delete(permissionId);
+            return next;
+          }),
+        ),
+      )
+      .subscribe({
+        next: (summary) => {
+          this.assignedCodes.set(new Set(summary['permisos'] ?? []));
+          this.isError.set(false);
+          this.message.set('Permisos del rol actualizados.');
+        },
+        error: (error) => this.fail(error),
+      });
+  }
+  roleLabel(role: string) {
+    return (
+      {
+        ADMIN: 'Administrador',
+        ENCARGADO_SUCURSAL: 'Encargado de sucursal',
+        CAJERO: 'Cajero',
+        AUXILIAR_INVENTARIO: 'Auxiliar de inventario',
+      }[role] ?? role
+    );
+  }
+  fail(error: unknown) {
+    this.isError.set(true);
+    this.message.set(this.errors.message(error));
   }
 }

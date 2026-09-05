@@ -97,6 +97,8 @@ POST  /api/v1/employees                                  empleados.crear
 PATCH /api/v1/employees/{id}                             empleados.editar
 GET   /api/v1/roles                                      permisos.asignar
 GET   /api/v1/permissions                                permisos.asignar
+GET   /api/v1/roles/{id}/permissions                     permisos.asignar y rol ADMIN
+PUT   /api/v1/roles/{id}/permissions/{id_permiso}        permisos.asignar y rol ADMIN
 GET   /api/v1/employees/{id}/permissions                 permisos.asignar
 PUT   /api/v1/employees/{id}/permissions/{id_permiso}    permisos.asignar
 DELETE /api/v1/employees/{id}/permissions/{id_permiso}   permisos.asignar

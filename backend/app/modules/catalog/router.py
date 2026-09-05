@@ -1,14 +1,18 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 
+from app.integrations.cloudinary import CloudinaryError, CloudinaryStorage
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     build_request_audit_context,
+    get_current_principal,
     require_permission,
 )
-from app.modules.catalog.dependencies import get_catalog_service
+from app.modules.catalog.dependencies import get_catalog_service, get_cloudinary_storage
+from app.modules.catalog.exceptions import CatalogStorageError, InvalidCatalogDataError
 from app.modules.catalog.schemas import (
+    BranchOption,
     BrandCreate,
     BrandResponse,
     BrandUpdate,
@@ -39,6 +43,7 @@ from app.modules.catalog.schemas import (
     SeasonUpdate,
     SizeResponse,
     VariantCreate,
+    VariantOption,
     VariantResponse,
     VariantUpdate,
 )
@@ -53,6 +58,22 @@ def audit_context_for(request: Request, principal: CurrentPrincipal):
         user_id=principal.user.id_usuario,
         session_id=principal.session_id,
     )
+
+
+@router.get("/branches", response_model=list[BranchOption])
+async def list_branches(
+    _: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.list_branches()
+
+
+@router.get("/variants", response_model=list[VariantOption])
+async def list_variant_options(
+    _: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.list_variant_options()
 
 
 @router.get("/categories", response_model=list[CategoryResponse])
@@ -403,6 +424,62 @@ async def create_image(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
     return await service.create_image(product_id, payload, audit_context_for(request, principal))
+
+
+MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024
+ALLOWED_PRODUCT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+@router.post(
+    "/products/{product_id}/images/upload",
+    response_model=ProductImageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_image(
+    product_id: int,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("productos.editar"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    storage: Annotated[CloudinaryStorage, Depends(get_cloudinary_storage)],
+    file: Annotated[UploadFile, File()],
+    tipo: Annotated[Literal["CATALOGO", "MINIATURA", "PROMOCIONAL"], Form()] = "CATALOGO",
+    orden: Annotated[int, Form(gt=0)] = 1,
+    es_principal: Annotated[bool, Form()] = False,
+):
+    if file.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
+        raise InvalidCatalogDataError("Usa una imagen JPG, PNG o WebP")
+    content = await file.read(MAX_PRODUCT_IMAGE_BYTES + 1)
+    await file.close()
+    if not content:
+        raise InvalidCatalogDataError("El archivo de imagen está vacío")
+    if len(content) > MAX_PRODUCT_IMAGE_BYTES:
+        raise InvalidCatalogDataError("La imagen no debe superar 5 MB")
+    try:
+        uploaded = await storage.upload_product_image(
+            product_id=product_id,
+            content=content,
+            filename=file.filename or "producto",
+            content_type=file.content_type,
+        )
+    except CloudinaryError as exc:
+        raise CatalogStorageError(str(exc)) from exc
+    payload = ProductImageCreate(
+        public_id=uploaded.public_id,
+        secure_url=uploaded.secure_url,
+        tipo=tipo,
+        orden=orden,
+        es_principal=es_principal,
+        formato=uploaded.formato,
+        ancho_px=uploaded.ancho_px,
+        alto_px=uploaded.alto_px,
+    )
+    try:
+        return await service.create_image(
+            product_id, payload, audit_context_for(request, principal)
+        )
+    except Exception:
+        await storage.destroy(uploaded.public_id)
+        raise
 
 
 @router.patch("/product-images/{image_id}", response_model=ProductImageResponse)

@@ -31,6 +31,7 @@ from app.modules.catalog.repository import (
     VariantRecord,
 )
 from app.modules.catalog.schemas import (
+    BranchOption,
     BrandCreate,
     BrandUpdate,
     CategoryCreate,
@@ -53,6 +54,7 @@ from app.modules.catalog.schemas import (
     SeasonCreate,
     SeasonUpdate,
     VariantCreate,
+    VariantOption,
     VariantResponse,
     VariantUpdate,
 )
@@ -64,6 +66,24 @@ class CatalogService:
     def __init__(self, session: AsyncSession, repository: CatalogRepository) -> None:
         self.session = session
         self.repository = repository
+
+    async def list_branches(self) -> list[BranchOption]:
+        branches = await self.repository.list_active_branches()
+        return [BranchOption.model_validate(branch, from_attributes=True) for branch in branches]
+
+    async def list_variant_options(self) -> list[VariantOption]:
+        records = await self.repository.list_active_variant_options()
+        return [
+            VariantOption(
+                id_variante=record.variant.id_variante,
+                id_producto=record.variant.id_producto,
+                producto=record.product_name,
+                sku=record.variant.sku,
+                talla=record.size,
+                color=record.color,
+            )
+            for record in records
+        ]
 
     async def list_categories(self) -> list[Categoria]:
         return await self.repository.list_entities(Categoria, Categoria.nombre)

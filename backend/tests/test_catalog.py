@@ -8,10 +8,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient, Response
 
 from app.db.audit_context import AuditContext
+from app.integrations.cloudinary import CloudinaryUpload
 from app.main import app
 from app.modules.auth.dependencies import CurrentPrincipal, get_current_principal
 from app.modules.auth.models import Usuario
-from app.modules.catalog.dependencies import get_catalog_service
+from app.modules.catalog.dependencies import get_catalog_service, get_cloudinary_storage
 from app.modules.catalog.exceptions import CatalogConflictError, CatalogNotFoundError
 from app.modules.catalog.models import HistorialPrecio, ImagenProducto, Producto
 from app.modules.catalog.schemas import PriceCreate, ProductImageCreate
@@ -138,6 +139,9 @@ async def call_catalog(
     service: AsyncMock,
     principal: CurrentPrincipal | None = None,
     json: dict | None = None,
+    storage: AsyncMock | None = None,
+    data: dict | None = None,
+    files: dict | None = None,
 ) -> Response:
     async def override_service() -> AsyncIterator[AsyncMock]:
         yield service
@@ -145,12 +149,14 @@ async def call_catalog(
     app.dependency_overrides[get_catalog_service] = override_service
     if principal is not None:
         app.dependency_overrides[get_current_principal] = lambda: principal
+    if storage is not None:
+        app.dependency_overrides[get_cloudinary_storage] = lambda: storage
     try:
         async with AsyncClient(
             transport=ASGITransport(app=app, raise_app_exceptions=False),
             base_url="http://test",
         ) as client:
-            return await client.request(method, path, json=json)
+            return await client.request(method, path, json=json, data=data, files=files)
     finally:
         app.dependency_overrides.clear()
 
@@ -511,6 +517,45 @@ async def test_create_product_image() -> None:
         },
     )
     assert response.status_code == 201
+
+
+async def test_upload_product_image_to_cloudinary() -> None:
+    service = AsyncMock()
+    storage = AsyncMock()
+    service.create_image.return_value = IMAGE
+    storage.upload_product_image.return_value = CloudinaryUpload(
+        public_id="capricho-store/productos/1/polera-negra",
+        secure_url="https://res.cloudinary.com/demo/image/upload/polera-negra.webp",
+        formato="webp",
+        ancho_px=900,
+        alto_px=1200,
+    )
+    response = await call_catalog(
+        "POST",
+        "/api/v1/products/1/images/upload",
+        service=service,
+        storage=storage,
+        principal=make_principal("productos.editar"),
+        data={"tipo": "CATALOGO", "orden": "1", "es_principal": "true"},
+        files={"file": ("polera.webp", b"image-bytes", "image/webp")},
+    )
+    assert response.status_code == 201
+    storage.upload_product_image.assert_awaited_once()
+    payload = service.create_image.await_args.args[1]
+    assert payload.public_id.endswith("polera-negra")
+    assert payload.es_principal is True
+
+
+async def test_upload_rejects_unsupported_product_image() -> None:
+    response = await call_catalog(
+        "POST",
+        "/api/v1/products/1/images/upload",
+        service=AsyncMock(),
+        storage=AsyncMock(),
+        principal=make_principal("productos.editar"),
+        files={"file": ("producto.gif", b"gif", "image/gif")},
+    )
+    assert response.status_code == 400
 
 
 async def test_only_one_principal_image_is_kept() -> None:

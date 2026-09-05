@@ -14,6 +14,21 @@ class ORMResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BranchOption(BaseModel):
+    id_sucursal: int
+    nombre: str
+    direccion: str
+
+
+class VariantOption(BaseModel):
+    id_variante: int
+    id_producto: int
+    producto: str
+    sku: str
+    talla: str
+    color: str
+
+
 class NamedCreate(BaseModel):
     nombre: str = Field(min_length=1)
 

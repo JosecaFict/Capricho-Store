@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     )
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
+    cloudinary_url: str | None = Field(default=None, alias="CLOUDINARY_URL")
     brevo_api_key: str | None = Field(default=None, alias="BREVO_API_KEY")
     brevo_sender_email: str | None = Field(default=None, alias="BREVO_SENDER_EMAIL")
     brevo_sender_name: str = Field(default="Capricho Store", alias="BREVO_SENDER_NAME")

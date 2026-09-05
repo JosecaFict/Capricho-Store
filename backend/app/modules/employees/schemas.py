@@ -111,6 +111,16 @@ class PermissionOverrideRequest(BaseModel):
     otorgado: bool
 
 
+class RolePermissionUpdate(BaseModel):
+    habilitado: bool
+
+
+class RolePermissionSummary(BaseModel):
+    id_rol: int
+    nombre: str
+    permisos: list[str]
+
+
 class EmployeePermissionSummary(BaseModel):
     id_empleado: int
     id_usuario: int
@@ -119,4 +129,3 @@ class EmployeePermissionSummary(BaseModel):
     permisos_individuales_otorgados: list[str]
     permisos_individuales_revocados: list[str]
     permisos_efectivos: list[str]
-

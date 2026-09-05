@@ -1,6 +1,6 @@
 # Capricho Store - Frontend web
 
-Interfaz pública de Capricho Store construida con Angular 21 y componentes standalone. Consume exclusivamente la API FastAPI existente y respeta el catálogo oficial: **POLERA**, **CAMISA**, **POLO** y **BLUSA**. La separación HOMBRE/MUJER se maneja como público objetivo, no como categorías nuevas; BLUSA se ofrece únicamente para MUJER.
+Interfaz pública y panel operativo de Capricho Store construidos con Angular 21 y componentes standalone. Consume exclusivamente la API FastAPI y respeta el catálogo oficial: **POLERA**, **CAMISA**, **POLO** y **BLUSA**. La separación HOMBRE/MUJER se maneja como público objetivo, no como categorías nuevas; BLUSA se ofrece únicamente para MUJER.
 
 ## Requisitos
 
@@ -32,6 +32,9 @@ Abre `http://127.0.0.1:4200`.
 | `/login`         | Inicio de sesión                        |
 | `/registro`      | Registro de cliente                     |
 | `/cuenta`        | Perfil autenticado, protegido por guard |
+| `/admin`         | Panel operativo según permisos efectivos |
+
+El panel incluye empleados, roles y permisos, catálogo, proveedores, órdenes de compra, recepciones, inventario, lotes, movimientos, transferencias y bitácora.
 
 ## Arquitectura
 
@@ -39,12 +42,12 @@ Abre `http://127.0.0.1:4200`.
 - `core/interceptors`: agrega `Authorization: Bearer <token>` a las peticiones.
 - `core/guards`: protege rutas que requieren autenticación.
 - `core/services`: integración tipada con FastAPI y mensajes de error.
-- `features`: Home, catálogo, detalle de producto y autenticación.
+- `features`: tienda pública, autenticación y administración operativa.
 - `layouts`: cabecera, pie y estructura pública responsive.
 - `shared`: tarjetas, estados reutilizables y formato de precios.
 - `public/images`: fotografías Web optimizadas y limitadas al catálogo oficial.
 
-La disponibilidad por sucursal se consulta en detalle cuando existe un identificador de sucursal. La interfaz pública no muestra un selector numérico inventado porque actualmente no existe un endpoint público que entregue nombres de sucursales.
+La disponibilidad por sucursal se consulta en el detalle. Los formularios administrativos utilizan nombres de sucursales, proveedores, productos y variantes; los identificadores internos no se solicitan al usuario.
 
 ## Comandos de verificación
 
@@ -58,4 +61,4 @@ Angular CLI no generó una configuración ESLint para este proyecto. La compilac
 
 ## Alcance actual
 
-No incluye administración, carrito, reservas, pagos ni compra. Los CTA se limitan a navegación y consulta de información realmente disponible en FastAPI.
+No incluye carrito, reservas, ventas, pagos ni delivery. Los CTA públicos se limitan a navegación y consulta de información respaldada por FastAPI.

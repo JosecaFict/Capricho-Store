@@ -34,6 +34,9 @@ export class AdminApiService {
   post(path: string, payload: unknown) {
     return this.http.post<Entity>(`${API_BASE_URL}/${path}`, payload);
   }
+  postForm(path: string, payload: FormData) {
+    return this.http.post<Entity>(`${API_BASE_URL}/${path}`, payload);
+  }
   patch(path: string, payload: unknown) {
     return this.http.patch<Entity>(`${API_BASE_URL}/${path}`, payload);
   }

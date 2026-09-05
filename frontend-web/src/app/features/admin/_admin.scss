@@ -697,6 +697,30 @@ textarea {
   gap: 10px;
   margin-top: 16px;
 }
+.admin-image-preview {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.admin-image-preview img,
+.admin-image-list img {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.admin-image-preview figcaption {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .admin-image-list a {
   color: var(--accent-dark);
 }
@@ -923,6 +947,79 @@ textarea {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+.role-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+.role-tabs button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.role-tabs button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+}
+.role-permission-groups {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+}
+.role-permission-group {
+  border-top: 1px solid var(--ink);
+}
+.role-permission-group > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0 10px;
+}
+.role-permission-group h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.role-permission-group header span {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.role-permission-row {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.role-permission-row > span,
+.role-permission-row strong,
+.role-permission-row small {
+  display: block;
+  min-width: 0;
+}
+.role-permission-row small {
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.role-permission-row input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
 }
 @media (max-width: 1200px) {
   .admin-detail-grid--employee {

@@ -25,6 +25,7 @@ from app.modules.employees.schemas import (
     EmployeeResponse,
     EmployeeUpdateRequest,
     PermissionResponse,
+    RolePermissionSummary,
     RoleResponse,
 )
 
@@ -62,6 +63,62 @@ class EmployeeService:
             )
             for permission in await self.repository.list_active_permissions()
         ]
+
+    async def get_role_permissions(
+        self, role_id: int, *, actor: CurrentPrincipal
+    ) -> RolePermissionSummary:
+        role = await self._require_managed_role(role_id, actor)
+        codes = await self.repository.list_role_permission_codes(role.id_rol)
+        return RolePermissionSummary(
+            id_rol=role.id_rol,
+            nombre=role.nombre,
+            permisos=sorted(codes),
+        )
+
+    async def set_role_permission(
+        self,
+        role_id: int,
+        permission_id: int,
+        *,
+        enabled: bool,
+        actor: CurrentPrincipal,
+        audit_context: AuditContext,
+    ) -> RolePermissionSummary:
+        role = await self._require_managed_role(role_id, actor)
+        permission = await self.repository.get_permission(permission_id)
+        if permission is None or not permission.activo:
+            raise ResourceNotFoundError("Permission not found")
+        if role.nombre == "ADMIN" and permission.codigo == "permisos.asignar" and not enabled:
+            raise InvalidEmployeeDataError(
+                "The ADMIN role must keep the permission assignment capability"
+            )
+        try:
+            await apply_audit_context(self.session, audit_context)
+            await self.repository.set_role_permission(
+                role_id=role.id_rol,
+                permission_id=permission.id_permiso,
+                enabled=enabled,
+            )
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
+        codes = await self.repository.list_role_permission_codes(role.id_rol)
+        return RolePermissionSummary(
+            id_rol=role.id_rol,
+            nombre=role.nombre,
+            permisos=sorted(codes),
+        )
+
+    async def _require_managed_role(self, role_id: int, actor: CurrentPrincipal) -> Rol:
+        if "ADMIN" not in actor.roles:
+            raise PermissionDeniedError
+        role = await self.repository.get_role(role_id)
+        if role is None or not role.activo:
+            raise ResourceNotFoundError("Role not found")
+        if role.nombre not in MANAGED_EMPLOYEE_ROLES:
+            raise InvalidEmployeeDataError("Only employee roles can be configured")
+        return role
 
     async def create_employee(
         self,

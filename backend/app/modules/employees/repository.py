@@ -8,6 +8,7 @@ from app.modules.auth.models import (
     Empleado,
     Permiso,
     Rol,
+    RolPermiso,
     Sucursal,
     Usuario,
     UsuarioPermiso,
@@ -102,6 +103,28 @@ class EmployeeRepository:
             .order_by(Permiso.modulo, Permiso.codigo)
         )
         return list((await self.session.scalars(statement)).all())
+
+    async def list_role_permission_codes(self, role_id: int) -> set[str]:
+        statement = (
+            select(Permiso.codigo)
+            .join(RolPermiso, RolPermiso.id_permiso == Permiso.id_permiso)
+            .where(RolPermiso.id_rol == role_id, Permiso.activo.is_(True))
+        )
+        return set((await self.session.scalars(statement)).all())
+
+    async def set_role_permission(
+        self, *, role_id: int, permission_id: int, enabled: bool
+    ) -> None:
+        statement = select(RolPermiso).where(
+            RolPermiso.id_rol == role_id,
+            RolPermiso.id_permiso == permission_id,
+        )
+        assignment = await self.session.scalar(statement)
+        if enabled and assignment is None:
+            self.session.add(RolPermiso(id_rol=role_id, id_permiso=permission_id))
+        elif not enabled and assignment is not None:
+            await self.session.delete(assignment)
+        await self.session.flush()
 
     async def create_employee(
         self,
