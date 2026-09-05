@@ -1,11 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { PermissionService } from '../../core/permissions/permission.service';
 import { AdminApiService } from './admin-api.service';
-import { EmployeeDetail } from './employees-admin';
+import { EmployeeDetail, EmployeesAdmin } from './employees-admin';
 
 const employee = {
   id_empleado: 7,
@@ -65,5 +65,47 @@ describe('EmployeeDetail permissions', () => {
     expect(text).toContain('✓ Permitido');
     expect(text).toContain('⊘ Denegado');
     expect(fixture.componentInstance.permissionGroups()).toHaveLength(3);
+  });
+});
+
+describe('EmployeesAdmin role filters', () => {
+  it('shows readable role types and filters the employee list', () => {
+    const employees = [
+      employee,
+      {
+        ...employee,
+        id_empleado: 8,
+        nombres: 'Luis',
+        correo: 'luis@example.com',
+        roles: ['ADMIN'],
+      },
+    ];
+    const api = {
+      list: vi.fn((path: string) => of(path === 'employees' ? employees : [])),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [EmployeesAdmin],
+      providers: [
+        provideRouter([]),
+        { provide: AdminApiService, useValue: api },
+        { provide: PermissionService, useValue: { has: () => true } },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(EmployeesAdmin);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.textContent).toContain('Administrador');
+    expect(element.textContent).toContain('Cajero');
+
+    fixture.componentInstance.roleFilter.set('ADMIN');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.filteredEmployees()).toHaveLength(1);
+    expect(element.textContent).toContain('Luis');
+    expect(element.textContent).not.toContain('Ana Rojas');
   });
 });

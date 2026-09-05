@@ -81,6 +81,35 @@ import { AdminApiService, Entity } from './admin-api.service';
     @if (loading()) {
       <div class="admin-skeleton" aria-label="Cargando"></div>
     } @else {
+      <div class="admin-filterbar employee-filterbar">
+        <label class="field employee-search">
+          <span>Buscar empleado</span>
+          <input
+            type="search"
+            placeholder="Nombre, correo, CI o sucursal"
+            [value]="employeeSearch()"
+            (input)="employeeSearch.set($any($event.target).value)"
+          />
+        </label>
+        <label class="field">
+          <span>Tipo de rol</span>
+          <select [value]="roleFilter()" (change)="roleFilter.set($any($event.target).value)">
+            <option value="">Todos los roles</option>
+            @for (role of roleOptions; track role.code) {
+              <option [value]="role.code">{{ role.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Estado</span>
+          <select [value]="statusFilter()" (change)="statusFilter.set($any($event.target).value)">
+            <option value="">Todos los estados</option>
+            <option value="ACTIVO">Activo</option>
+            <option value="INACTIVO">Inactivo</option>
+            <option value="SUSPENDIDO">Suspendido</option>
+          </select>
+        </label>
+      </div>
       <div class="admin-table-wrap">
         <table>
           <thead>
@@ -93,14 +122,22 @@ import { AdminApiService, Entity } from './admin-api.service';
             </tr>
           </thead>
           <tbody>
-            @for (e of employees(); track e['id_empleado']) {
+            @for (e of filteredEmployees(); track e['id_empleado']) {
               <tr>
                 <td>
                   <strong>{{ e['nombres'] }} {{ e['apellidos'] }}</strong
                   ><small>{{ e['correo'] }} · CI {{ e['ci'] }}</small>
                 </td>
                 <td>{{ e['sucursal'] }}</td>
-                <td>{{ e['roles']?.join(', ') || 'Sin rol' }}</td>
+                <td>
+                  <div class="employee-roles">
+                    @for (role of e['roles']; track role) {
+                      <span class="role-chip" [attr.data-role]="role">{{ roleLabel(role) }}</span>
+                    } @empty {
+                      <span class="role-chip role-chip--muted">Sin rol</span>
+                    }
+                  </div>
+                </td>
                 <td>
                   <span
                     class="status-chip"
@@ -117,7 +154,10 @@ import { AdminApiService, Entity } from './admin-api.service';
               </tr>
             } @empty {
               <tr>
-                <td colspan="5">No hay empleados registrados.</td>
+                <td colspan="5" class="employee-empty">
+                  <strong>No se encontraron empleados</strong>
+                  <span>Prueba cambiando el rol, el estado o el texto de búsqueda.</span>
+                </td>
               </tr>
             }
           </tbody>
@@ -133,6 +173,9 @@ export class EmployeesAdmin implements OnInit {
   private fb = inject(FormBuilder);
   employees = signal<Entity[]>([]);
   roles = signal<Entity[]>([]);
+  employeeSearch = signal('');
+  roleFilter = signal('');
+  statusFilter = signal('');
   loading = signal(true);
   saving = signal(false);
   showForm = signal(false);
@@ -141,6 +184,28 @@ export class EmployeesAdmin implements OnInit {
   isError = signal(false);
   canCreate = computed(() => this.perms.has('empleados.crear'));
   canEdit = computed(() => this.perms.has('empleados.editar'));
+  readonly roleOptions = [
+    { code: 'ADMIN', label: 'Administrador' },
+    { code: 'ENCARGADO_SUCURSAL', label: 'Encargado de sucursal' },
+    { code: 'CAJERO', label: 'Cajero' },
+    { code: 'AUXILIAR_INVENTARIO', label: 'Auxiliar de inventario' },
+  ];
+  filteredEmployees = computed(() => {
+    const query = this.employeeSearch().trim().toLocaleLowerCase('es');
+    const role = this.roleFilter();
+    const status = this.statusFilter();
+    return this.employees().filter((employee) => {
+      const searchable =
+        `${employee['nombres']} ${employee['apellidos']} ${employee['correo']} ${employee['ci']} ${employee['sucursal']}`.toLocaleLowerCase(
+          'es',
+        );
+      return (
+        (!query || searchable.includes(query)) &&
+        (!role || employee['roles']?.includes(role)) &&
+        (!status || employee['estado_laboral'] === status)
+      );
+    });
+  });
   textFields = [
     { key: 'nombres', label: 'Nombres', type: 'text', required: true },
     { key: 'apellidos', label: 'Apellidos', type: 'text', required: true },
@@ -223,6 +288,9 @@ export class EmployeesAdmin implements OnInit {
         this.fail(e);
       },
     });
+  }
+  roleLabel(role: string) {
+    return this.roleOptions.find((option) => option.code === role)?.label ?? role;
   }
   ok(m: string) {
     this.isError.set(false);

@@ -368,6 +368,60 @@
 .admin-row-actions button:hover {
   text-decoration-color: currentColor;
 }
+.admin-table-wrap td.admin-row-actions {
+  display: table-cell;
+  height: 100%;
+  vertical-align: middle;
+}
+.admin-table-wrap td.admin-row-actions > * + * {
+  margin-left: 10px;
+}
+.employee-filterbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(180px, 0.45fr));
+  padding-inline: 0;
+}
+.employee-filterbar .field {
+  max-width: none;
+}
+.employee-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.role-chip {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.role-chip[data-role='ADMIN'] {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+.role-chip[data-role='ENCARGADO_SUCURSAL'] {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+.role-chip--muted {
+  color: var(--ink-soft);
+}
+.employee-empty {
+  padding-block: 42px !important;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.employee-empty strong,
+.employee-empty span {
+  display: block;
+}
 .status-chip--muted {
   border-color: var(--line);
   color: var(--ink-soft);
@@ -936,6 +990,12 @@ textarea {
   .audit-search {
     grid-column: 1/-1;
   }
+  .employee-filterbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .employee-search {
+    grid-column: 1/-1;
+  }
 }
 @media (max-width: 600px) {
   .admin-header {
@@ -1036,5 +1096,12 @@ textarea {
   }
   .audit-pagination {
     justify-content: space-between;
+  }
+  .employee-filterbar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .employee-search {
+    grid-column: auto;
   }
 }
