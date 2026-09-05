@@ -2,7 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { PermissionService } from '../../core/permissions/permission.service';
-import { ADMIN_NAVIGATION } from './admin-navigation';
+import { ADMIN_NAVIGATION, AdminNavGroup } from './admin-navigation';
 
 @Component({
   selector: 'app-admin-layout',
@@ -26,17 +26,35 @@ import { ADMIN_NAVIGATION } from './admin-navigation';
         >
         <nav>
           @for (group of visibleNavigation(); track group.label) {
-            <section class="admin-nav-group">
-              <h2>{{ group.label }}</h2>
-              @for (item of group.items; track item.path) {
-                <a
-                  [routerLink]="item.path"
-                  routerLinkActive="active"
-                  [routerLinkActiveOptions]="{ exact: item.path === '/admin' }"
-                  (click)="menuOpen.set(false)"
-                  >{{ item.label }}</a
+            <section class="admin-nav-group" [class.is-expanded]="isGroupExpanded(group)">
+              <h2>
+                <button
+                  type="button"
+                  class="admin-nav-trigger"
+                  (click)="toggleGroup(group)"
+                  [attr.aria-expanded]="isGroupExpanded(group)"
+                  [attr.aria-controls]="'admin-nav-group-' + $index"
+                  [attr.aria-label]="
+                    (isGroupExpanded(group) ? 'Ocultar ' : 'Mostrar ') + group.label
+                  "
                 >
-              }
+                  <span>{{ group.label }}</span>
+                  <svg aria-hidden="true" viewBox="0 0 16 16" fill="none">
+                    <path d="M6 3.5 10.5 8 6 12.5" />
+                  </svg>
+                </button>
+              </h2>
+              <div [id]="'admin-nav-group-' + $index" [hidden]="!isGroupExpanded(group)">
+                @for (item of group.items; track item.path) {
+                  <a
+                    [routerLink]="item.path"
+                    routerLinkActive="active"
+                    [routerLinkActiveOptions]="{ exact: item.path === '/admin' }"
+                    (click)="menuOpen.set(false)"
+                    >{{ item.label }}</a
+                  >
+                }
+              </div>
             </section>
           }
         </nav>
@@ -70,6 +88,7 @@ export class AdminLayout {
   private readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
   readonly menuOpen = signal(false);
+  readonly expandedGroups = signal<Record<string, boolean>>({});
   readonly user = this.auth.currentUser;
   readonly roleLabel = computed(() => this.user()?.roles.join(' · ') || 'Sin rol asignado');
   readonly visibleNavigation = computed(() =>
@@ -80,6 +99,24 @@ export class AdminLayout {
       ),
     })).filter((group) => group.items.length),
   );
+
+  isGroupExpanded(group: AdminNavGroup): boolean {
+    return this.expandedGroups()[group.label] ?? this.isGroupActive(group);
+  }
+
+  toggleGroup(group: AdminNavGroup): void {
+    const expanded = this.isGroupExpanded(group);
+    this.expandedGroups.update((groups) => ({ ...groups, [group.label]: !expanded }));
+  }
+
+  private isGroupActive(group: AdminNavGroup): boolean {
+    const currentPath = this.router.url.split(/[?#]/, 1)[0];
+    return group.items.some((item) =>
+      item.path === '/admin'
+        ? currentPath === item.path
+        : currentPath === item.path || currentPath.startsWith(`${item.path}/`),
+    );
+  }
 
   logout(): void {
     this.auth.logout();

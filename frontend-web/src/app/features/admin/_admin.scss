@@ -31,14 +31,59 @@
   letter-spacing: 0.22em;
 }
 .admin-nav-group {
-  margin-bottom: 22px;
+  margin-bottom: 8px;
 }
 .admin-nav-group h2 {
-  margin: 0 10px 7px;
+  margin: 0;
+}
+.admin-nav-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: #9299a4;
   font-size: 0.68rem;
+  font-weight: 700;
   letter-spacing: 0.12em;
+  text-align: left;
   text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 140ms var(--ease-out);
+}
+.admin-nav-trigger svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+  transition: transform 160ms var(--ease-out);
+}
+.admin-nav-group.is-expanded .admin-nav-trigger svg {
+  transform: rotate(90deg);
+}
+.admin-nav-trigger:hover {
+  background: #1b1f26;
+  color: #dfe2e7;
+}
+.admin-nav-trigger:active {
+  transform: scale(0.98);
+}
+.admin-nav-trigger:focus-visible {
+  outline: 2px solid #8eb0ff;
+  outline-offset: 2px;
+}
+.admin-nav-group > div {
+  margin-top: 2px;
 }
 .admin-nav-group a {
   display: flex;
