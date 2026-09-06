@@ -68,6 +68,50 @@ class AuthRepository {
   Future<bool> hasSession() async => (await _storage.read()) != null;
   Future<void> logout() => _storage.clear();
 
+  Future<String> requestPasswordRecovery(String email) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/password-recovery/request',
+        data: {'correo': email.trim().toLowerCase()},
+      );
+      return (response.data?['message'] as String?) ??
+          'Código de recuperación enviado con éxito.';
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<String> verifyPasswordRecoveryCode({
+    required String email,
+    required String code,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/password-recovery/verify',
+        data: {'correo': email.trim().toLowerCase(), 'codigo': code.trim()},
+      );
+      return response.data!['reset_token'] as String;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<String> resetPassword({
+    required String resetToken,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/password-recovery/reset',
+        data: {'reset_token': resetToken.trim(), 'password': newPassword},
+      );
+      return (response.data?['message'] as String?) ??
+          'Contraseña restablecida exitosamente.';
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   static String? _optional(String? value) {
     final cleaned = value?.trim();
     return cleaned == null || cleaned.isEmpty ? null : cleaned;

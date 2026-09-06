@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "489331495679",
+    "project_id": "capricho-store-374bb",
+    "storage_bucket": "capricho-store-374bb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:489331495679:android:032bb812437b4dbf47b2ca",
+        "android_client_info": {
+          "package_name": "com.caprichostore.capricho_store"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2pNB9DWTkgEn9LPAdJolJmNgGNmmB2ag"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -32,4 +32,102 @@ class CatalogRepository {
       throw ApiException.fromDio(error);
     }
   }
+
+  Future<List<CategoryItem>> categories() async {
+    try {
+      final response = await _dio.get<List<dynamic>>('/categories');
+      return (response.data ?? const [])
+          .map((item) => CategoryItem.fromJson(item as Map<String, dynamic>))
+          .where((cat) => cat.active)
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<BrandItem>> brands() async {
+    try {
+      final response = await _dio.get<List<dynamic>>('/brands');
+      return (response.data ?? const [])
+          .map((item) => BrandItem.fromJson(item as Map<String, dynamic>))
+          .where((brand) => brand.active)
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<SizeItem>> sizes() async {
+    try {
+      final response = await _dio.get<List<dynamic>>('/sizes');
+      return (response.data ?? const [])
+          .map((item) => SizeItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<ColorItem>> colors() async {
+    try {
+      final response = await _dio.get<List<dynamic>>('/colors');
+      return (response.data ?? const [])
+          .map((item) => ColorItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<SeasonItem>> seasons() async {
+    try {
+      final response = await _dio.get<List<dynamic>>('/seasons');
+      return (response.data ?? const [])
+          .map((item) => SeasonItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<ProductImage>> productImages(int productId) async {
+    try {
+      final response = await _dio.get<List<dynamic>>(
+        '/products/$productId/images',
+      );
+      return (response.data ?? const [])
+          .map((item) => ProductImage.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<ProductVariant>> productVariants(int productId) async {
+    try {
+      final response = await _dio.get<List<dynamic>>(
+        '/products/$productId/variants',
+      );
+      return (response.data ?? const [])
+          .map((item) => ProductVariant.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<ProductMeasurement>> productMeasurements(int productId) async {
+    try {
+      final response = await _dio.get<List<dynamic>>(
+        '/products/$productId/measurements',
+      );
+      return (response.data ?? const [])
+          .map(
+            (item) => ProductMeasurement.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
 }

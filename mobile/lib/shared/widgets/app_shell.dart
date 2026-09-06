@@ -1,3 +1,4 @@
+import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,24 +8,53 @@ class AppShell extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: child,
-    bottomNavigationBar: NavigationBar(
-      selectedIndex: location.startsWith('/cuenta') ? 1 : 0,
-      onDestinationSelected: (index) =>
-          context.go(index == 0 ? '/catalogo' : '/cuenta'),
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.grid_view_outlined),
-          selectedIcon: Icon(Icons.grid_view_rounded),
-          label: 'Catálogo',
+  Widget build(BuildContext context) {
+    final selectedIndex = location.startsWith('/cuenta')
+        ? 2
+        : (location.startsWith('/catalogo') ? 1 : 0);
+
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(
+            top: BorderSide(color: AppColors.line, width: 1),
+          ),
         ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outline_rounded),
-          selectedIcon: Icon(Icons.person_rounded),
-          label: 'Mi cuenta',
+        child: NavigationBar(
+          selectedIndex: selectedIndex,
+          onDestinationSelected: (index) {
+            switch (index) {
+              case 0:
+                context.go('/inicio');
+                break;
+              case 1:
+                context.go('/catalogo');
+                break;
+              case 2:
+                context.go('/cuenta');
+                break;
+            }
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'Inicio',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.grid_view_outlined),
+              selectedIcon: Icon(Icons.grid_view_rounded),
+              label: 'Catálogo',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Mi cuenta',
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

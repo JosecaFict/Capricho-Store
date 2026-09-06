@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
+
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
@@ -17,6 +18,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool hidden = true;
 
   @override
+  void initState() {
+    super.initState();
+    // Limpiar errores previos al entrar a la pantalla
+    Future.microtask(() {
+      ref.read(authControllerProvider.notifier).clearError();
+    });
+  }
+
+  @override
   void dispose() {
     email.dispose();
     password.dispose();
@@ -26,97 +36,163 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> submit() async {
     FocusScope.of(context).unfocus();
     if (!formKey.currentState!.validate()) return;
+    if (ref.read(authControllerProvider).loading) return;
+
     final success = await ref
         .read(authControllerProvider.notifier)
-        .login(email.text, password.text);
-    if (success && mounted) context.go('/cuenta');
+        .login(email.text.trim(), password.text);
+
+    if (success && mounted) {
+      context.go('/cuenta');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
+
     return Scaffold(
       appBar: AppBar(leading: const BackButton()),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-          child: Form(
-            key: formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const BrandWordmark(),
-                const SizedBox(height: 38),
-                Text(
-                  'Vuelve a tu estilo',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Ingresa para consultar tu perfil y continuar tu experiencia.',
-                ),
-                const SizedBox(height: 28),
-                TextFormField(
-                  controller: email,
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.email],
-                  decoration: const InputDecoration(
-                    labelText: 'Correo',
-                    prefixIcon: Icon(Icons.mail_outline_rounded),
+        child: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+            child: Form(
+              key: formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const BrandWordmark(),
+                  const SizedBox(height: 34),
+                  Text(
+                    'Vuelve a tu estilo',
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  validator: (value) => value != null && value.contains('@')
-                      ? null
-                      : 'Ingresa un correo válido.',
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: password,
-                  obscureText: hidden,
-                  autofillHints: const [AutofillHints.password],
-                  decoration: InputDecoration(
-                    labelText: 'Contraseña',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded),
-                    suffixIcon: IconButton(
-                      tooltip: hidden
-                          ? 'Mostrar contraseña'
-                          : 'Ocultar contraseña',
-                      onPressed: () => setState(() => hidden = !hidden),
-                      icon: Icon(
-                        hidden
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Ingresa para consultar tu perfil y continuar tu experiencia.',
+                  ),
+                  if (state.sessionExpired) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade700),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.amber.shade900,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Tu sesión ha expirado. Por favor ingresa nuevamente.',
+                              style: TextStyle(
+                                color: Colors.amber.shade900,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  ],
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo electrónico',
+                      prefixIcon: Icon(Icons.mail_outline_rounded),
+                    ),
+                    validator: (value) => value != null && value.contains('@')
+                        ? null
+                        : 'Ingresa un correo válido.',
                   ),
-                  validator: (value) => (value?.length ?? 0) >= 8
-                      ? null
-                      : 'La contraseña debe tener al menos 8 caracteres.',
-                ),
-                if (state.error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    state.error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: password,
+                    obscureText: hidden,
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => submit(),
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        tooltip: hidden
+                            ? 'Mostrar contraseña'
+                            : 'Ocultar contraseña',
+                        onPressed: () => setState(() => hidden = !hidden),
+                        icon: Icon(
+                          hidden
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
+                    ),
+                    validator: (value) => (value?.length ?? 0) >= 1
+                        ? null
+                        : 'Ingresa tu contraseña.',
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => context.push('/recuperar-password'),
+                      child: const Text('¿Olvidaste tu contraseña?'),
                     ),
                   ),
+                  if (state.error != null && !state.sessionExpired) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.error
+                            .withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        state.error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: state.loading ? null : submit,
+                    child: state.loading
+                        ? const SizedBox.square(
+                            dimension: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Ingresar'),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('¿Aún no tienes cuenta?'),
+                      TextButton(
+                        onPressed: () => context.push('/registro'),
+                        child: const Text('Crear una cuenta'),
+                      ),
+                    ],
+                  ),
                 ],
-                const SizedBox(height: 22),
-                FilledButton(
-                  onPressed: state.loading ? null : submit,
-                  child: state.loading
-                      ? const SizedBox.square(
-                          dimension: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Ingresar'),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => context.push('/registro'),
-                  child: const Text('Crear una cuenta'),
-                ),
-              ],
+              ),
             ),
           ),
         ),

@@ -2,7 +2,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class TokenStorage {
   TokenStorage([FlutterSecureStorage? storage])
-    : _storage = storage ?? const FlutterSecureStorage();
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock,
+            ),
+            aOptions: AndroidOptions(resetOnError: true),
+          );
 
   static const _key = 'capricho_access_token';
   final FlutterSecureStorage _storage;

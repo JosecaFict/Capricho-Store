@@ -37,4 +37,62 @@ void main() {
     expect(query.toQuery(), containsPair('sort', '-precio'));
     expect(query.toQuery(), containsPair('page', 2));
   });
+
+  test(
+    'CatalogQuery maneja filtros extendidos (marca, talla, color, temporada)',
+    () {
+      const query = CatalogQuery(
+        category: 'POLO',
+        audience: 'HOMBRE',
+        brand: 'Capricho Premium',
+        size: 'L',
+        color: 'Azul',
+        season: 'Verano 2026',
+        sort: '-created_at',
+        page: 1,
+      );
+
+      final params = query.toQuery();
+      expect(params['marca'], 'Capricho Premium');
+      expect(params['talla'], 'L');
+      expect(params['color'], 'Azul');
+      expect(params['temporada'], 'Verano 2026');
+      expect(query.hasActiveFilters, isTrue);
+
+      final cleared = query.copyWith(clearBrand: true, clearColor: true);
+      expect(cleared.brand, isNull);
+      expect(cleared.color, isNull);
+      expect(cleared.size, 'L');
+    },
+  );
+
+  test('CategoryItem, BrandItem, ColorItem y ProductMeasurement parsean correctamente', () {
+    final cat = CategoryItem.fromJson({
+      'id_categoria': 1,
+      'nombre': 'CAMISA',
+      'descripcion': 'Manga larga',
+      'activo': true,
+    });
+    expect(cat.id, 1);
+    expect(cat.name, 'CAMISA');
+
+    final color = ColorItem.fromJson({
+      'id_color': 3,
+      'nombre': 'Rojo',
+      'codigo_hex': '#FF0000',
+    });
+    expect(color.hex, '#FF0000');
+
+    final measurement = ProductMeasurement.fromJson({
+      'id_medida': 10,
+      'talla': 'M',
+      'ancho_hombros_cm': '44.5',
+      'ancho_pecho_cm': '52.0',
+      'largo_prenda_cm': '70.0',
+      'largo_manga_cm': '22.0',
+    });
+    expect(measurement.shouldersCm, 44.5);
+    expect(measurement.chestCm, 52.0);
+    expect(measurement.size, 'M');
+  });
 }

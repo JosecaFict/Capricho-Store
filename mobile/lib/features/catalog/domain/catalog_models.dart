@@ -11,6 +11,8 @@ class ProductVariant {
     required this.size,
     required this.color,
     required this.active,
+    this.sku,
+    this.barcode,
     this.hex,
     this.stock,
     this.stockStatus,
@@ -20,6 +22,8 @@ class ProductVariant {
     size: json['talla'] as String,
     color: json['color'] as String,
     hex: json['codigo_hex'] as String?,
+    sku: json['sku'] as String?,
+    barcode: json['codigo_barras'] as String?,
     active: json['activo'] as bool,
     stock: json['stock_disponible'] as int?,
     stockStatus: json['estado_stock'] as String?,
@@ -28,6 +32,8 @@ class ProductVariant {
   final String size;
   final String color;
   final String? hex;
+  final String? sku;
+  final String? barcode;
   final bool active;
   final int? stock;
   final String? stockStatus;
@@ -106,23 +112,183 @@ class ProductPage {
   final int pages;
 }
 
+class CategoryItem {
+  const CategoryItem({
+    required this.id,
+    required this.name,
+    this.description,
+    this.active = true,
+  });
+
+  factory CategoryItem.fromJson(Map<String, dynamic> json) => CategoryItem(
+    id: json['id_categoria'] as int,
+    name: json['nombre'] as String,
+    description: json['descripcion'] as String?,
+    active: json['activo'] as bool? ?? true,
+  );
+
+  final int id;
+  final String name;
+  final String? description;
+  final bool active;
+}
+
+class BrandItem {
+  const BrandItem({required this.id, required this.name, this.active = true});
+
+  factory BrandItem.fromJson(Map<String, dynamic> json) => BrandItem(
+    id: json['id_marca'] as int,
+    name: json['nombre'] as String,
+    active: json['activo'] as bool? ?? true,
+  );
+
+  final int id;
+  final String name;
+  final bool active;
+}
+
+class SizeItem {
+  const SizeItem({required this.id, required this.name, this.order});
+
+  factory SizeItem.fromJson(Map<String, dynamic> json) => SizeItem(
+    id: json['id_talla'] as int,
+    name: json['nombre'] as String,
+    order: json['orden'] as int?,
+  );
+
+  final int id;
+  final String name;
+  final int? order;
+}
+
+class ColorItem {
+  const ColorItem({required this.id, required this.name, this.hex});
+
+  factory ColorItem.fromJson(Map<String, dynamic> json) => ColorItem(
+    id: json['id_color'] as int,
+    name: json['nombre'] as String,
+    hex: json['codigo_hex'] as String?,
+  );
+
+  final int id;
+  final String name;
+  final String? hex;
+}
+
+class SeasonItem {
+  const SeasonItem({required this.id, required this.name, this.year});
+
+  factory SeasonItem.fromJson(Map<String, dynamic> json) => SeasonItem(
+    id: json['id_temporada'] as int,
+    name: json['nombre'] as String,
+    year: json['anio'] as int?,
+  );
+
+  final int id;
+  final String name;
+  final int? year;
+}
+
+class ProductMeasurement {
+  const ProductMeasurement({
+    required this.id,
+    required this.size,
+    this.shouldersCm,
+    this.chestCm,
+    this.lengthCm,
+    this.sleeveCm,
+  });
+
+  factory ProductMeasurement.fromJson(Map<String, dynamic> json) =>
+      ProductMeasurement(
+        id: json['id_medida'] as int,
+        size: json['talla'] as String,
+        shouldersCm: double.tryParse(
+          json['ancho_hombros_cm']?.toString() ?? '',
+        ),
+        chestCm: double.tryParse(json['ancho_pecho_cm']?.toString() ?? ''),
+        lengthCm: double.tryParse(json['largo_prenda_cm']?.toString() ?? ''),
+        sleeveCm: double.tryParse(json['largo_manga_cm']?.toString() ?? ''),
+      );
+
+  final int id;
+  final String size;
+  final double? shouldersCm;
+  final double? chestCm;
+  final double? lengthCm;
+  final double? sleeveCm;
+}
+
 class CatalogQuery {
   const CatalogQuery({
     this.category,
     this.audience,
+    this.brand,
+    this.size,
+    this.color,
+    this.season,
     this.sort = 'nombre',
     this.page = 1,
+    this.pageSize = 20,
   });
+
   final String? category;
   final String? audience;
+  final String? brand;
+  final String? size;
+  final String? color;
+  final String? season;
   final String sort;
   final int page;
+  final int pageSize;
+
+  bool get hasActiveFilters =>
+      (category != null && category!.isNotEmpty) ||
+      (audience != null && audience!.isNotEmpty) ||
+      (brand != null && brand!.isNotEmpty) ||
+      (size != null && size!.isNotEmpty) ||
+      (color != null && color!.isNotEmpty) ||
+      (season != null && season!.isNotEmpty);
 
   Map<String, dynamic> toQuery() => {
     'page': page,
-    'page_size': 20,
+    'page_size': pageSize,
     'sort': sort,
-    if (category != null) 'categoria': category,
-    if (audience != null) 'publico_objetivo': audience,
+    if (category != null && category!.isNotEmpty) 'categoria': category,
+    if (audience != null && audience!.isNotEmpty) 'publico_objetivo': audience,
+    if (brand != null && brand!.isNotEmpty) 'marca': brand,
+    if (size != null && size!.isNotEmpty) 'talla': size,
+    if (color != null && color!.isNotEmpty) 'color': color,
+    if (season != null && season!.isNotEmpty) 'temporada': season,
   };
+
+  CatalogQuery copyWith({
+    String? category,
+    String? audience,
+    String? brand,
+    String? size,
+    String? color,
+    String? season,
+    String? sort,
+    int? page,
+    int? pageSize,
+    bool clearCategory = false,
+    bool clearAudience = false,
+    bool clearBrand = false,
+    bool clearSize = false,
+    bool clearColor = false,
+    bool clearSeason = false,
+  }) {
+    return CatalogQuery(
+      category: clearCategory ? null : (category ?? this.category),
+      audience: clearAudience ? null : (audience ?? this.audience),
+      brand: clearBrand ? null : (brand ?? this.brand),
+      size: clearSize ? null : (size ?? this.size),
+      color: clearColor ? null : (color ?? this.color),
+      season: clearSeason ? null : (season ?? this.season),
+      sort: sort ?? this.sort,
+      page: page ?? this.page,
+      pageSize: pageSize ?? this.pageSize,
+    );
+  }
 }

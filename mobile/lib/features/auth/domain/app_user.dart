@@ -34,4 +34,25 @@ class AppUser {
   final List<String> permissions;
 
   String get fullName => '$names $surnames';
+
+  bool get isAdmin =>
+      roles.contains('ADMIN') || roles.contains('ADMINISTRADOR');
+
+  bool get isStaff =>
+      isAdmin ||
+      roles.contains('ENCARGADO_SUCURSAL') ||
+      roles.contains('CAJERO') ||
+      roles.contains('AUXILIAR_INVENTARIO') ||
+      permissions.any((p) => p.startsWith('inventario.') || p.startsWith('empleados.'));
+
+  String get roleName {
+    if (isAdmin) return 'Administrador';
+    if (roles.contains('ENCARGADO_SUCURSAL')) return 'Encargado de Sucursal';
+    if (roles.contains('CAJERO')) return 'Cajero';
+    if (roles.contains('AUXILIAR_INVENTARIO')) return 'Auxiliar de Inventario';
+    if (roles.isNotEmpty && !roles.contains('CLIENTE')) return roles.first;
+    return 'Cliente';
+  }
+
+  bool hasPermission(String permission) => permissions.contains(permission);
 }
