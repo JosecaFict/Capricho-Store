@@ -1,4 +1,4 @@
-$FirebaseSDKVersion = '11.4.0'
+$FirebaseSDKVersion = '10.29.0'
 platform :ios, '15.0'
 
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -29,10 +29,10 @@ flutter_ios_podfile_setup
 target 'Runner' do
   use_frameworks!
 
-  pod 'FirebaseCoreInternal', '< 12.0'
-  pod 'FirebaseCore', '< 12.0'
-  pod 'FirebaseInstallations', '< 12.0'
-  pod 'FirebaseMessaging', '< 12.0'
+  pod 'FirebaseCoreInternal', '10.29.0'
+  pod 'FirebaseCore', '10.29.0'
+  pod 'FirebaseInstallations', '10.29.0'
+  pod 'FirebaseMessaging', '10.29.0'
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
