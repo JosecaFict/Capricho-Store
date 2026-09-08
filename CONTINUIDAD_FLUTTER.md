@@ -408,3 +408,11 @@ Respeta estas reglas:
 Empieza verificando el entorno con flutter doctor -v y continúa desde el
 próximo bloque recomendado en CONTINUIDAD_FLUTTER.md.
 ```
+
+## 15. Entorno de desarrollo físico en iPhone desde Windows 11
+
+El entorno oficial para probar y desarrollar nativamente en el **iPhone 15 Pro Max** desde la laptop Windows 11 (MSI Cyborg 15 A13V con Intel i7-13620H) quedó 100% operativo mediante máquina virtual macOS Sonoma + VMware Workstation Pro + Xcode 15.2.
+
+Todo el procedimiento, credenciales de Team, configuración de VMware, parches para Intel Core de 13va gen y reglas de compatibilidad de Firebase (fijado en 10.29.0) están documentados detalladamente en:
+👉 [MANUAL_IOS_WINDOWS.md](file:///c:/Users/huasi/Documents/Proyectos%202-2026/Capricho-Store/MANUAL_IOS_WINDOWS.md)
+
