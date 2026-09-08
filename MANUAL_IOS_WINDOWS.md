@@ -167,3 +167,47 @@ La versión Release compila en código binario AOT de 120 Hz ProMotion y se pued
 | `Desarrollador no confiable` en iPhone | Primera instalación de un nuevo certificado | En iPhone: *Ajustes > General > VPN y gestión de dispositivos > josephuagrm@icloud.com > Confiar* |
 | `In iOS 14+, debug mode apps can only be launched from tooling` | Se tocó el icono en la pantalla de inicio mientras no había debugger conectado | Cerrar la app desde el multitarea y correr `flutter run` en terminal, o instalar con `flutter run --release` |
 | `Signing requires a development team` | Se perdió la configuración en Xcode | Ejecutar `open ios/Runner.xcworkspace`, ir a `Signing & Capabilities` y seleccionar `Jose carlos Villarroel (Personal Team)` |
+
+---
+
+## 9. Hoja de Ruta de Diseño: La Experiencia que Enamora (iOS vs Android)
+
+Esta sección documenta cómo lograr que la aplicación no se sienta como una app genérica, sino que enamore al usuario adaptando su personalidad física y visual según el dispositivo:
+
+### A. Los 6 Pilares de la Experiencia iOS (Apple Human Interface Guidelines)
+1. **Física del Tacto y Gestos (120 Hz ProMotion):**
+   - Scroll con rebote elástico natural (`BouncingScrollPhysics`).
+   - Gesto interactivo de arrastrar desde el borde izquierdo para volver atrás (`CupertinoPageRoute` / swipe-to-back interactivo).
+   - Micro-compresión elástica en tarjetas al tocarlas (escala al 96% con curva de resorte, en lugar de manchas de tinta).
+2. **El Motor Háptico (*Taptic Engine* del iPhone 15 Pro Max):**
+   - Clics mecánicos sutiles al cambiar de pestaña (`HapticFeedback.selectionClick()`).
+   - Pulsos de confirmación al añadir al carrito (`HapticFeedback.mediumImpact()`).
+   - Pop táctil al hacer pull-to-refresh.
+3. **Efecto Vidrio Esmerilado (*Frosted Glass / Glassmorphism*):**
+   - Barras de navegación superior e inferior con translucidez difuminada (`BackdropFilter` con `ImageFilter.blur(sigmaX: 20, sigmaY: 20)`).
+   - El catálogo de prendas pasa por detrás de las barras desenfocándose con luminosidad.
+4. **Títulos Gigantes Dinámicos (*iOS Large Titles*):**
+   - Títulos en `34px, w800` (tipografía estilo **SF Pro**) que al hacer scroll se comprimen suavemente y se centran en miniatura en la barra superior.
+5. **Curvaturas Continuas (*Apple Squircles*):**
+   - Superelipses de 16 a 24 px en fotos de prendas y botones, eliminando bordes rectos y redondeos simples.
+6. **Hojas Modales Arrastrables (*Draggable Action Sheets*):**
+   - Para filtros, tallas o compras, se despliegan tarjetas flotantes desde abajo con barrita *grabber*, cerrables arrastrando con el dedo.
+
+### B. Matriz de Diseño Adaptativo: El Toque iPhone vs El Toque Android
+Ambas plataformas comparten el 100% de la lógica de negocio, catálogo y FastAPI, pero la experiencia sensorial se adapta automáticamente:
+
+| Elemento | En iPhone (Toque Apple / Cupertino) | En Android (Toque Google / Material You) |
+| :--- | :--- | :--- |
+| **Física de scroll** | Rebote de goma elástica (*Bouncing Scroll* a 120 Hz) | Estiramiento elástico suave (*Overscroll Stretch*) |
+| **Al tocar una prenda** | Compresión elástica de la tarjeta hacia adentro | Onda de agua luminosa interactiva (*Ink Ripple*) |
+| **Gesto de volver** | Arrastrar el borde izquierdo con el pulgar | Gesto de retroceso predictivo con encogimiento 3D |
+| **Barra de navegación** | Vidrio translúcido esmerilado con desenfoque de fondo | Barra de color tonal dinámico con píldora indicadora |
+| **Ruedita de carga** | Rayitas grises giratorias de iOS (`CupertinoActivityIndicator`) | Arco circular giratorio continuo (`CircularProgressIndicator`) |
+| **Icono de compartir** | Caja con flecha hacia arriba (icono estándar iOS) | Tres puntos unidos por líneas (icono estándar Android) |
+| **Hojas de opciones** | Hoja modal curva flotante con botón Cancelar separado | Menú emergente de opciones flotante con bordes limpios |
+
+### C. Estrategia de Implementación en Flutter (Un solo código)
+1. **Constructores adaptativos:** Usar `Switch.adaptive()`, `Slider.adaptive()`, `CircularProgressIndicator.adaptive()`, `Icons.adaptive.share`, etc.
+2. **Detección de plataforma:** Mediante `Theme.of(context).platform == TargetPlatform.iOS`, activar micro-escalas y háptica de Apple en iOS, y ondas *InkWell* en Android.
+3. **Mantenimiento centralizado:** Un solo proyecto Flutter, un solo backend en Railway y una sola base de datos PostgreSQL.
+
