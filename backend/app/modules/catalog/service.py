@@ -242,7 +242,7 @@ class CatalogService:
     ) -> ProductResponse:
         category = await self._require_active(Categoria, payload.id_categoria, "Category")
         await self._require_active(Marca, payload.id_marca, "Brand")
-        self.validate_blouse_rule(category.nombre, payload.publico_objetivo)
+        self.validate_catalog_rule(category.nombre, payload.publico_objetivo)
         product = Producto(**payload.model_dump())
         await self._mutate(audit_context, self.repository.add(product))
         return await self.get_product(product.id_producto)
@@ -257,7 +257,7 @@ class CatalogService:
         category = await self._require_active(Categoria, category_id, "Category")
         await self._require_active(Marca, brand_id, "Brand")
         target = payload.publico_objetivo or product.publico_objetivo
-        self.validate_blouse_rule(category.nombre, target)
+        self.validate_catalog_rule(category.nombre, target)
         for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(product, key, value)
         await self._mutate(audit_context, self.repository.flush())
@@ -474,9 +474,15 @@ class CatalogService:
         await self._mutate(audit_context, self.repository.remove(link))
 
     @staticmethod
-    def validate_blouse_rule(category_name: str, target: str) -> None:
-        if category_name.strip().upper() == "BLUSA" and target != "MUJER":
+    def validate_catalog_rule(category_name: str, target: str) -> None:
+        category = category_name.strip().upper()
+        if category not in {"POLERA", "CAMISA", "POLO", "BLUSA"}:
+            raise InvalidCatalogDataError("Category is not part of the official catalog")
+        if category == "BLUSA" and target != "MUJER":
             raise InvalidCatalogDataError("BLUSA products are only valid for MUJER")
+
+    # Alias conservado para llamadas existentes y compatibilidad interna.
+    validate_blouse_rule = validate_catalog_rule
 
     @staticmethod
     def stock_state(available: int, minimum: int) -> str:

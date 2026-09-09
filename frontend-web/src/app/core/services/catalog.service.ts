@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 import { API_BASE_URL, OFFICIAL_CATEGORIES } from '../config/api.config';
 import {
   Brand,
+  Branch,
   CatalogFilters,
   CatalogOptions,
   Category,
@@ -43,6 +44,10 @@ export class CatalogService {
     return this.http.get<ProductMeasurement[]>(`${API_BASE_URL}/products/${id}/measurements`);
   }
 
+  branches(): Observable<Branch[]> {
+    return this.http.get<Branch[]>(`${API_BASE_URL}/branches`);
+  }
+
   options(): Observable<CatalogOptions> {
     return forkJoin({
       categories: this.http
@@ -70,6 +75,7 @@ export class CatalogService {
       seasons: this.http
         .get<Season[]>(`${API_BASE_URL}/seasons`)
         .pipe(map((items) => items.filter((item) => item.activo))),
+      branches: this.branches(),
     });
   }
 }

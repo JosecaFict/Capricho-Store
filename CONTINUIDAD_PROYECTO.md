@@ -1,6 +1,6 @@
 # Continuidad general — Capricho Store
 
-Última actualización: 4 de septiembre de 2026.
+Última actualización: 8 de septiembre de 2026.
 
 Este es el documento maestro para continuar Capricho Store desde otra
 computadora o desde una nueva tarea de Codex. Resume el estado real del backend,
@@ -287,9 +287,9 @@ ruff check . --no-cache
 ### Estado de calidad del backend
 
 - Existen 9 archivos de pruebas.
-- Pytest recolecta 116 pruebas, incluidas las del bootstrap del dueño y la
+- Pytest recolecta 138 pruebas, incluidas las del bootstrap del dueño y la
   configuración de producción.
-- `pytest -q -p no:cacheprovider`: 116 pruebas aprobadas en la revisión del 4 de
+- `pytest -q -p no:cacheprovider`: 138 pruebas aprobadas en la revisión del 8 de
   septiembre de 2026.
 - `ruff check . --no-cache`: correcto, sin observaciones.
 - Se desactivó el cache provider de Pytest y se usó `--no-cache` en Ruff porque
@@ -333,8 +333,8 @@ frontend-web/src/app/
 | Ruta | Función |
 |---|---|
 | `/` | Home pública |
-| `/catalogo` | Catálogo real y filtros compactos |
-| `/productos/:id` | Detalle de producto |
+| `/catalogo` | Catálogo real, filtros compactos y consulta por sucursal |
+| `/productos/:id` | Detalle de producto y disponibilidad por sucursal |
 | `/login` | Inicio de sesión |
 | `/registro` | Registro de cliente |
 | `/cuenta` | Perfil autenticado |
@@ -351,7 +351,7 @@ Rutas existentes bajo `/admin`:
 - Dashboard.
 - Empleados y detalle de empleado.
 - Productos y detalle administrativo.
-- Datos maestros del catálogo.
+- Datos maestros del catálogo, incluidas las tallas canónicas de solo lectura.
 - Proveedores y detalle de proveedor.
 - Órdenes de compra.
 - Recepciones.
@@ -395,10 +395,10 @@ Estado verificado el 4 de septiembre de 2026:
 
 ```text
 npm run build: correcto
-Vitest: 4 archivos aprobados, 9 pruebas aprobadas
+Vitest: 10 archivos aprobados, 22 pruebas aprobadas
 ```
 
-Hay 4 archivos `.spec.ts`. Angular no tiene ESLint configurado actualmente; la
+Hay 10 archivos `.spec.ts`. Angular no tiene ESLint configurado actualmente; la
 validación disponible es compilación estricta, Vitest y Prettier.
 
 ## 7. Mobile Flutter
@@ -495,6 +495,10 @@ sentirse parte del mismo producto, respetando los patrones nativos de cada una.
   panel administrativo.
 - Añadir más pruebas para rutas y flujos administrativos.
 - No mostrar operaciones que todavía no tengan endpoint.
+- Las categorías nuevas se limitan en FastAPI a `POLERA`, `CAMISA`, `POLO` y
+  `BLUSA`; esta última conserva la restricción exclusiva para `MUJER`.
+- Las tallas `S`, `M`, `L` y `XL` se muestran en datos maestros como valores
+  canónicos de solo lectura para no romper variantes existentes.
 
 ### Flutter
 

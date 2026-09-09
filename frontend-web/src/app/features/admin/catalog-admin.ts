@@ -27,6 +27,14 @@ const MASTER: any = {
       ['activo', 'Activo', 'checkbox'],
     ],
   },
+  sizes: {
+    label: 'Tallas',
+    id: 'id_talla',
+    display: 'codigo',
+    detail: 'orden',
+    readonly: true,
+    fields: [],
+  },
   colors: {
     label: 'Colores',
     id: 'id_color',
@@ -67,7 +75,7 @@ const MASTER: any = {
       <div>
         <p class="eyebrow">Catálogo</p>
         <h1>Datos maestros</h1>
-        <p>Categorías oficiales, marcas, colores, temporadas y colecciones.</p>
+        <p>Categorías oficiales, tallas, marcas, colores, temporadas y colecciones.</p>
       </div>
     </header>
     <div class="admin-tabs" role="tablist">
@@ -78,29 +86,36 @@ const MASTER: any = {
     @if (message()) {
       <div class="notice" [class.notice--error]="error()">{{ message() }}</div>
     }
-    <section class="admin-editor">
-      <header>
-        <h2>{{ editing() ? 'Editar' : 'Nuevo' }} · {{ cfg(active()).label }}</h2>
-      </header>
-      <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
-        @for (f of cfg(active()).fields; track f[0]) {
-          <label class="field"
-            ><span>{{ f[1] }}</span>
-            @if (f[2] === 'checkbox') {
-              <input type="checkbox" [formControlName]="f[0]" />
-            } @else {
-              <input [type]="f[2]" [formControlName]="f[0]" />
-            }
-          </label>
-        }
-        <div class="admin-form-actions">
-          <button class="button button--primary" [disabled]="form.invalid">Guardar</button>
-          @if (editing()) {
-            <button type="button" class="button button--quiet" (click)="reset()">Cancelar</button>
+    @if (cfg(active()).readonly) {
+      <div class="notice">
+        Las tallas S, M, L y XL son datos canónicos del Ciclo I y se administran como valores de
+        solo lectura para proteger las variantes existentes.
+      </div>
+    } @else {
+      <section class="admin-editor">
+        <header>
+          <h2>{{ editing() ? 'Editar' : 'Nuevo' }} · {{ cfg(active()).label }}</h2>
+        </header>
+        <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
+          @for (f of cfg(active()).fields; track f[0]) {
+            <label class="field"
+              ><span>{{ f[1] }}</span>
+              @if (f[2] === 'checkbox') {
+                <input type="checkbox" [formControlName]="f[0]" />
+              } @else {
+                <input [type]="f[2]" [formControlName]="f[0]" />
+              }
+            </label>
           }
-        </div>
-      </form>
-    </section>
+          <div class="admin-form-actions">
+            <button class="button button--primary" [disabled]="form.invalid">Guardar</button>
+            @if (editing()) {
+              <button type="button" class="button button--quiet" (click)="reset()">Cancelar</button>
+            }
+          </div>
+        </form>
+      </section>
+    }
     <div class="admin-table-wrap">
       <table>
         <thead>
@@ -115,14 +130,21 @@ const MASTER: any = {
           @for (x of items(); track x[cfg(active()).id]) {
             <tr>
               <td>
-                <strong>{{ x['nombre'] }}</strong>
+                <strong>{{ x[cfg(active()).display || 'nombre'] }}</strong>
               </td>
               <td>
-                {{ x['descripcion'] || x['pais_origen'] || x['codigo_hex'] || x['anio'] || '—' }}
+                {{
+                  (cfg(active()).detail ? x[cfg(active()).detail] : null) ||
+                    x['descripcion'] ||
+                    x['pais_origen'] ||
+                    x['codigo_hex'] ||
+                    x['anio'] ||
+                    '—'
+                }}
               </td>
               <td>{{ x['activo'] ? 'ACTIVO' : 'INACTIVO' }}</td>
               <td class="admin-row-actions">
-                @if (canEdit()) {
+                @if (canEdit() && !cfg(active()).readonly) {
                   <button (click)="edit(x)">Editar</button>
                 }
               </td>
@@ -186,6 +208,7 @@ export class MasterDataAdmin implements OnInit {
     scrollTo({ top: 0, behavior: 'smooth' });
   }
   save() {
+    if (this.cfg(this.active()).readonly) return;
     const allowed = this.cfg(this.active()).fields.map((x: any) => x[0]);
     const raw = this.form.getRawValue() as Entity;
     const payload = Object.fromEntries(

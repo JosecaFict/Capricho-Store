@@ -42,6 +42,11 @@ export interface Season {
   created_at: string;
   updated_at: string;
 }
+export interface Branch {
+  id_sucursal: number;
+  nombre: string;
+  direccion: string;
+}
 
 export interface ProductImage {
   id_imagen: number;
@@ -133,4 +138,5 @@ export interface CatalogOptions {
   sizes: Size[];
   colors: Color[];
   seasons: Season[];
+  branches: Branch[];
 }

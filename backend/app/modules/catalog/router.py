@@ -62,7 +62,6 @@ def audit_context_for(request: Request, principal: CurrentPrincipal):
 
 @router.get("/branches", response_model=list[BranchOption])
 async def list_branches(
-    _: Annotated[CurrentPrincipal, Depends(get_current_principal)],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
     return await service.list_branches()

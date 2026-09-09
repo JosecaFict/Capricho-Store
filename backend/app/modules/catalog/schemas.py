@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, mod
 TargetAudience = Literal["HOMBRE", "MUJER"]
 ImageType = Literal["CATALOGO", "MINIATURA", "PROMOCIONAL"]
 StockState = Literal["DISPONIBLE", "STOCK_BAJO", "AGOTADO"]
+OfficialCategory = Literal["POLERA", "CAMISA", "POLO", "BLUSA"]
 
 
 class ORMResponse(BaseModel):
@@ -42,15 +43,24 @@ class NamedCreate(BaseModel):
 
 
 class CategoryCreate(NamedCreate):
-    nombre: str = Field(min_length=1, max_length=80)
+    nombre: OfficialCategory
     descripcion: str | None = Field(default=None, max_length=250)
     activo: bool = True
 
+    @field_validator("nombre", mode="before")
+    @classmethod
+    def normalize_official_name(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
 
 class CategoryUpdate(BaseModel):
-    nombre: str | None = Field(default=None, min_length=1, max_length=80)
+    nombre: OfficialCategory | None = None
     descripcion: str | None = Field(default=None, max_length=250)
     activo: bool | None = None
+
+    _normalize_official_name = field_validator("nombre", mode="before")(
+        CategoryCreate.normalize_official_name.__func__
+    )
 
     @model_validator(mode="after")
     def has_fields(self) -> "CategoryUpdate":

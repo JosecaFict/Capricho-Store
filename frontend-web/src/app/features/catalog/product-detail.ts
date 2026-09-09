@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, of } from 'rxjs';
-import { Product, ProductImage, ProductMeasurement } from '../../core/models/catalog.model';
+import { Branch, Product, ProductImage, ProductMeasurement } from '../../core/models/catalog.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
@@ -64,6 +64,15 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
             <p class="product-info__description">
               {{ item.descripcion || 'Este producto todavía no tiene una descripción publicada.' }}
             </p>
+            <label class="field" for="detail-branch">
+              <span>Sucursal para consultar disponibilidad</span>
+              <select id="detail-branch" (change)="selectBranch($event)">
+                <option value="">Selecciona una sucursal</option>
+                @for (branch of branches(); track branch.id_sucursal) {
+                  <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
+                }
+              </select>
+            </label>
             <dl class="product-specs">
               <div>
                 <dt>Público</dt>
@@ -137,12 +146,15 @@ export class ProductDetail {
   readonly product = signal<Product | null>(null);
   readonly images = signal<ProductImage[]>([]);
   readonly measurements = signal<ProductMeasurement[]>([]);
+  readonly branches = signal<Branch[]>([]);
+  readonly selectedBranchId = signal<number | null>(null);
   readonly activeImage = signal('/images/catalogo-prendas-oficiales.jpg');
   readonly activeImageIsFallback = signal(true);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
 
   constructor() {
+    this.catalog.branches().subscribe({ next: (branches) => this.branches.set(branches) });
     this.load();
   }
 
@@ -156,7 +168,7 @@ export class ProductDetail {
     this.loading.set(true);
     this.errorMessage.set('');
     forkJoin({
-      product: this.catalog.product(id),
+      product: this.catalog.product(id, this.selectedBranchId() ?? undefined),
       images: this.catalog.images(id).pipe(catchError(() => of([]))),
       measurements: this.catalog.measurements(id).pipe(catchError(() => of([]))),
     })
@@ -178,6 +190,12 @@ export class ProductDetail {
         error: (error) =>
           this.errorMessage.set(this.errors.message(error, 'No pudimos cargar el producto.')),
       });
+  }
+
+  selectBranch(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.selectedBranchId.set(value ? Number(value) : null);
+    this.load();
   }
 
   selectImage(image: ProductImage): void {

@@ -169,6 +169,16 @@ async def test_list_categories() -> None:
     assert response.json()[0]["nombre"] == "POLERA"
 
 
+async def test_list_branches_is_public() -> None:
+    service = AsyncMock()
+    service.list_branches.return_value = [
+        {"id_sucursal": 1, "nombre": "Central", "direccion": "Av. Principal 123"}
+    ]
+    response = await call_catalog("GET", "/api/v1/branches", service=service)
+    assert response.status_code == 200
+    assert response.json()[0]["nombre"] == "Central"
+
+
 async def test_create_category() -> None:
     service = AsyncMock()
     service.create_category.return_value = CATEGORY
@@ -180,6 +190,33 @@ async def test_create_category() -> None:
         json={"nombre": "POLERA", "descripcion": "Prenda superior"},
     )
     assert response.status_code == 201
+
+
+async def test_normalize_official_category_name() -> None:
+    service = AsyncMock()
+    service.create_category.return_value = CATEGORY
+    response = await call_catalog(
+        "POST",
+        "/api/v1/categories",
+        service=service,
+        principal=make_principal("productos.crear"),
+        json={"nombre": " polera ", "descripcion": "Prenda superior"},
+    )
+    assert response.status_code == 201
+    assert service.create_category.await_args.args[0].nombre == "POLERA"
+
+
+async def test_reject_category_outside_official_catalog() -> None:
+    service = AsyncMock()
+    response = await call_catalog(
+        "POST",
+        "/api/v1/categories",
+        service=service,
+        principal=make_principal("productos.crear"),
+        json={"nombre": "PANTALON"},
+    )
+    assert response.status_code == 422
+    service.create_category.assert_not_awaited()
 
 
 async def test_update_category() -> None:
@@ -333,6 +370,11 @@ async def test_create_product_without_permission() -> None:
 def test_reject_blouse_for_man() -> None:
     with pytest.raises(Exception, match="only valid for MUJER"):
         CatalogService.validate_blouse_rule("BLUSA", "HOMBRE")
+
+
+def test_reject_product_category_outside_official_catalog() -> None:
+    with pytest.raises(Exception, match="official catalog"):
+        CatalogService.validate_catalog_rule("PANTALON", "HOMBRE")
 
 
 async def test_reject_unisex_target() -> None:

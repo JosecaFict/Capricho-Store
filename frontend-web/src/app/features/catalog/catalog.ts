@@ -20,6 +20,7 @@ const EMPTY_OPTIONS: CatalogOptions = {
   sizes: [],
   colors: [],
   seasons: [],
+  branches: [],
 };
 const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, pages: 0 };
 
@@ -168,6 +169,15 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
                 </select>
               </div>
               <div class="field field--compact">
+                <label for="branch-filter">Sucursal</label
+                ><select id="branch-filter" formControlName="sucursal">
+                  <option value="">Todas</option>
+                  @for (item of options().branches; track item.id_sucursal) {
+                    <option [value]="item.id_sucursal">{{ item.nombre }}</option>
+                  }
+                </select>
+              </div>
+              <div class="field field--compact">
                 <label for="status-filter">Estado</label
                 ><select id="status-filter" formControlName="activo">
                   <option value="true">Solo activos</option>
@@ -274,6 +284,7 @@ export class Catalog {
     talla: [this.query.get('talla') ?? ''],
     color: [this.query.get('color') ?? ''],
     temporada: [this.query.get('temporada') ?? ''],
+    sucursal: [this.query.get('sucursal') ?? ''],
     permite_vestidor: [this.query.get('permite_vestidor') ?? ''],
     activo: [this.query.get('activo') ?? 'true'],
     sort: [this.query.get('sort') ?? 'nombre'],
@@ -310,9 +321,13 @@ export class Catalog {
   }
   secondaryFilterCount(): number {
     const value = this.form.getRawValue();
-    return [value.color, value.temporada, value.permite_vestidor, value.activo !== 'true'].filter(
-      Boolean,
-    ).length;
+    return [
+      value.color,
+      value.temporada,
+      value.sucursal,
+      value.permite_vestidor,
+      value.activo !== 'true',
+    ].filter(Boolean).length;
   }
   activeFilterCount(): number {
     const value = this.form.getRawValue();
@@ -323,6 +338,7 @@ export class Catalog {
       value.talla,
       value.color,
       value.temporada,
+      value.sucursal,
       value.permite_vestidor,
       value.activo !== 'true',
     ].filter(Boolean).length;
@@ -338,6 +354,7 @@ export class Catalog {
       talla: '',
       color: '',
       temporada: '',
+      sucursal: '',
       permite_vestidor: '',
       activo: 'true',
       sort: 'nombre',
@@ -387,6 +404,7 @@ export class Catalog {
       talla: value.talla || undefined,
       color: value.color || undefined,
       temporada: value.temporada || undefined,
+      sucursal: value.sucursal ? Number(value.sucursal) : undefined,
       permite_vestidor:
         value.permite_vestidor === '' ? undefined : value.permite_vestidor === 'true',
       activo: value.activo === '' ? undefined : value.activo === 'true',
