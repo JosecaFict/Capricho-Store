@@ -119,10 +119,16 @@ class CatalogRepository {
     }
   }
 
-  Future<List<ProductVariant>> productVariants(int productId) async {
+  Future<List<ProductVariant>> productVariants(
+    int productId, {
+    int? branchId,
+  }) async {
     try {
       final response = await _dio.get<List<dynamic>>(
         '/products/$productId/variants',
+        queryParameters: {
+          if (branchId != null) 'sucursal': branchId,
+        },
       );
       return (response.data ?? const [])
           .map((item) => ProductVariant.fromJson(item as Map<String, dynamic>))

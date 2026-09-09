@@ -64,6 +64,7 @@ final appRouter = GoRouter(
       path: '/productos/:id',
       builder: (context, state) => ProductDetailScreen(
         productId: int.parse(state.pathParameters['id']!),
+        branchId: int.tryParse(state.uri.queryParameters['sucursal'] ?? ''),
       ),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),

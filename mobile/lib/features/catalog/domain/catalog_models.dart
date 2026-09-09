@@ -152,7 +152,7 @@ class SizeItem {
 
   factory SizeItem.fromJson(Map<String, dynamic> json) => SizeItem(
     id: json['id_talla'] as int,
-    name: json['nombre'] as String,
+    name: json['codigo'] as String,
     order: json['orden'] as int?,
   );
 

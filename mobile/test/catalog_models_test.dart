@@ -107,6 +107,18 @@ void main() {
     expect(branch.address, 'Calle Sucre #150');
   });
 
+  test('SizeItem utiliza el campo codigo del contrato de FastAPI', () {
+    final size = SizeItem.fromJson({
+      'id_talla': 2,
+      'codigo': 'M',
+      'orden': 2,
+      'activo': true,
+    });
+    expect(size.id, 2);
+    expect(size.name, 'M');
+    expect(size.order, 2);
+  });
+
   test('CatalogQuery serializa sucursal y permite_vestidor para FastAPI', () {
     const query = CatalogQuery(
       branchId: 3,

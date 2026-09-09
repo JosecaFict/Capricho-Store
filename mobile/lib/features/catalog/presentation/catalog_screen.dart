@@ -646,6 +646,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                       return _CatalogProductCard(
                         product: product,
                         currency: currency,
+                        branchId: query.branchId,
                       );
                     }, childCount: page.items.length),
                   ),
@@ -812,14 +813,26 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 }
 
 class _CatalogProductCard extends StatelessWidget {
-  const _CatalogProductCard({required this.product, required this.currency});
+  const _CatalogProductCard({
+    required this.product,
+    required this.currency,
+    this.branchId,
+  });
   final Product product;
   final NumberFormat currency;
+  final int? branchId;
 
   @override
   Widget build(BuildContext context) {
     return AdaptiveCardPressable(
-      onTap: () => context.push('/productos/${product.id}'),
+      onTap: () => context.push(
+        Uri(
+          path: '/productos/${product.id}',
+          queryParameters: {
+            if (branchId != null) 'sucursal': branchId.toString(),
+          },
+        ).toString(),
+      ),
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: AppColors.line, width: 0.8),
       child: Column(
