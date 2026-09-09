@@ -24,10 +24,26 @@ class CatalogRepository {
     }
   }
 
-  Future<Product> product(int id) async {
+  Future<Product> product(int id, {int? branchId}) async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>('/products/$id');
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/products/$id',
+        queryParameters: {
+          if (branchId != null) 'sucursal': branchId,
+        },
+      );
       return Product.fromJson(response.data!);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<List<BranchItem>> branches() async {
+    try {
+      final response = await _dio.get<List<dynamic>>('/branches');
+      return (response.data ?? const [])
+          .map((item) => BranchItem.fromJson(item as Map<String, dynamic>))
+          .toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }

@@ -1,10 +1,12 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/catalog/data/catalog_repository.dart';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
+import 'package:capricho_store/shared/widgets/adaptive/adaptive_card_pressable.dart';
+import 'package:capricho_store/shared/widgets/adaptive/adaptive_image.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -25,6 +27,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   List<SizeItem> _availableSizes = [];
   List<ColorItem> _availableColors = [];
   List<SeasonItem> _availableSeasons = [];
+  List<BranchItem> _availableBranches = [];
 
   @override
   void initState() {
@@ -42,6 +45,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         repo.sizes(),
         repo.colors(),
         repo.seasons(),
+        repo.branches(),
       ]);
       if (mounted) {
         setState(() {
@@ -50,6 +54,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           _availableSizes = results[2] as List<SizeItem>;
           _availableColors = results[3] as List<ColorItem>;
           _availableSeasons = results[4] as List<SeasonItem>;
+          _availableBranches = results[5] as List<BranchItem>;
         });
       }
     } catch (_) {
@@ -80,6 +85,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     var tempSize = query.size;
     var tempColor = query.color;
     var tempSeason = query.season;
+    var tempBranchId = query.branchId;
+    var tempFittingEnabled = query.fittingEnabled;
 
     final result = await showModalBottomSheet<CatalogQuery>(
       context: context,
@@ -90,9 +97,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       ),
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) => DraggableScrollableSheet(
-          initialChildSize: 0.75,
+          initialChildSize: 0.78,
           minChildSize: 0.5,
-          maxChildSize: 0.92,
+          maxChildSize: 0.94,
           expand: false,
           builder: (context, scrollController) => SafeArea(
             child: ListView(
@@ -109,6 +116,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                     ),
                     TextButton(
                       onPressed: () {
+                        HapticFeedback.selectionClick();
                         setSheetState(() {
                           tempCategory = null;
                           tempAudience = null;
@@ -116,6 +124,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           tempSize = null;
                           tempColor = null;
                           tempSeason = null;
+                          tempBranchId = null;
+                          tempFittingEnabled = null;
                         });
                       },
                       child: const Text('Limpiar todo'),
@@ -134,8 +144,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                     ButtonSegment(value: 'HOMBRE', label: Text('Hombre')),
                   ],
                   selected: {tempAudience},
-                  onSelectionChanged: (values) =>
-                      setSheetState(() => tempAudience = values.first),
+                  onSelectionChanged: (values) {
+                    HapticFeedback.selectionClick();
+                    setSheetState(() => tempAudience = values.first);
+                  },
                 ),
                 const SizedBox(height: 18),
 
@@ -154,9 +166,46 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           DropdownMenuItem(value: c.name, child: Text(c.name)),
                     ),
                   ],
-                  onChanged: (val) => setSheetState(() => tempCategory = val),
+                  onChanged: (val) {
+                    HapticFeedback.selectionClick();
+                    setSheetState(() => tempCategory = val);
+                  },
                 ),
                 const SizedBox(height: 18),
+
+                // Sucursal (Filtro por tienda física)
+                if (_availableBranches.isNotEmpty) ...[
+                  _buildFilterLabel('Sucursal'),
+                  DropdownButtonFormField<int?>(
+                    initialValue: tempBranchId,
+                    decoration: const InputDecoration(
+                      hintText: 'Todas las sucursales',
+                      prefixIcon: Icon(Icons.storefront_outlined),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Todas las sucursales'),
+                      ),
+                      ..._availableBranches.map(
+                        (b) => DropdownMenuItem(
+                          value: b.id,
+                          child: Text(
+                            b.address.isNotEmpty
+                                ? '${b.name} (${b.address})'
+                                : b.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      HapticFeedback.selectionClick();
+                      setSheetState(() => tempBranchId = val);
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                ],
 
                 // Marca (si existen marcas registradas)
                 if (_availableBrands.isNotEmpty) ...[
@@ -176,7 +225,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                         ),
                       ),
                     ],
-                    onChanged: (val) => setSheetState(() => tempBrand = val),
+                    onChanged: (val) {
+                      HapticFeedback.selectionClick();
+                      setSheetState(() => tempBrand = val);
+                    },
                   ),
                   const SizedBox(height: 18),
                 ],
@@ -192,7 +244,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                         label: const Text('Todas'),
                         selected: tempSize == null,
                         onSelected: (selected) {
-                          if (selected) setSheetState(() => tempSize = null);
+                          if (selected) {
+                            HapticFeedback.selectionClick();
+                            setSheetState(() => tempSize = null);
+                          }
                         },
                       ),
                       ..._availableSizes.map((s) {
@@ -201,6 +256,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           label: Text(s.name),
                           selected: isSelected,
                           onSelected: (selected) {
+                            HapticFeedback.selectionClick();
                             setSheetState(
                               () => tempSize = selected ? s.name : null,
                             );
@@ -223,7 +279,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                         label: const Text('Todos'),
                         selected: tempColor == null,
                         onSelected: (selected) {
-                          if (selected) setSheetState(() => tempColor = null);
+                          if (selected) {
+                            HapticFeedback.selectionClick();
+                            setSheetState(() => tempColor = null);
+                          }
                         },
                       ),
                       ..._availableColors.map((c) {
@@ -245,6 +304,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           label: Text(c.name),
                           selected: isSelected,
                           onSelected: (selected) {
+                            HapticFeedback.selectionClick();
                             setSheetState(
                               () => tempColor = selected ? c.name : null,
                             );
@@ -274,14 +334,60 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                         ),
                       ),
                     ],
-                    onChanged: (val) => setSheetState(() => tempSeason = val),
+                    onChanged: (val) {
+                      HapticFeedback.selectionClick();
+                      setSheetState(() => tempSeason = val);
+                    },
                   ),
                   const SizedBox(height: 18),
                 ],
 
-                const SizedBox(height: 12),
+                // Vestidor Virtual (Compatibilidad con realidad aumentada)
+                _buildFilterLabel('Vestidor Virtual'),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.muted,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: SwitchListTile.adaptive(
+                    value: tempFittingEnabled ?? false,
+                    title: const Text(
+                      'Solo con vestidor virtual',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Prendas compatibles con probador virtual',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
+                    secondary: const Icon(
+                      Icons.auto_awesome,
+                      color: AppColors.cobalt,
+                    ),
+                    activeColor: AppColors.cobalt,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 2,
+                    ),
+                    onChanged: (val) {
+                      HapticFeedback.selectionClick();
+                      setSheetState(
+                        () => tempFittingEnabled = val ? true : null,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+
                 FilledButton(
                   onPressed: () {
+                    HapticFeedback.lightImpact();
                     Navigator.pop(
                       sheetContext,
                       query.copyWith(
@@ -297,6 +403,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                         clearColor: tempColor == null,
                         season: tempSeason,
                         clearSeason: tempSeason == null,
+                        branchId: tempBranchId,
+                        clearBranch: tempBranchId == null,
+                        fittingEnabled: tempFittingEnabled,
+                        clearFittingEnabled: tempFittingEnabled == null,
                         page: 1, // Reiniciar a página 1 tras filtrar
                       ),
                     );
@@ -425,8 +535,22 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               future: request,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
+                  return SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 14,
+                            childAspectRatio: 0.64,
+                          ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) =>
+                            const _CatalogProductShimmerCard(),
+                        childCount: 6,
+                      ),
+                    ),
                   );
                 }
 
@@ -638,8 +762,47 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                     _setQuery(query.copyWith(clearSeason: true, page: 1)),
               ),
             ),
+          if (query.branchId != null) ...[
+            Builder(
+              builder: (context) {
+                final match = _availableBranches
+                    .cast<BranchItem?>()
+                    .firstWhere(
+                      (b) => b?.id == query.branchId,
+                      orElse: () => null,
+                    );
+                final name = match != null ? match.name : 'Sucursal #${query.branchId}';
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Chip(
+                    avatar: const Icon(Icons.storefront_outlined, size: 16),
+                    label: Text(name),
+                    onDeleted: () =>
+                        _setQuery(query.copyWith(clearBranch: true, page: 1)),
+                  ),
+                );
+              },
+            ),
+          ],
+          if (query.fittingEnabled == true)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Chip(
+                avatar: const Icon(
+                  Icons.auto_awesome,
+                  size: 15,
+                  color: AppColors.cobalt,
+                ),
+                label: const Text('Con Vestidor'),
+                onDeleted: () =>
+                    _setQuery(query.copyWith(clearFittingEnabled: true, page: 1)),
+              ),
+            ),
           TextButton(
-            onPressed: () => _setQuery(const CatalogQuery()),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              _setQuery(const CatalogQuery());
+            },
             child: const Text('Borrar todos'),
           ),
         ],
@@ -655,79 +818,90 @@ class _CatalogProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return AdaptiveCardPressable(
       onTap: () => context.push('/productos/${product.id}'),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.line, width: 0.8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.muted,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.line),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (product.image?.url != null &&
-                      product.image!.url.isNotEmpty)
-                    CachedNetworkImage(
-                      imageUrl: product.image!.url,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: AppColors.muted,
-                        child: const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        color: AppColors.muted,
-                        child: const Icon(
-                          Icons.image_not_supported_outlined,
-                          color: AppColors.inkSoft,
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
-                      color: AppColors.muted,
-                      child: const Icon(
-                        Icons.checkroom_rounded,
-                        size: 38,
-                        color: AppColors.inkSoft,
-                      ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                AdaptiveImage(
+                  imageUrl: product.image?.url,
+                  heroTag: 'product-image-${product.id}',
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(15),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
                     ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xD0121418),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        product.audience,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xD0121418),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      product.audience,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+                if (product.fittingEnabled)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.cobalt.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.cobalt.withValues(alpha: 0.35),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome, size: 10, color: Colors.white),
+                          SizedBox(width: 3),
+                          Text(
+                            'VESTIDOR',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(top: 8, left: 2, right: 2),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -778,6 +952,46 @@ class _CatalogProductCard extends StatelessWidget {
                         : AppColors.inkSoft,
                   ),
                 ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CatalogProductShimmerCard extends StatelessWidget {
+  const _CatalogProductShimmerCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line, width: 0.8),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ShimmerBox(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(10, 10, 10, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ShimmerBox(width: 50, height: 10),
+                SizedBox(height: 6),
+                ShimmerBox(width: 110, height: 12),
+                SizedBox(height: 6),
+                ShimmerBox(width: 70, height: 10),
+                SizedBox(height: 8),
+                ShimmerBox(width: 60, height: 14),
               ],
             ),
           ),

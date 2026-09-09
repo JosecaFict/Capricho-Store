@@ -1,6 +1,7 @@
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -35,15 +36,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> submit() async {
     FocusScope.of(context).unfocus();
-    if (!formKey.currentState!.validate()) return;
+    if (!formKey.currentState!.validate()) {
+      HapticFeedback.mediumImpact();
+      return;
+    }
     if (ref.read(authControllerProvider).loading) return;
 
+    HapticFeedback.lightImpact();
     final success = await ref
         .read(authControllerProvider.notifier)
         .login(email.text.trim(), password.text);
 
-    if (success && mounted) {
+    if (!mounted) return;
+
+    if (success) {
+      HapticFeedback.lightImpact();
       context.go('/cuenta');
+    } else {
+      HapticFeedback.mediumImpact();
     }
   }
 

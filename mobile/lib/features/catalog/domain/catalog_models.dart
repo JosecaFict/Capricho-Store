@@ -219,6 +219,24 @@ class ProductMeasurement {
   final double? sleeveCm;
 }
 
+class BranchItem {
+  const BranchItem({
+    required this.id,
+    required this.name,
+    required this.address,
+  });
+
+  factory BranchItem.fromJson(Map<String, dynamic> json) => BranchItem(
+    id: json['id_sucursal'] as int,
+    name: json['nombre'] as String,
+    address: json['direccion'] as String? ?? '',
+  );
+
+  final int id;
+  final String name;
+  final String address;
+}
+
 class CatalogQuery {
   const CatalogQuery({
     this.category,
@@ -227,6 +245,8 @@ class CatalogQuery {
     this.size,
     this.color,
     this.season,
+    this.branchId,
+    this.fittingEnabled,
     this.sort = 'nombre',
     this.page = 1,
     this.pageSize = 20,
@@ -238,6 +258,8 @@ class CatalogQuery {
   final String? size;
   final String? color;
   final String? season;
+  final int? branchId;
+  final bool? fittingEnabled;
   final String sort;
   final int page;
   final int pageSize;
@@ -248,7 +270,9 @@ class CatalogQuery {
       (brand != null && brand!.isNotEmpty) ||
       (size != null && size!.isNotEmpty) ||
       (color != null && color!.isNotEmpty) ||
-      (season != null && season!.isNotEmpty);
+      (season != null && season!.isNotEmpty) ||
+      branchId != null ||
+      fittingEnabled != null;
 
   Map<String, dynamic> toQuery() => {
     'page': page,
@@ -260,6 +284,8 @@ class CatalogQuery {
     if (size != null && size!.isNotEmpty) 'talla': size,
     if (color != null && color!.isNotEmpty) 'color': color,
     if (season != null && season!.isNotEmpty) 'temporada': season,
+    if (branchId != null) 'sucursal': branchId,
+    if (fittingEnabled != null) 'permite_vestidor': fittingEnabled,
   };
 
   CatalogQuery copyWith({
@@ -269,6 +295,8 @@ class CatalogQuery {
     String? size,
     String? color,
     String? season,
+    int? branchId,
+    bool? fittingEnabled,
     String? sort,
     int? page,
     int? pageSize,
@@ -278,6 +306,8 @@ class CatalogQuery {
     bool clearSize = false,
     bool clearColor = false,
     bool clearSeason = false,
+    bool clearBranch = false,
+    bool clearFittingEnabled = false,
   }) {
     return CatalogQuery(
       category: clearCategory ? null : (category ?? this.category),
@@ -286,6 +316,9 @@ class CatalogQuery {
       size: clearSize ? null : (size ?? this.size),
       color: clearColor ? null : (color ?? this.color),
       season: clearSeason ? null : (season ?? this.season),
+      branchId: clearBranch ? null : (branchId ?? this.branchId),
+      fittingEnabled:
+          clearFittingEnabled ? null : (fittingEnabled ?? this.fittingEnabled),
       sort: sort ?? this.sort,
       page: page ?? this.page,
       pageSize: pageSize ?? this.pageSize,

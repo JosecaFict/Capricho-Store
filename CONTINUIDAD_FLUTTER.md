@@ -98,23 +98,37 @@ mobile/
 ### Funcionalidades implementadas
 
 - Proyecto Flutter con soporte Android e iOS.
-- Tema Material 3 adaptado al lenguaje visual de Capricho Store.
-- Fondo cálido, texto negro y azul como acento.
-- Navegación inferior entre Catálogo y Mi cuenta.
-- Registro de clientes contra FastAPI.
-- Inicio de sesión mediante correo y contraseña.
-- JWT almacenado con `flutter_secure_storage`.
-- Restauración de sesión mediante `/auth/me`.
-- Cierre de sesión eliminando el token local.
-- Catálogo conectado a datos reales de FastAPI.
-- Filtro por categoría y público objetivo.
-- Ordenamiento por nombre, precio y fecha de creación.
-- Detalle de producto.
-- Visualización de precio, imagen, descripción, tallas y colores.
-- Indicador de compatibilidad con el vestidor virtual según
-  `permite_vestidor`, sin activar todavía la cámara.
-- Estados de carga, error, reintento y resultados vacíos.
-- Configuración de URL de API mediante `--dart-define`.
+### Funcionalidades implementadas (Cierre de Ciclo 1)
+
+- **Soporte nativo dual completo:** Optimizado y probado para iPhone 15 Pro Max (iOS) y POCO X3 / Android.
+- **Sistema de diseño y física táctil adaptativa:**
+  - *Toque Apple (iOS):* Tipografía nativa (SF Pro con tracking negativo), transiciones de página `CupertinoPageTransitionsBuilder` (swipe-to-back universal con el pulgar), tarjetas interactivas con micro-compresión elástica con resorte al 97% (`AdaptiveCardPressable`), clics hápticos del *Taptic Engine* (`HapticFeedback.selectionClick()`), diálogos nativos `CupertinoAlertDialog` (`AdaptiveDialogs`), y `NoSplash` nativo de iOS.
+  - *Toque Android (Material You):* Tipografía Roboto/Google Sans, ondas de agua cobalto translúcidas (`InkRipple`), transiciones `ZoomPageTransitionsBuilder`, superelipses (squircles) de 16px en tarjetas y 10px en controles, y diálogos Material 3.
+- **Catálogo y filtros completos (100% integrados a FastAPI):**
+  - Filtros soportados: Categoría oficial (`POLERA`, `CAMISA`, `POLO`, `BLUSA`), Público objetivo (`HOMBRE`, `MUJER`), Marca, Talla, Color con avatar visual, Temporada, **Sucursal física** (`GET /api/v1/branches`) y **Compatibilidad con Vestidor Virtual** (`permite_vestidor`).
+  - Ordenamiento por: Nombre (A-Z, Z-A), Precio (menor, mayor) y Novedades (`-created_at`).
+  - Paginación dinámica con botones Anterior y Siguiente.
+  - Chips interactivos de filtros activos con opción de eliminación individual o borrado total.
+- **Manejo elegante y robusto de imágenes (`AdaptiveImage`):**
+  - Efecto Shimmer brillante continuo durante la descarga de imágenes y esqueleto de carga de 6 tarjetas en catálogo (`ShimmerBox`).
+  - Fallback editorial sobrio con isotipo de Capricho si la URL falla, está vacía o no hay red (error 404 / timeout).
+  - Vuelo fluido de la foto entre catálogo y detalle mediante animación `Hero` (`heroTag: 'product-image-{id}'`).
+- **Detalle de producto y variantes:**
+  - Galería de imágenes deslizable con paginador animado.
+  - Selector de tallas y colores con respuesta háptica instantánea.
+  - Disponibilidad de inventario en tiempo real según la variante seleccionada (SKU, unidades disponibles y estado de existencias).
+  - Banner distintivo "Compatible con Vestidor Virtual" para prendas con `permite_vestidor = true`.
+  - Guía de medidas real de la prenda (hombros, pecho, largo y manga en cm).
+- **Autenticación y Ciclo de Vida JWT:**
+  - Registro de clientes contra FastAPI.
+  - Inicio de sesión con validación visual y háptica.
+  - Almacenamiento seguro del JWT mediante `flutter_secure_storage`.
+  - Detección automática de sesión expirada (401 en endpoints protegidos) con redirección al login y alerta informativa nativa.
+  - Cierre de sesión con confirmación destructiva adaptativa (`AdaptiveDialogs.showConfirmation`).
+- **Manejo de estados de red FastAPI:**
+  - Pantallas de carga con shimmer skeleton.
+  - Pantalla de estado vacío cuando los filtros no arrojan stock.
+  - Pantalla de error con mensaje descriptivo y botón de reintento con vibración háptica.
 
 ### Dependencias instaladas
 
@@ -124,6 +138,8 @@ mobile/
 - `flutter_secure_storage`
 - `cached_network_image`
 - `intl`
+- `firebase_core: ^3.8.1` (bloqueado con `$FirebaseSDKVersion = '10.29.0'` para Xcode 15.2)
+- `firebase_messaging: ^15.1.6`
 
 Las versiones exactas están bloqueadas en `mobile/pubspec.lock` y deben
 conservarse en Git.
@@ -354,17 +370,18 @@ flutter pub get
 No trabajar simultáneamente en los mismos archivos desde dos equipos sin hacer
 `git pull` previamente. Hacer commits pequeños facilita resolver conflictos.
 
-## 12. Próximo bloque recomendado
+## 12. Próximo bloque recomendado: Ciclo 2 (Vestidor Virtual & Realidad Aumentada)
 
-1. Instalar Android SDK y crear el primer emulador.
-2. Ejecutar Mobile contra FastAPI real.
-3. Revisar visualmente teléfono pequeño, teléfono grande y tablet.
-4. Añadir pruebas de widgets para login, registro, catálogo y detalle.
-5. Completar los filtros móviles con marca, talla, color, temporada, sucursal y
-   vestidor, manteniendo exactamente los parámetros actuales de FastAPI.
-6. Implementar selección de sucursal y disponibilidad real.
-7. Solo después, avanzar con carrito o reservas si sus endpoints ya existen.
-8. Implementar cámara y MediaPipe en un bloque independiente y posterior.
+1. **Ciclo 1 cerrado exitosamente:**
+   - Filtros completos de catálogo (categoría, público, marca, talla, color, temporada, sucursal física y vestidor).
+   - Experiencia visual y táctil adaptativa nativa (iOS Cupertino de lujo vs. Android Material You con 120Hz).
+   - Manejo de estados de carga, error y vacío, con shimmer skeleton y fallback de imágenes.
+   - Ciclo de vida JWT y alertas adaptativas.
+2. **Inicio de Ciclo 2 (Vestidor Virtual):**
+   - Integración de cámara en tiempo real (`camera` package con permisos en `Info.plist` y `AndroidManifest.xml`).
+   - Estimación de pose corporal con MediaPipe / ML Kit.
+   - Superposición y deformación 2D/3D de prendas compatibles (`permite_vestidor = true`) sobre el cuerpo del cliente.
+   - Calibración de medidas físicas según la tabla de hombros, pecho, largo y manga del catálogo.
 
 ## 13. Instrucciones para el siguiente agente
 

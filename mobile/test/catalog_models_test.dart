@@ -95,4 +95,33 @@ void main() {
     expect(measurement.chestCm, 52.0);
     expect(measurement.size, 'M');
   });
+
+  test('BranchItem parsea id_sucursal, nombre y direccion de FastAPI', () {
+    final branch = BranchItem.fromJson({
+      'id_sucursal': 2,
+      'nombre': 'Sucursal Centro',
+      'direccion': 'Calle Sucre #150',
+    });
+    expect(branch.id, 2);
+    expect(branch.name, 'Sucursal Centro');
+    expect(branch.address, 'Calle Sucre #150');
+  });
+
+  test('CatalogQuery serializa sucursal y permite_vestidor para FastAPI', () {
+    const query = CatalogQuery(
+      branchId: 3,
+      fittingEnabled: true,
+      category: 'POLERA',
+    );
+    final params = query.toQuery();
+    expect(params['sucursal'], 3);
+    expect(params['permite_vestidor'], isTrue);
+    expect(params['categoria'], 'POLERA');
+    expect(query.hasActiveFilters, isTrue);
+
+    final cleared = query.copyWith(clearBranch: true, clearFittingEnabled: true);
+    expect(cleared.branchId, isNull);
+    expect(cleared.fittingEnabled, isNull);
+    expect(cleared.category, 'POLERA');
+  });
 }

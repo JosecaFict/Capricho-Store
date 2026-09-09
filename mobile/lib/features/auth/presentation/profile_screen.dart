@@ -1,6 +1,7 @@
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/auth/domain/app_user.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
+import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -422,27 +423,14 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await AdaptiveDialogs.showConfirmation(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('¿Cerrar sesión?'),
-        content: const Text(
+      title: '¿Cerrar sesión?',
+      message:
           'Tendrás que ingresar tus credenciales la próxima vez que desees acceder a tu cuenta.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Cerrar sesión'),
-          ),
-        ],
-      ),
+      confirmText: 'Cerrar sesión',
+      cancelText: 'Cancelar',
+      isDestructive: true,
     );
 
     if (confirmed == true) {

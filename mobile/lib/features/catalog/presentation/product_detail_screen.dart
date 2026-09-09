@@ -1,9 +1,10 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/catalog/data/catalog_repository.dart';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
+import 'package:capricho_store/shared/widgets/adaptive/adaptive_image.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -241,8 +242,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             ),
                             if (_selectedSize != null)
                               TextButton(
-                                onPressed: () =>
-                                    setState(() => _selectedSize = null),
+                                onPressed: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _selectedSize = null);
+                                },
                                 style: TextButton.styleFrom(
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -260,6 +263,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               label: Text(s),
                               selected: isSelected,
                               onSelected: (val) {
+                                HapticFeedback.selectionClick();
                                 setState(() {
                                   _selectedSize = val ? s : null;
                                 });
@@ -282,8 +286,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             ),
                             if (_selectedColor != null)
                               TextButton(
-                                onPressed: () =>
-                                    setState(() => _selectedColor = null),
+                                onPressed: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _selectedColor = null);
+                                },
                                 style: TextButton.styleFrom(
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -325,6 +331,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               label: Text(c),
                               selected: isSelected,
                               onSelected: (val) {
+                                HapticFeedback.selectionClick();
                                 setState(() {
                                   _selectedColor = val ? c : null;
                                 });
@@ -333,6 +340,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           }).toList(),
                         ),
                         const SizedBox(height: 20),
+                      ],
+
+                      // Banner de compatibilidad con vestidor virtual (AR)
+                      if (product.fittingEnabled) ...[
+                        _buildFittingBanner(context),
+                        const SizedBox(height: 16),
                       ],
 
                       // Disponibilidad Real en Stock
@@ -352,15 +365,75 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
+  Widget _buildFittingBanner(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), AppColors.cobalt],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cobalt.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.auto_awesome,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Compatible con Vestidor Virtual',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Esta prenda cuenta con soporte para prueba con realidad aumentada.',
+                  style: TextStyle(
+                    color: Color(0xFFE2E8F0),
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildImageGallery(List<ProductImage> images) {
     if (images.isEmpty) {
-      return AspectRatio(
-        aspectRatio: 1.0,
-        child: Container(
-          color: Colors.grey.shade100,
-          child: const Center(
-            child: Icon(Icons.checkroom_rounded, size: 72, color: Colors.grey),
-          ),
+      return const AspectRatio(
+        aspectRatio: 1.05,
+        child: AdaptiveImage(
+          imageUrl: null,
+          aspectRatio: 1.05,
         ),
       );
     }
@@ -376,25 +449,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 setState(() => _selectedImageIndex = index),
             itemBuilder: (context, index) {
               final img = images[index];
-              return CachedNetworkImage(
+              return AdaptiveImage(
                 imageUrl: img.url,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey.shade100,
-                  child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey.shade100,
-                  child: const Center(
-                    child: Icon(
-                      Icons.broken_image_outlined,
-                      size: 48,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ),
+                aspectRatio: 1.05,
+                heroTag: index == 0 ? 'product-image-${widget.productId}' : null,
               );
             },
           ),
@@ -412,7 +470,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 height: 6,
                 decoration: BoxDecoration(
                   color: isCurrent
-                      ? Theme.of(context).colorScheme.primary
+                      ? AppColors.cobalt
                       : Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(3),
                 ),

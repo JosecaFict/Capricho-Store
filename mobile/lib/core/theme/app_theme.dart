@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
@@ -9,30 +10,46 @@ abstract final class AppColors {
   static const line = Color(0xFFCBD0D6);
   static const cobalt = Color(0xFF064FE8);
   static const cobaltDark = Color(0xFF0039B8);
+  static const cobaltLight = Color(0xFFE3EDFF);
   static const danger = Color(0xFFB42318);
   static const warning = Color(0xFF7A4B00);
+  static const success = Color(0xFF027A48);
 }
 
 abstract final class AppTheme {
   static ThemeData get light {
-    final scheme =
-        ColorScheme.fromSeed(
-          seedColor: AppColors.cobalt,
-          brightness: Brightness.light,
-          surface: AppColors.canvas,
-        ).copyWith(
-          primary: AppColors.cobalt,
-          onPrimary: Colors.white,
-          error: AppColors.danger,
-          onSurface: AppColors.ink,
-          outline: AppColors.line,
-          surfaceContainerHighest: AppColors.muted,
-        );
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.cobalt,
+      brightness: Brightness.light,
+      surface: AppColors.canvas,
+    ).copyWith(
+      primary: AppColors.cobalt,
+      onPrimary: Colors.white,
+      error: AppColors.danger,
+      onSurface: AppColors.ink,
+      outline: AppColors.line,
+      surfaceContainerHighest: AppColors.muted,
+    );
+
+    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+
     final base = ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
-      fontFamily: 'Segoe UI',
+      // Usar fuente nativa del sistema (SF Pro en iOS, Roboto en Android)
+      splashFactory: isIOS ? NoSplash.splashFactory : InkRipple.splashFactory,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
     );
+
+    final squircleCardRadius = BorderRadius.circular(16);
+    final squircleControlRadius = BorderRadius.circular(10);
+
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.canvas,
       appBarTheme: const AppBarTheme(
@@ -46,22 +63,22 @@ abstract final class AppTheme {
       textTheme: base.textTheme.copyWith(
         displaySmall: base.textTheme.displaySmall?.copyWith(
           fontSize: 34,
-          height: 1.02,
+          height: 1.05,
           fontWeight: FontWeight.w800,
-          letterSpacing: -1.2,
+          letterSpacing: isIOS ? -1.2 : -0.8,
           color: AppColors.ink,
         ),
         headlineMedium: base.textTheme.headlineMedium?.copyWith(
           fontSize: 24,
-          height: 1.05,
+          height: 1.1,
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.8,
+          letterSpacing: isIOS ? -0.8 : -0.4,
           color: AppColors.ink,
         ),
         titleLarge: base.textTheme.titleLarge?.copyWith(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.5,
+          letterSpacing: isIOS ? -0.5 : 0.0,
           color: AppColors.ink,
         ),
         titleMedium: base.textTheme.titleMedium?.copyWith(
@@ -86,22 +103,22 @@ abstract final class AppTheme {
           color: AppColors.inkSoft,
         ),
       ),
-      inputDecorationTheme: const InputDecorationTheme(
+      inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
-          borderSide: BorderSide(color: AppColors.line),
+          borderRadius: squircleControlRadius,
+          borderSide: const BorderSide(color: AppColors.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
-          borderSide: BorderSide(color: AppColors.line),
+          borderRadius: squircleControlRadius,
+          borderSide: const BorderSide(color: AppColors.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
-          borderSide: BorderSide(color: AppColors.cobalt, width: 2),
+          borderRadius: squircleControlRadius,
+          borderSide: const BorderSide(color: AppColors.cobalt, width: 2),
         ),
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -109,7 +126,7 @@ abstract final class AppTheme {
           backgroundColor: AppColors.cobalt,
           foregroundColor: Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: squircleControlRadius),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
         ),
       ),
@@ -118,24 +135,24 @@ abstract final class AppTheme {
           minimumSize: const Size(48, 48),
           foregroundColor: AppColors.ink,
           side: const BorderSide(color: AppColors.line),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: squircleControlRadius),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
         ),
       ),
       navigationBarTheme: const NavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        indicatorColor: Color(0xFFE3EDFF),
+        indicatorColor: AppColors.cobaltLight,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         height: 68,
       ),
-      cardTheme: const CardThemeData(
+      cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
-          side: BorderSide(color: AppColors.line),
+          borderRadius: squircleCardRadius,
+          side: const BorderSide(color: AppColors.line, width: 0.8),
         ),
       ),
     );
