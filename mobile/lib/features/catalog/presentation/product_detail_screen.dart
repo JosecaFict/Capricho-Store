@@ -9,8 +9,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
-  const ProductDetailScreen({required this.productId, super.key});
+  const ProductDetailScreen({
+    required this.productId,
+    this.branchId,
+    super.key,
+  });
   final int productId;
+  final int? branchId;
 
   @override
   ConsumerState<ProductDetailScreen> createState() =>
@@ -24,10 +29,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   int _selectedImageIndex = 0;
   String? _selectedSize;
   String? _selectedColor;
+  int? _selectedBranchId;
 
   @override
   void initState() {
     super.initState();
+    _selectedBranchId = widget.branchId;
     _loadData();
   }
 
@@ -41,21 +48,26 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final repo = ref.read(catalogRepositoryProvider);
     _future =
         Future.wait([
-          repo.product(widget.productId),
+          repo.product(widget.productId, branchId: _selectedBranchId),
           repo
               .productImages(widget.productId)
               .catchError((_) => <ProductImage>[]),
           repo
-              .productVariants(widget.productId)
+              .productVariants(
+                widget.productId,
+                branchId: _selectedBranchId,
+              )
               .catchError((_) => <ProductVariant>[]),
           repo
               .productMeasurements(widget.productId)
               .catchError((_) => <ProductMeasurement>[]),
+          repo.branches().catchError((_) => <BranchItem>[]),
         ]).then((results) {
           final product = results[0] as Product;
           final images = results[1] as List<ProductImage>;
           final variants = results[2] as List<ProductVariant>;
           final measurements = results[3] as List<ProductMeasurement>;
+          final branches = results[4] as List<BranchItem>;
 
           // Si no devolvió imágenes específicas, usamos la principal del producto
           final effectiveImages = images.isNotEmpty
@@ -72,6 +84,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             images: effectiveImages,
             variants: effectiveVariants,
             measurements: measurements,
+            branches: branches,
           );
         });
   }
@@ -135,6 +148,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           final images = data.images;
           final variants = data.variants;
           final measurements = data.measurements;
+          final branches = data.branches;
 
           final matchedVariant = _findMatchingVariant(variants);
 
@@ -229,6 +243,34 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
                       const Divider(),
                       const SizedBox(height: 16),
+
+                      Text(
+                        'Sucursal',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<int?>(
+                        initialValue: _selectedBranchId,
+                        decoration: const InputDecoration(
+                          hintText: 'Selecciona una sucursal',
+                          prefixIcon: Icon(Icons.storefront_outlined),
+                        ),
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('Selecciona una sucursal'),
+                          ),
+                          ...branches.map(
+                            (branch) => DropdownMenuItem<int?>(
+                              value: branch.id,
+                              child: Text(branch.name),
+                            ),
+                          ),
+                        ],
+                        onChanged: _changeBranch,
+                      ),
+                      const SizedBox(height: 20),
 
                       // Selector de Talla
                       if (product.sizes.isNotEmpty) ...[
@@ -365,6 +407,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
+  void _changeBranch(int? branchId) {
+    if (branchId == _selectedBranchId) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _selectedBranchId = branchId;
+      _selectedSize = null;
+      _selectedColor = null;
+      _loadData();
+    });
+  }
+
   Widget _buildFittingBanner(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -483,6 +536,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   }
 
   Widget _buildStockAvailabilityCard(ProductVariant? variant) {
+    if (_selectedBranchId == null) {
+      return _stockMessage(
+        icon: Icons.storefront_outlined,
+        message: 'Selecciona una sucursal para consultar la disponibilidad real.',
+      );
+    }
     if (_selectedSize == null && _selectedColor == null) {
       return Container(
         width: double.infinity,
@@ -539,7 +598,14 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       );
     }
 
-    final stock = variant.stock ?? 0;
+    if (variant.stock == null) {
+      return _stockMessage(
+        icon: Icons.info_outline_rounded,
+        message: 'La disponibilidad no está informada para esta sucursal.',
+      );
+    }
+
+    final stock = variant.stock!;
     final hasStock = stock > 0;
     final skuText = (variant.sku != null && variant.sku!.isNotEmpty)
         ? variant.sku!
@@ -600,6 +666,30 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _stockMessage({required IconData icon, required String message}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.cobalt, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.inkSoft, fontSize: 13),
+            ),
+          ),
         ],
       ),
     );
@@ -707,10 +797,12 @@ class _ProductDetailData {
     required this.images,
     required this.variants,
     required this.measurements,
+    required this.branches,
   });
 
   final Product product;
   final List<ProductImage> images;
   final List<ProductVariant> variants;
   final List<ProductMeasurement> measurements;
+  final List<BranchItem> branches;
 }
