@@ -1,8 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
-import { PermissionService } from '../../core/permissions/permission.service';
-import { ADMIN_NAVIGATION, AdminNavGroup } from './admin-navigation';
+import { AdminNavGroup, visibleAdminNavigation } from './admin-navigation';
 
 @Component({
   selector: 'app-admin-layout',
@@ -49,7 +48,7 @@ import { ADMIN_NAVIGATION, AdminNavGroup } from './admin-navigation';
                   <a
                     [routerLink]="item.path"
                     routerLinkActive="active"
-                    [routerLinkActiveOptions]="{ exact: item.path === '/admin' }"
+                    [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
                     (click)="menuOpen.set(false)"
                     >{{ item.label }}</a
                   >
@@ -85,20 +84,12 @@ import { ADMIN_NAVIGATION, AdminNavGroup } from './admin-navigation';
 })
 export class AdminLayout {
   private readonly auth = inject(AuthService);
-  private readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
   readonly menuOpen = signal(false);
   readonly expandedGroups = signal<Record<string, boolean>>({});
   readonly user = this.auth.currentUser;
   readonly roleLabel = computed(() => this.user()?.roles.join(' · ') || 'Sin rol asignado');
-  readonly visibleNavigation = computed(() =>
-    ADMIN_NAVIGATION.map((group) => ({
-      ...group,
-      items: group.items.filter(
-        (item) => !item.permissions.length || this.permissions.hasAny(item.permissions),
-      ),
-    })).filter((group) => group.items.length),
-  );
+  readonly visibleNavigation = computed(() => visibleAdminNavigation(this.user()?.permisos ?? []));
 
   isGroupExpanded(group: AdminNavGroup): boolean {
     return this.expandedGroups()[group.label] ?? this.isGroupActive(group);
@@ -112,7 +103,7 @@ export class AdminLayout {
   private isGroupActive(group: AdminNavGroup): boolean {
     const currentPath = this.router.url.split(/[?#]/, 1)[0];
     return group.items.some((item) =>
-      item.path === '/admin'
+      item.exact
         ? currentPath === item.path
         : currentPath === item.path || currentPath.startsWith(`${item.path}/`),
     );

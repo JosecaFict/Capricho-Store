@@ -14,7 +14,7 @@ export function resolveLoginDestination(user: UserResponse, returnUrl: string | 
     return requestedPath;
   }
   const hasAdminAccess = ADMIN_PERMISSIONS.some((permission) => user.permisos.includes(permission));
-  return hasAdminAccess ? '/admin' : '/cuenta';
+  return hasAdminAccess ? '/admin' : '/catalogo';
 }
 
 @Component({

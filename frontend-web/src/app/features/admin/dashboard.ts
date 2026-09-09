@@ -1,8 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
-import { PermissionService } from '../../core/permissions/permission.service';
-import { ADMIN_NAVIGATION } from './admin-navigation';
+import { availableAdminModules } from './admin-navigation';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -53,13 +52,9 @@ import { ADMIN_NAVIGATION } from './admin-navigation';
 })
 export class AdminDashboard {
   private readonly auth = inject(AuthService);
-  private readonly permissions = inject(PermissionService);
   readonly user = this.auth.currentUser;
   readonly permissionCount = computed(() => this.user()?.permisos.length ?? 0);
-  readonly quickLinks = computed(() =>
-    ADMIN_NAVIGATION.flatMap((g) => g.items)
-      .filter((i) => i.path !== '/admin' && this.permissions.hasAny(i.permissions))
-      .slice(0, 6),
-  );
-  readonly moduleCount = computed(() => this.quickLinks().length);
+  readonly availableModules = computed(() => availableAdminModules(this.user()?.permisos ?? []));
+  readonly quickLinks = computed(() => this.availableModules().slice(0, 6));
+  readonly moduleCount = computed(() => this.availableModules().length);
 }

@@ -2,6 +2,7 @@ export interface AdminNavItem {
   label: string;
   path: string;
   permissions: string[];
+  exact?: boolean;
 }
 export interface AdminNavGroup {
   label: string;
@@ -9,7 +10,10 @@ export interface AdminNavGroup {
 }
 
 export const ADMIN_NAVIGATION: AdminNavGroup[] = [
-  { label: 'Vista general', items: [{ label: 'Dashboard', path: '/admin', permissions: [] }] },
+  {
+    label: 'Vista general',
+    items: [{ label: 'Dashboard', path: '/admin', permissions: [], exact: true }],
+  },
   {
     label: 'Personal',
     items: [{ label: 'Empleados', path: '/admin/empleados', permissions: ['empleados.ver'] }],
@@ -25,7 +29,7 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
       {
         label: 'Datos maestros',
         path: '/admin/catalogo/datos-maestros',
-        permissions: ['productos.ver', 'productos.crear', 'productos.editar'],
+        permissions: ['productos.crear', 'productos.editar'],
       },
     ],
   },
@@ -48,7 +52,12 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
   {
     label: 'Inventario',
     items: [
-      { label: 'Existencias', path: '/admin/inventario', permissions: ['inventario.ver'] },
+      {
+        label: 'Existencias',
+        path: '/admin/inventario',
+        permissions: ['inventario.ver'],
+        exact: true,
+      },
       { label: 'Lotes', path: '/admin/inventario/lotes', permissions: ['inventario.ver'] },
       {
         label: 'Movimientos',
@@ -78,3 +87,21 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
     ],
   },
 ];
+
+export function visibleAdminNavigation(permissionCodes: readonly string[]): AdminNavGroup[] {
+  const permissions = new Set(permissionCodes);
+  return ADMIN_NAVIGATION.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) =>
+        !item.permissions.length ||
+        item.permissions.some((permission) => permissions.has(permission)),
+    ),
+  })).filter((group) => group.items.length);
+}
+
+export function availableAdminModules(permissionCodes: readonly string[]): AdminNavItem[] {
+  return visibleAdminNavigation(permissionCodes)
+    .flatMap((group) => group.items)
+    .filter((item) => item.path !== '/admin');
+}

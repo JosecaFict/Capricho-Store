@@ -894,6 +894,19 @@ ON CONFLICT(nombre) DO NOTHING;
 
 INSERT INTO talla(codigo,orden) VALUES ('S',1),('M',2),('L',3),('XL',4) ON CONFLICT(codigo) DO NOTHING;
 INSERT INTO categoria(nombre,descripcion) VALUES ('POLERA','Prenda superior tipo polera'),('POLO','Prenda superior tipo polo'),('CAMISA','Prenda superior tipo camisa'),('BLUSA','Prenda superior para mujer') ON CONFLICT(nombre) DO NOTHING;
+INSERT INTO marca(nombre,descripcion,pais_origen) VALUES
+('Nike','Ropa deportiva y urbana de alto rendimiento.','Estados Unidos'),
+('Adidas','Ropa deportiva y urbana reconocida por sus tres franjas.','Alemania'),
+('H&M','Prendas básicas y de tendencia para el uso diario.','Suecia'),
+('Uniqlo','Prendas minimalistas centradas en calidad y funcionalidad.','Japón'),
+('Tommy Hilfiger','Moda casual y formal de inspiración clásica.','Estados Unidos'),
+('Zara','Moda contemporánea con propuestas de temporada.','España'),
+('Ralph Lauren','Moda clásica y elegante de inspiración deportiva.','Estados Unidos'),
+('Pull&Bear','Moda casual y juvenil de estilo relajado.','España'),
+('Mango','Moda urbana de línea contemporánea y sofisticada.','España'),
+('Bershka','Moda juvenil con propuestas actuales y atrevidas.','España'),
+('Lacoste','Moda deportiva y casual reconocida por el polo de piqué.','Francia')
+ON CONFLICT(nombre) DO NOTHING;
 INSERT INTO metodo_pago(codigo,nombre,tipo) VALUES ('EFECTIVO','Efectivo','EFECTIVO'),('QR','Pago QR','QR'),('STRIPE','Stripe','PASARELA') ON CONFLICT(codigo) DO NOTHING;
 INSERT INTO tarifa_envio(tarifa_base,distancia_base_km,costo_km_adicional,activo)
 SELECT 5,1,2.5,TRUE WHERE NOT EXISTS(SELECT 1 FROM tarifa_envio WHERE activo=TRUE);
@@ -922,7 +935,7 @@ SELECT r.id_rol,p.id_permiso FROM rol r JOIN permiso p ON p.codigo IN ('inventar
 ON CONFLICT(id_rol,id_permiso) DO NOTHING;
 
 INSERT INTO rol_permiso(id_rol,id_permiso)
-SELECT r.id_rol,p.id_permiso FROM rol r JOIN permiso p ON p.codigo IN ('inventario.ver','inventario.movimiento','recepcion.registrar','productos.ver','proveedores.ver') WHERE r.nombre='AUXILIAR_INVENTARIO'
+SELECT r.id_rol,p.id_permiso FROM rol r JOIN permiso p ON p.codigo IN ('inventario.ver','inventario.movimiento','recepcion.registrar') WHERE r.nombre='AUXILIAR_INVENTARIO'
 ON CONFLICT(id_rol,id_permiso) DO NOTHING;
 
 -- COMMIT trasladado al final de las correcciones V2 para conservar atomicidad.

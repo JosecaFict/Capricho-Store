@@ -32,6 +32,18 @@ No debe ejecutarse después del archivo completo v2 actual, porque sus cambios
 ya están integrados. Ejecutar ambos en una instalación nueva puede producir
 errores por objetos que ya existen.
 
+## Cambios sobre una base existente
+
+Los scripts de `changes/` se aplican únicamente cuando la base ya fue creada
+con el SQL completo. Antes de ejecutarlos en producción debe existir un respaldo
+verificable. Usa `psql` con `ON_ERROR_STOP=1` y ejecuta cada archivo una sola vez;
+los scripts están preparados para tolerar una repetición accidental.
+
+El orden actual es:
+
+1. `changes/20260909_ajustar_permisos_roles.sql`
+2. `changes/20260909_cargar_marcas.sql`
+
 ## Política
 
 - FastAPI no crea las tablas.

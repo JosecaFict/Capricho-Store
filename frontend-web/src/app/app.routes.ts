@@ -90,7 +90,7 @@ export const routes: Routes = [
       },
       {
         path: 'catalogo/datos-maestros',
-        canActivate: [requireAnyPermission('productos.ver', 'productos.crear', 'productos.editar')],
+        canActivate: [requireAnyPermission('productos.crear', 'productos.editar')],
         loadComponent: () =>
           import('./features/admin/catalog-admin').then((m) => m.MasterDataAdmin),
       },

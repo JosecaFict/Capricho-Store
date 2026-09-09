@@ -21,8 +21,8 @@ describe('resolveLoginDestination', () => {
     expect(resolveLoginDestination(admin, null)).toBe('/admin');
   });
 
-  it('sends a customer to their account', () => {
-    expect(resolveLoginDestination(baseUser, null)).toBe('/cuenta');
+  it('sends a customer to the catalog', () => {
+    expect(resolveLoginDestination(baseUser, null)).toBe('/catalogo');
   });
 
   it('preserves a local return URL', () => {
@@ -30,6 +30,6 @@ describe('resolveLoginDestination', () => {
   });
 
   it('ignores an external return URL', () => {
-    expect(resolveLoginDestination(baseUser, '//example.com')).toBe('/cuenta');
+    expect(resolveLoginDestination(baseUser, '//example.com')).toBe('/catalogo');
   });
 });
