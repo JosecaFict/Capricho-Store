@@ -18,7 +18,7 @@ class AdminProfileScreen extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('No hay una sesión de administrador activa.'),
+              const Text('No hay una sesión activa.'),
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: () => context.go('/login'),
@@ -39,7 +39,7 @@ class AdminProfileScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         children: [
-          // 1. Identificación del Admin
+          // Identificación de la cuenta operativa.
           Center(
             child: Column(
               children: [
@@ -105,7 +105,7 @@ class AdminProfileScreen extends ConsumerWidget {
                         user.roleName.toUpperCase(),
                         style: const TextStyle(
                           color: AppColors.cobalt,
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
                         ),
@@ -118,70 +118,7 @@ class AdminProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // 2. Modo Dual: Ver Tienda como Cliente
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.cobalt, width: 1.5),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.cobalt.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.storefront_rounded,
-                    color: AppColors.cobalt,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Modo Tienda',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          color: AppColors.ink,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Explora el catálogo comercial y detalle de prendas como un cliente.',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: AppColors.inkSoft,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.cobalt,
-                    visualDensity: VisualDensity.compact,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () => context.go('/inicio'),
-                  child: const Text('Ir a tienda', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // 3. Tarjeta de información del perfil
+          // Datos de la cuenta.
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -213,9 +150,16 @@ class AdminProfileScreen extends ConsumerWidget {
                 const Divider(height: 20),
                 _InfoRow(label: 'Nombres', value: user.names),
                 _InfoRow(label: 'Apellidos', value: user.surnames),
-                _InfoRow(label: 'Teléfono', value: user.phone ?? 'No registrado'),
+                _InfoRow(
+                  label: 'Teléfono',
+                  value: user.phone ?? 'No registrado',
+                ),
                 _InfoRow(label: 'CI', value: user.ci ?? 'No registrado'),
-                _InfoRow(label: 'ID de Usuario', value: '#${user.id}', last: true),
+                _InfoRow(
+                  label: 'ID de Usuario',
+                  value: '#${user.id}',
+                  last: true,
+                ),
               ],
             ),
           ),
@@ -274,7 +218,7 @@ class AdminProfileScreen extends ConsumerWidget {
                         child: Text(
                           p,
                           style: const TextStyle(
-                            fontSize: 10.5,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: AppColors.ink,
                           ),
@@ -287,7 +231,7 @@ class AdminProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // 5. Botón Cerrar Sesión
+          // La sesión es única para Tienda y Panel.
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFFEF4444),
@@ -299,7 +243,7 @@ class AdminProfileScreen extends ConsumerWidget {
             ),
             onPressed: () => _confirmLogout(context, ref),
             icon: const Icon(Icons.logout_rounded),
-            label: const Text('Cerrar sesión de administrador'),
+            label: const Text('Cerrar sesión'),
           ),
         ],
       ),
@@ -312,7 +256,7 @@ class AdminProfileScreen extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('¿Cerrar sesión?'),
         content: const Text(
-          'Se cerrará tu sesión de administrador en este dispositivo.',
+          'Se cerrará tu sesión de Capricho Store en este dispositivo.',
         ),
         actions: [
           TextButton(
@@ -339,11 +283,7 @@ class AdminProfileScreen extends ConsumerWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.last = false,
-  });
+  const _InfoRow({required this.label, required this.value, this.last = false});
 
   final String label;
   final String value;
@@ -354,18 +294,27 @@ class _InfoRow extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(bottom: last ? 0 : 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14, color: AppColors.inkSoft),
+            ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.visible,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ink,
+              ),
             ),
           ),
         ],

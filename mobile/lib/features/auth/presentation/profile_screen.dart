@@ -1,4 +1,6 @@
+import 'package:capricho_store/app/navigation_memory.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/admin/domain/operational_access.dart';
 import 'package:capricho_store/features/auth/domain/app_user.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
@@ -226,55 +228,59 @@ class ProfileScreen extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.muted,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.line),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          user.isStaff
-                              ? Icons.shield_outlined
-                              : Icons.check_circle_rounded,
-                          size: 14,
-                          color: user.isStaff
-                              ? AppColors.cobalt
-                              : const Color(0xFF10B981),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${user.roleName.toUpperCase()} · ${user.status.toUpperCase()}',
-                          style: TextStyle(
-                            color: user.isStaff
-                                ? AppColors.cobalt
-                                : const Color(0xFF10B981),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (user.isStaff) ...[
-              const SizedBox(height: 20),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.cobalt, width: 1.5),
+                  color: AppColors.muted,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.line),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      user.hasOperationalRole
+                          ? Icons.shield_outlined
+                          : Icons.check_circle_rounded,
+                      size: 14,
+                      color: user.hasOperationalRole
+                          ? AppColors.cobalt
+                          : const Color(0xFF10B981),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${user.roleName.toUpperCase()} · ${user.status.toUpperCase()}',
+                      style: TextStyle(
+                        color: user.hasOperationalRole
+                            ? AppColors.cobalt
+                            : const Color(0xFF10B981),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (user.canAccessOperationalPanel) ...[
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.cobalt, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
@@ -294,88 +300,81 @@ class ProfileScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Panel Administrativo Móvil',
+                            'Herramientas de trabajo',
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 13.5,
+                              fontSize: 16,
                               color: AppColors.ink,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          SizedBox(height: 4),
                           Text(
-                            'Supervisa inventario crítico, compras y transferencias.',
+                            'Abre las funciones operativas autorizadas para tu cuenta.',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 14,
                               color: AppColors.inkSoft,
+                              height: 1.35,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.cobalt,
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () => context.go('/admin/resumen'),
-                      child: const Text('Entrar', style: TextStyle(fontSize: 12)),
-                    ),
                   ],
                 ),
-              ),
-            ],
-            const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () =>
+                      context.go(NavigationMemory.panelTarget(user)),
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                  label: const Text('Ir al panel'),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
 
-            // Tarjeta de información personal
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.line),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        // Tarjeta de información personal
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
                 children: [
-                  const Row(
-                    children: [
-                      Icon(
-                        Icons.badge_outlined,
-                        size: 20,
-                        color: AppColors.cobalt,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Información personal',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13.5,
-                          color: AppColors.ink,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 24),
-                  _InfoRow(label: 'Nombres', value: user.names),
-                  _InfoRow(label: 'Apellidos', value: user.surnames),
-                  _InfoRow(label: 'Correo', value: user.email),
-                  _InfoRow(
-                    label: 'Teléfono',
-                    value: user.phone ?? 'No registrado',
-                  ),
-                  _InfoRow(label: 'CI', value: user.ci ?? 'No registrado'),
-                  _InfoRow(
-                    label: user.isStaff ? 'ID de Colaborador' : 'ID de Cliente',
-                    value: '#${user.id}',
-                    last: true,
+                  Icon(Icons.badge_outlined, size: 20, color: AppColors.cobalt),
+                  SizedBox(width: 8),
+                  Text(
+                    'Información personal',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13.5,
+                      color: AppColors.ink,
+                    ),
                   ),
                 ],
               ),
-            ),
+              const Divider(height: 24),
+              _InfoRow(label: 'Nombres', value: user.names),
+              _InfoRow(label: 'Apellidos', value: user.surnames),
+              _InfoRow(label: 'Correo', value: user.email),
+              _InfoRow(label: 'Teléfono', value: user.phone ?? 'No registrado'),
+              _InfoRow(label: 'CI', value: user.ci ?? 'No registrado'),
+              _InfoRow(
+                label: user.hasOperationalRole
+                    ? 'ID de Colaborador'
+                    : 'ID de Cliente',
+                value: '#${user.id}',
+                last: true,
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 20),
 
         // Accesos rápidos
@@ -426,8 +425,7 @@ class ProfileScreen extends ConsumerWidget {
     final confirmed = await AdaptiveDialogs.showConfirmation(
       context: context,
       title: '¿Cerrar sesión?',
-      message:
-          'Tendrás que ingresar tus credenciales la próxima vez que desees acceder a tu cuenta.',
+      message: 'Tendrás que ingresar tus credenciales la próxima vez que desees acceder a tu cuenta.',
       confirmText: 'Cerrar sesión',
       cancelText: 'Cancelar',
       isDestructive: true,

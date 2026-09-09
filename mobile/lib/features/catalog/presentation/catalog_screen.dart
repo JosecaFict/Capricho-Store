@@ -370,7 +370,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                       Icons.auto_awesome,
                       color: AppColors.cobalt,
                     ),
-                    activeColor: AppColors.cobalt,
+                    activeThumbColor: AppColors.cobalt,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 2,
@@ -546,8 +546,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                             childAspectRatio: 0.64,
                           ),
                       delegate: SliverChildBuilderDelegate(
-                        (context, index) =>
-                            const _CatalogProductShimmerCard(),
+                        (context, index) => const _CatalogProductShimmerCard(),
                         childCount: 6,
                       ),
                     ),
@@ -621,7 +620,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                             else
                               OutlinedButton.icon(
                                 onPressed: _refresh,
-                                icon: const Icon(Icons.refresh_rounded, size: 18),
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 18,
+                                ),
                                 label: const Text('Actualizar'),
                               ),
                           ],
@@ -766,13 +768,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           if (query.branchId != null) ...[
             Builder(
               builder: (context) {
-                final match = _availableBranches
-                    .cast<BranchItem?>()
-                    .firstWhere(
-                      (b) => b?.id == query.branchId,
-                      orElse: () => null,
-                    );
-                final name = match != null ? match.name : 'Sucursal #${query.branchId}';
+                final match = _availableBranches.cast<BranchItem?>().firstWhere(
+                  (b) => b?.id == query.branchId,
+                  orElse: () => null,
+                );
+                final name = match != null
+                    ? match.name
+                    : 'Sucursal #${query.branchId}';
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Chip(
@@ -795,8 +797,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                   color: AppColors.cobalt,
                 ),
                 label: const Text('Con Vestidor'),
-                onDeleted: () =>
-                    _setQuery(query.copyWith(clearFittingEnabled: true, page: 1)),
+                onDeleted: () => _setQuery(
+                  query.copyWith(clearFittingEnabled: true, page: 1),
+                ),
               ),
             ),
           TextButton(
@@ -895,7 +898,11 @@ class _CatalogProductCard extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.auto_awesome, size: 10, color: Colors.white),
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 10,
+                            color: Colors.white,
+                          ),
                           SizedBox(width: 3),
                           Text(
                             'VESTIDOR',

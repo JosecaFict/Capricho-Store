@@ -19,18 +19,19 @@ abstract final class AppColors {
 
 abstract final class AppTheme {
   static ThemeData get light {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.cobalt,
-      brightness: Brightness.light,
-      surface: AppColors.canvas,
-    ).copyWith(
-      primary: AppColors.cobalt,
-      onPrimary: Colors.white,
-      error: AppColors.danger,
-      onSurface: AppColors.ink,
-      outline: AppColors.line,
-      surfaceContainerHighest: AppColors.muted,
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: AppColors.cobalt,
+          brightness: Brightness.light,
+          surface: AppColors.canvas,
+        ).copyWith(
+          primary: AppColors.cobalt,
+          onPrimary: Colors.white,
+          error: AppColors.danger,
+          onSurface: AppColors.ink,
+          outline: AppColors.line,
+          surfaceContainerHighest: AppColors.muted,
+        );
 
     final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
 
@@ -119,7 +120,10 @@ abstract final class AppTheme {
           borderRadius: squircleControlRadius,
           borderSide: const BorderSide(color: AppColors.cobalt, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 15,
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(

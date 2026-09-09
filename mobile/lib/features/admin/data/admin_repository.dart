@@ -81,7 +81,10 @@ class AdminRepository {
     }
   }
 
-  Future<TransferItem> updateTransferStatus(int transferId, String status) async {
+  Future<TransferItem> updateTransferStatus(
+    int transferId,
+    String status,
+  ) async {
     try {
       final res = await _dio.patch(
         '/inventory/transfers/$transferId/status',
@@ -93,79 +96,88 @@ class AdminRepository {
     }
   }
 
-  Future<AdminDashboardMetrics> getDashboardMetrics() async {
-    try {
-      final results = await Future.wait([
-        inventory(lowStock: true).catchError((_) => <InventoryStockItem>[]),
-        purchaseOrders().catchError((_) => <PurchaseOrderItem>[]),
-        transfers().catchError((_) => <TransferItem>[]),
-        receipts().catchError((_) => <ReceiptItem>[]),
-      ]);
+  Future<AdminDashboardMetrics> getDashboardMetrics({
+    required bool includeInventory,
+    required bool includePurchaseOrders,
+    required bool includeTransfers,
+    required bool includeReceipts,
+  }) async {
+    final results = await Future.wait<Object>([
+      if (includeInventory)
+        inventory(lowStock: true)
+      else
+        Future.value(<InventoryStockItem>[]),
+      if (includePurchaseOrders)
+        purchaseOrders()
+      else
+        Future.value(<PurchaseOrderItem>[]),
+      if (includeTransfers) transfers() else Future.value(<TransferItem>[]),
+      if (includeReceipts) receipts() else Future.value(<ReceiptItem>[]),
+    ]);
 
-      final lowStockList = results[0] as List<InventoryStockItem>;
-      final ordersList = results[1] as List<PurchaseOrderItem>;
-      final transfersList = results[2] as List<TransferItem>;
-      final receiptsList = results[3] as List<ReceiptItem>;
+    final lowStockList = results[0] as List<InventoryStockItem>;
+    final ordersList = results[1] as List<PurchaseOrderItem>;
+    final transfersList = results[2] as List<TransferItem>;
+    final receiptsList = results[3] as List<ReceiptItem>;
 
-      final pendingOrders = ordersList.where((o) => o.isPending).toList();
-      final pendingTransfers = transfersList.where((t) => t.isPending).toList();
+    final pendingOrders = ordersList.where((o) => o.isPending).toList();
+    final pendingTransfers = transfersList.where((t) => t.isPending).toList();
 
-      final alerts = <AdminAlert>[];
+    final alerts = <AdminAlert>[];
 
-      // Alertas por stock crítico
-      for (final item in lowStockList.take(5)) {
-        alerts.add(
-          AdminAlert(
-            id: 'stock_${item.id}',
-            title: 'Stock bajo: ${item.productName}',
-            message:
-                'Quedan solo ${item.availableStock} unid. (Mínimo: ${item.minStock}) en ${item.branchName}.',
-            level: item.isOutOfStock ? AdminAlertLevel.critical : AdminAlertLevel.warning,
-            category: 'INVENTARIO',
-            referenceId: item.id,
-          ),
-        );
-      }
-
-      // Alertas por transferencias pendientes
-      for (final t in pendingTransfers.take(3)) {
-        alerts.add(
-          AdminAlert(
-            id: 'transfer_${t.id}',
-            title: 'Transferencia #${t.id} en estado ${t.status}',
-            message:
-                'Despacho desde sucursal #${t.originBranchId} hacia #${t.destinationBranchId} con ${t.detailsCount} prendas.',
-            level: AdminAlertLevel.info,
-            category: 'TRANSFERENCIAS',
-            referenceId: t.id,
-          ),
-        );
-      }
-
-      // Alertas por órdenes de compra pendientes
-      for (final o in pendingOrders.take(3)) {
-        alerts.add(
-          AdminAlert(
-            id: 'order_${o.id}',
-            title: 'Orden de compra #${o.id} pendiente',
-            message:
-                'Esperando recepción en sucursal #${o.branchId}. Estado actual: ${o.status}.',
-            level: AdminAlertLevel.warning,
-            category: 'COMPRAS',
-            referenceId: o.id,
-          ),
-        );
-      }
-
-      return AdminDashboardMetrics(
-        criticalStockCount: lowStockList.length,
-        pendingOrdersCount: pendingOrders.length,
-        pendingTransfersCount: pendingTransfers.length,
-        recentReceiptsCount: receiptsList.length,
-        alerts: alerts,
+    // Alertas por stock crítico
+    for (final item in lowStockList.take(5)) {
+      alerts.add(
+        AdminAlert(
+          id: 'stock_${item.id}',
+          title: 'Stock bajo: ${item.productName}',
+          message:
+              'Quedan solo ${item.availableStock} unid. (Mínimo: ${item.minStock}) en ${item.branchName}.',
+          level: item.isOutOfStock
+              ? AdminAlertLevel.critical
+              : AdminAlertLevel.warning,
+          category: 'INVENTARIO',
+          referenceId: item.id,
+        ),
       );
-    } on DioException catch (e) {
-      throw ApiException.fromDio(e);
     }
+
+    // Alertas por transferencias pendientes
+    for (final t in pendingTransfers.take(3)) {
+      alerts.add(
+        AdminAlert(
+          id: 'transfer_${t.id}',
+          title: 'Transferencia #${t.id} en estado ${t.status}',
+          message:
+              'Despacho desde sucursal #${t.originBranchId} hacia #${t.destinationBranchId} con ${t.detailsCount} prendas.',
+          level: AdminAlertLevel.info,
+          category: 'TRANSFERENCIAS',
+          referenceId: t.id,
+        ),
+      );
+    }
+
+    // Alertas por órdenes de compra pendientes
+    for (final o in pendingOrders.take(3)) {
+      alerts.add(
+        AdminAlert(
+          id: 'order_${o.id}',
+          title: 'Orden de compra #${o.id} pendiente',
+          message:
+              'Esperando recepción en sucursal #${o.branchId}. Estado actual: ${o.status}.',
+          level: AdminAlertLevel.warning,
+          category: 'COMPRAS',
+          referenceId: o.id,
+        ),
+      );
+    }
+
+    return AdminDashboardMetrics(
+      criticalStockCount: lowStockList.length,
+      pendingOrdersCount: pendingOrders.length,
+      pendingTransfersCount: pendingTransfers.length,
+      recentReceiptsCount: receiptsList.length,
+      alerts: alerts,
+    );
   }
 }

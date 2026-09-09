@@ -129,7 +129,7 @@ abstract final class AdaptiveDialogs {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 20,
                 offset: const Offset(0, -4),
               ),
@@ -158,9 +158,8 @@ abstract final class AdaptiveDialogs {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                   ),
                   const SizedBox(height: 8),

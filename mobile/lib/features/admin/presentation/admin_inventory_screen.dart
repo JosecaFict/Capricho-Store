@@ -38,9 +38,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
         child: Container(
           decoration: const BoxDecoration(
             color: AppColors.canvas,
-            border: Border(
-              bottom: BorderSide(color: AppColors.line, width: 1),
-            ),
+            border: Border(bottom: BorderSide(color: AppColors.line, width: 1)),
           ),
           child: TabBar(
             controller: _tabController,
@@ -48,7 +46,10 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
             indicatorWeight: 2.5,
             labelColor: AppColors.cobalt,
             unselectedLabelColor: AppColors.inkSoft,
-            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
             tabs: const [
               Tab(
                 icon: Icon(Icons.warning_amber_rounded, size: 18),
@@ -64,10 +65,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildLowStockTab(),
-          _buildBranchStockTab(),
-        ],
+        children: [_buildLowStockTab(), _buildBranchStockTab()],
       ),
     );
   }
@@ -148,7 +146,9 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
         }
 
         final effectiveBranchId = _selectedBranchId ?? branches.first.id;
-        final stockAsync = ref.watch(adminBranchInventoryProvider(effectiveBranchId));
+        final stockAsync = ref.watch(
+          adminBranchInventoryProvider(effectiveBranchId),
+        );
 
         return Column(
           children: [
@@ -198,7 +198,10 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                           items: branches.map((b) {
                             return DropdownMenuItem<int>(
                               value: b.id,
-                              child: Text(b.name, overflow: TextOverflow.ellipsis),
+                              child: Text(
+                                b.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             );
                           }).toList(),
                           onChanged: (val) {
@@ -217,8 +220,9 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
             // Lista de inventario
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () async =>
-                    ref.refresh(adminBranchInventoryProvider(effectiveBranchId).future),
+                onRefresh: () async => ref.refresh(
+                  adminBranchInventoryProvider(effectiveBranchId).future,
+                ),
                 color: AppColors.cobalt,
                 child: stockAsync.when(
                   loading: () =>
@@ -226,8 +230,9 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                   error: (err, _) => MessageState(
                     title: 'Error al cargar inventario',
                     message: err.toString(),
-                    onRetry: () =>
-                        ref.refresh(adminBranchInventoryProvider(effectiveBranchId)),
+                    onRetry: () => ref.refresh(
+                      adminBranchInventoryProvider(effectiveBranchId),
+                    ),
                   ),
                   data: (items) {
                     if (items.isEmpty) {
@@ -277,7 +282,9 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: item.isLowStock ? statusColor.withValues(alpha: 0.5) : AppColors.line,
+          color: item.isLowStock
+              ? statusColor.withValues(alpha: 0.5)
+              : AppColors.line,
           width: item.isLowStock ? 1.5 : 1,
         ),
       ),
@@ -294,7 +301,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                     Text(
                       item.sku,
                       style: const TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                         color: AppColors.cobalt,
                         letterSpacing: 0.8,
@@ -321,7 +328,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                 child: Text(
                   statusLabel,
                   style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
                     color: statusColor,
                     letterSpacing: 0.4,
@@ -331,27 +338,28 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
             ],
           ),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
               _buildBadge('Talla: ${item.size}'),
-              const SizedBox(width: 6),
               _buildBadge('Color: ${item.color}'),
-              const SizedBox(width: 6),
               _buildBadge('Cat: ${item.category}'),
             ],
           ),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
                     'Disponible',
-                    style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                    style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
                   ),
                   Text(
                     '${item.availableStock} unid.',
@@ -368,7 +376,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                 children: [
                   const Text(
                     'Mínimo',
-                    style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                    style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
                   ),
                   Text(
                     '${item.minStock} unid.',
@@ -385,7 +393,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                 children: [
                   const Text(
                     'Físico / Res.',
-                    style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                    style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
                   ),
                   Text(
                     '${item.physicalStock} / ${item.reservedStock}',
@@ -402,7 +410,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                 children: [
                   const Text(
                     'Sucursal',
-                    style: TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                    style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
                   ),
                   Text(
                     item.branchName,
@@ -432,7 +440,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
       child: Text(
         label,
         style: const TextStyle(
-          fontSize: 10.5,
+          fontSize: 12,
           fontWeight: FontWeight.w600,
           color: AppColors.ink,
         ),

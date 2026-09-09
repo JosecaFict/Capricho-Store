@@ -28,9 +28,7 @@ class CatalogRepository {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/products/$id',
-        queryParameters: {
-          if (branchId != null) 'sucursal': branchId,
-        },
+        queryParameters: {'sucursal': ?branchId},
       );
       return Product.fromJson(response.data!);
     } on DioException catch (error) {
@@ -126,9 +124,7 @@ class CatalogRepository {
     try {
       final response = await _dio.get<List<dynamic>>(
         '/products/$productId/variants',
-        queryParameters: {
-          if (branchId != null) 'sucursal': branchId,
-        },
+        queryParameters: {'sucursal': ?branchId},
       );
       return (response.data ?? const [])
           .map((item) => ProductVariant.fromJson(item as Map<String, dynamic>))

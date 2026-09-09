@@ -1,107 +1,120 @@
+import 'package:capricho_store/app/navigation_memory.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
-import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
+import 'package:capricho_store/features/admin/domain/operational_access.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class AdminShell extends StatelessWidget {
+class AdminShell extends ConsumerWidget {
   const AdminShell({required this.location, required this.child, super.key});
+
   final String location;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final selectedIndex = location.startsWith('/admin/perfil')
-        ? 3
-        : (location.startsWith('/admin/operaciones')
-            ? 2
-            : (location.startsWith('/admin/inventario') ? 1 : 0));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.initialized) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final user = auth.user;
+    if (user == null) return const SizedBox.shrink();
+
+    NavigationMemory.rememberPanel(location);
+    final destinations = <_PanelDestination>[
+      const _PanelDestination(
+        location: '/admin/resumen',
+        label: 'Resumen',
+        icon: Icons.dashboard_outlined,
+        selectedIcon: Icons.dashboard_rounded,
+      ),
+      if (user.canAccessSection(OperationalSection.inventory))
+        const _PanelDestination(
+          location: '/admin/inventario',
+          label: 'Inventario',
+          icon: Icons.inventory_2_outlined,
+          selectedIcon: Icons.inventory_2_rounded,
+        ),
+      if (user.canAccessSection(OperationalSection.operations))
+        const _PanelDestination(
+          location: '/admin/operaciones',
+          label: 'Operaciones',
+          icon: Icons.swap_horiz_outlined,
+          selectedIcon: Icons.swap_horiz_rounded,
+        ),
+      const _PanelDestination(
+        location: '/admin/perfil',
+        label: 'Cuenta',
+        icon: Icons.person_outline_rounded,
+        selectedIcon: Icons.person_rounded,
+      ),
+    ];
+
+    var selectedIndex = destinations.indexWhere(
+      (destination) => location.startsWith(destination.location),
+    );
+    if (selectedIndex < 0) selectedIndex = 0;
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            const BrandWordmark(compact: true),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.cobalt,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'ADMIN',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ),
-          ],
+        titleSpacing: 12,
+        title: Text(
+          user.operationalContextLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         centerTitle: false,
         actions: [
-          IconButton(
-            tooltip: 'Ver tienda como cliente',
-            icon: const Icon(Icons.storefront_outlined),
-            onPressed: () => context.go('/inicio'),
+          TextButton.icon(
+            onPressed: () => context.go(NavigationMemory.storeTarget),
+            icon: const Icon(Icons.storefront_outlined, size: 20),
+            label: const Text('Cambiar a tienda'),
           ),
+          const SizedBox(width: 4),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.line, height: 1),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.line),
         ),
       ),
       body: child,
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          border: Border(
-            top: BorderSide(color: AppColors.line, width: 1),
-          ),
+          border: Border(top: BorderSide(color: AppColors.line)),
         ),
         child: NavigationBar(
           selectedIndex: selectedIndex,
           onDestinationSelected: (index) {
-            switch (index) {
-              case 0:
-                context.go('/admin/resumen');
-                break;
-              case 1:
-                context.go('/admin/inventario');
-                break;
-              case 2:
-                context.go('/admin/operaciones');
-                break;
-              case 3:
-                context.go('/admin/perfil');
-                break;
-            }
+            context.go(destinations[index].location);
           },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Resumen',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined),
-              selectedIcon: Icon(Icons.inventory_2_rounded),
-              label: 'Inventario',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.swap_horiz_outlined),
-              selectedIcon: Icon(Icons.swap_horiz_rounded),
-              label: 'Operaciones',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.admin_panel_settings_outlined),
-              selectedIcon: Icon(Icons.admin_panel_settings_rounded),
-              label: 'Admin',
-            ),
-          ],
+          destinations: destinations
+              .map(
+                (destination) => NavigationDestination(
+                  icon: Icon(destination.icon),
+                  selectedIcon: Icon(destination.selectedIcon),
+                  label: destination.label,
+                ),
+              )
+              .toList(),
         ),
       ),
     );
   }
+}
+
+class _PanelDestination {
+  const _PanelDestination({
+    required this.location,
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+  });
+
+  final String location;
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
 }

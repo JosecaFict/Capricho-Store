@@ -51,7 +51,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (success) {
       HapticFeedback.lightImpact();
-      context.go('/cuenta');
+      final requestedLocation = GoRouterState.of(context)
+          .uri
+          .queryParameters['returnUrl'];
+      final safeReturnUrl =
+          requestedLocation != null &&
+              requestedLocation.startsWith('/') &&
+              !requestedLocation.startsWith('//')
+          ? requestedLocation
+          : null;
+      context.go(safeReturnUrl ?? '/cuenta');
     } else {
       HapticFeedback.mediumImpact();
     }

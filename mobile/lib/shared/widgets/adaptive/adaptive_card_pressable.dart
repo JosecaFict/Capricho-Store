@@ -102,10 +102,8 @@ class _AdaptiveCardPressableState extends State<AdaptiveCardPressable>
         behavior: HitTestBehavior.opaque,
         child: AnimatedBuilder(
           animation: _scaleAnimation,
-          builder: (context, child) => Transform.scale(
-            scale: _scaleAnimation.value,
-            child: child,
-          ),
+          builder: (context, child) =>
+              Transform.scale(scale: _scaleAnimation.value, child: child),
           child: Container(
             padding: widget.padding,
             decoration: BoxDecoration(
@@ -115,7 +113,9 @@ class _AdaptiveCardPressableState extends State<AdaptiveCardPressable>
               boxShadow: widget.elevation > 0
                   ? [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04 * widget.elevation),
+                        color: Colors.black.withValues(
+                          alpha: 0.04 * widget.elevation,
+                        ),
                         blurRadius: 8 * widget.elevation,
                         offset: Offset(0, 2 * widget.elevation),
                       ),
