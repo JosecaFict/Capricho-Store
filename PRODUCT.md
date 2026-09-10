@@ -67,7 +67,9 @@ historial, direcciones, devoluciones y notificaciones operativas.
   alcance implementado.
 - Las notificaciones se registran como pendientes; el envío por correo o push
   requiere un proveedor externo y queda fuera del alcance actual.
-- Quedan fuera promociones, campañas, pagos externos y recomendador. En Flutter,
+- Stripe Checkout procesa pagos Web sin exponer datos de tarjeta a Angular. FastAPI confirma el
+  resultado mediante webhook, registra el pago y libera inventario ante cancelación o expiración.
+- Quedan fuera promociones, campañas y recomendador. En Flutter,
   cámara, MediaPipe y vestidor virtual permanecen para una etapa posterior.
 
 ## Brand Commitments

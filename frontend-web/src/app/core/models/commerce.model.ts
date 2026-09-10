@@ -81,6 +81,18 @@ export interface Order {
   items: CommerceLine[];
 }
 
+export interface StripeCheckoutSession {
+  session_id: string;
+  checkout_url: string;
+  expires_at: string;
+}
+
+export interface StripeCheckoutStatus {
+  status: 'PROCESANDO' | 'PAGADO' | 'CANCELADO' | 'RECHAZADO';
+  message: string;
+  order: Order | null;
+}
+
 export interface ShippingQuote {
   id_cotizacion: number;
   id_sucursal: number;

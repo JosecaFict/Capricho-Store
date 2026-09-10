@@ -120,6 +120,33 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                 </div>
               </div>
             }
+            @if (selectedMeasurement(); as measurement) {
+              <section
+                class="selected-measurement"
+                aria-labelledby="selected-measurement-title"
+                aria-live="polite"
+              >
+                <h2 id="selected-measurement-title">Medidas de la talla {{ measurement.talla }}</h2>
+                <dl>
+                  <div>
+                    <dt>Hombros</dt>
+                    <dd>{{ measurementValue(measurement.ancho_hombros_cm) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Pecho</dt>
+                    <dd>{{ measurementValue(measurement.ancho_pecho_cm) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Largo</dt>
+                    <dd>{{ measurementValue(measurement.largo_prenda_cm) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Manga</dt>
+                    <dd>{{ measurementValue(measurement.largo_manga_cm) }}</dd>
+                  </div>
+                </dl>
+              </section>
+            }
             <label class="field" for="detail-branch">
               <span>Sucursal para consultar disponibilidad</span>
               <select
@@ -233,38 +260,6 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
             </div>
           </article>
         </div>
-        @if (measurements().length > 0) {
-          <section class="measurements" aria-labelledby="measurements-title">
-            <div class="section-heading">
-              <h2 id="measurements-title">Medidas publicadas</h2>
-              <p>Valores en centímetros según talla.</p>
-            </div>
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Talla</th>
-                    <th>Hombros</th>
-                    <th>Pecho</th>
-                    <th>Largo</th>
-                    <th>Manga</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of measurements(); track row.id_medida) {
-                    <tr>
-                      <th>{{ row.talla }}</th>
-                      <td>{{ row.ancho_hombros_cm || 'No disponible' }}</td>
-                      <td>{{ row.ancho_pecho_cm || 'No disponible' }}</td>
-                      <td>{{ row.largo_prenda_cm || 'No disponible' }}</td>
-                      <td>{{ row.largo_manga_cm || 'No disponible' }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </section>
-        }
       }
     </section>
   `,
@@ -280,6 +275,10 @@ export class ProductDetail {
   readonly selectedColorId = signal<number | null>(null);
   readonly selectedSize = signal<string | null>(null);
   readonly measurements = signal<ProductMeasurement[]>([]);
+  readonly selectedMeasurement = computed(() => {
+    const size = this.selectedSize();
+    return this.measurements().find((measurement) => measurement.talla === size) ?? null;
+  });
   readonly branches = signal<Branch[]>([]);
   readonly selectedBranchId = signal<number | null>(null);
   readonly quantity = signal(1);
@@ -392,6 +391,12 @@ export class ProductDetail {
     this.selectedSize.set(size);
     this.quantity.set(1);
     this.actionMessage.set('');
+  }
+  measurementValue(value: string | null): string {
+    if (!value?.trim()) return 'No disponible';
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return `${value} cm`;
+    return `${numericValue.toLocaleString('es-BO', { maximumFractionDigits: 2 })} cm`;
   }
   availableColors(item: Product) {
     return item.variantes.filter(

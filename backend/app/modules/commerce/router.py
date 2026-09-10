@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime, time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
@@ -10,6 +10,7 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.exceptions import PermissionDeniedError
 from app.modules.commerce.dependencies import get_commerce_service
+from app.modules.commerce.exceptions import PaymentGatewayError
 from app.modules.commerce.schemas import (
     AddressCreate,
     AddressResponse,
@@ -31,6 +32,8 @@ from app.modules.commerce.schemas import (
     SaleResponse,
     ShippingQuoteCreate,
     ShippingQuoteResponse,
+    StripeCheckoutResponse,
+    StripeCheckoutStatusResponse,
     SupplierPurchaseHistoryPage,
 )
 from app.modules.commerce.service import CommerceService
@@ -175,9 +178,40 @@ async def customer_reservation_history(principal: Authenticated, service: Servic
     return await service.list_reservations(principal.user.id_usuario, operational=False)
 
 
-@router.post("/checkout", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/checkout", response_model=StripeCheckoutResponse, status_code=status.HTTP_201_CREATED
+)
 async def checkout(payload: CheckoutCreate, principal: Authenticated, service: Service):
     return await service.checkout(principal.user.id_usuario, payload)
+
+
+@router.get("/checkout/{session_id}/status", response_model=StripeCheckoutStatusResponse)
+async def stripe_checkout_status(session_id: str, principal: Authenticated, service: Service):
+    return await service.stripe_checkout_status(principal.user.id_usuario, session_id)
+
+
+@router.post("/checkout/{session_id}/cancel", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_stripe_checkout(
+    session_id: str, principal: Authenticated, service: Service
+) -> Response:
+    await service.cancel_stripe_checkout(principal.user.id_usuario, session_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/payments/stripe/webhook", include_in_schema=False)
+async def stripe_webhook(request: Request, service: Service) -> dict[str, bool]:
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature")
+    if not signature:
+        raise HTTPException(status_code=400, detail="Falta la firma de Stripe")
+    try:
+        event = service.construct_stripe_event(payload, signature)
+    except PaymentGatewayError:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="La firma de Stripe no es válida") from exc
+    await service.process_stripe_event(event)
+    return {"received": True}
 
 
 @router.get("/orders", response_model=list[OrderResponse])

@@ -219,6 +219,17 @@ pytest -q -p no:cacheprovider
 ruff check .
 ```
 
+## Stripe Checkout
+
+La compra Web crea una sesión alojada de Stripe con precios calculados exclusivamente por
+FastAPI. La venta permanece pendiente hasta recibir una confirmación verificable. Configura
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` y `PUBLIC_WEB_URL`; el webhook público es
+`POST /api/v1/payments/stripe/webhook`.
+
+Eventos necesarios: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed` y `checkout.session.expired`. Las sesiones vencen en 30
+minutos por defecto para no retener inventario indefinidamente.
+
 ## Alembic
 
 Alembic está configurado para el esquema existente `capricho`, pero este proyecto no contiene

@@ -57,6 +57,11 @@ ORDER = {
     "fecha_finalizacion": None,
     "items": [LINE],
 }
+STRIPE_CHECKOUT = {
+    "session_id": "cs_test_capricho",
+    "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_capricho",
+    "expires_at": "2026-09-10T14:30:00Z",
+}
 RETURN = {
     "id_devolucion": 10,
     "id_venta": 6,
@@ -104,6 +109,7 @@ async def call(
     service: AsyncMock,
     actor: CurrentPrincipal | None = None,
     json: dict | None = None,
+    headers: dict[str, str] | None = None,
 ) -> Response:
     async def override_service() -> AsyncIterator[AsyncMock]:
         yield service
@@ -116,7 +122,7 @@ async def call(
             transport=ASGITransport(app=app, raise_app_exceptions=False),
             base_url="http://test",
         ) as client:
-            return await client.request(method, path, json=json)
+            return await client.request(method, path, json=json, headers=headers)
     finally:
         app.dependency_overrides.clear()
 
@@ -210,7 +216,7 @@ async def test_cash_sale_requires_payment_permission() -> None:
 
 async def test_checkout_pickup() -> None:
     service = AsyncMock()
-    service.checkout.return_value = ORDER
+    service.checkout.return_value = STRIPE_CHECKOUT
     response = await call(
         "POST",
         "/api/v1/checkout",
@@ -219,7 +225,53 @@ async def test_checkout_pickup() -> None:
         json={"id_sucursal": 1, "modalidad_entrega": "RETIRO_SUCURSAL"},
     )
     assert response.status_code == 201
-    assert response.json()["modalidad_entrega"] == "RETIRO_SUCURSAL"
+    assert response.json()["session_id"] == "cs_test_capricho"
+
+
+async def test_checkout_status_confirms_paid_order() -> None:
+    service = AsyncMock()
+    service.stripe_checkout_status.return_value = {
+        "status": "PAGADO",
+        "message": "Stripe confirmó el pago.",
+        "order": ORDER,
+    }
+    response = await call(
+        "GET",
+        "/api/v1/checkout/cs_test_capricho/status",
+        service=service,
+        actor=principal(),
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "PAGADO"
+    assert response.json()["order"]["id_pedido"] == 8
+
+
+async def test_stripe_webhook_requires_signature() -> None:
+    response = await call(
+        "POST",
+        "/api/v1/payments/stripe/webhook",
+        service=AsyncMock(),
+        json={"type": "checkout.session.completed"},
+    )
+    assert response.status_code == 400
+
+
+async def test_stripe_webhook_processes_verified_event() -> None:
+    service = AsyncMock()
+    service.construct_stripe_event.return_value = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"id": "cs_test_capricho"}},
+    }
+    response = await call(
+        "POST",
+        "/api/v1/payments/stripe/webhook",
+        service=service,
+        json={"type": "checkout.session.completed"},
+        headers={"stripe-signature": "t=1,v1=firma"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"received": True}
+    service.process_stripe_event.assert_awaited_once()
 
 
 async def test_customer_can_list_own_orders() -> None:

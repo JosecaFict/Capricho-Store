@@ -4,12 +4,14 @@ from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import Cliente, Sucursal
+from app.integrations.stripe_checkout import StripeCheckoutGateway
+from app.modules.auth.models import Cliente, Sucursal, Usuario
 from app.modules.catalog.models import InventarioSucursal
 from app.modules.commerce.exceptions import (
     CommerceConflictError,
     CommerceNotFoundError,
     InvalidCommerceOperationError,
+    PaymentGatewayError,
 )
 from app.modules.commerce.models import (
     Carrito,
@@ -24,6 +26,7 @@ from app.modules.commerce.models import (
     Pago,
     Pedido,
     Reserva,
+    TransaccionPasarela,
     Venta,
 )
 from app.modules.commerce.repository import CommerceRepository
@@ -49,6 +52,8 @@ from app.modules.commerce.schemas import (
     SaleCreate,
     SaleResponse,
     ShippingQuoteCreate,
+    StripeCheckoutResponse,
+    StripeCheckoutStatusResponse,
     SupplierPurchaseHistoryPage,
 )
 from app.modules.inventory.models import MovimientoInventario, MovimientoLote
@@ -75,9 +80,20 @@ RETURN_TRANSITIONS = {
 
 
 class CommerceService:
-    def __init__(self, session: AsyncSession, repository: CommerceRepository) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        repository: CommerceRepository,
+        *,
+        stripe_gateway: StripeCheckoutGateway | None = None,
+        public_web_url: str = "http://localhost:4200",
+        checkout_expire_minutes: int = 30,
+    ) -> None:
         self.session = session
         self.repository = repository
+        self.stripe_gateway = stripe_gateway
+        self.public_web_url = public_web_url.rstrip("/")
+        self.checkout_expire_minutes = checkout_expire_minutes
 
     async def _customer(self, user_id: int) -> Cliente:
         customer = await self.repository.customer_by_user(user_id)
@@ -500,6 +516,7 @@ class CommerceService:
         reservation_id: int | None = None,
         shipping_cost: Decimal = Decimal(0),
         cash: bool = False,
+        state: str | None = None,
     ) -> Venta:
         self._validate_unique_lines(lines)
         priced: list[tuple[CommerceLineRequest, Decimal, InventarioSucursal]] = []
@@ -530,7 +547,7 @@ class CommerceService:
                 id_reserva=reservation_id,
                 canal_venta=channel,
                 modalidad_entrega=mode,
-                estado="PAGADA" if cash else "CONFIRMADA",
+                estado="PAGADA" if cash else (state or "CONFIRMADA"),
                 subtotal=subtotal,
                 descuento_total=0,
                 costo_envio=shipping_cost,
@@ -618,7 +635,13 @@ class CommerceService:
             raise
         return await self._sale_response(sale)
 
-    async def checkout(self, user_id: int, payload: CheckoutCreate) -> OrderResponse:
+    @staticmethod
+    def _stripe_amount(amount: Decimal) -> int:
+        return int((amount * 100).quantize(Decimal("1")))
+
+    async def checkout(self, user_id: int, payload: CheckoutCreate) -> StripeCheckoutResponse:
+        if self.stripe_gateway is None:
+            raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
         customer = await self._customer(user_id)
         cart = await self._active_cart(customer.id_cliente, create=False, lock=True)
         details = await self.repository.cart_details(cart.id_carrito)
@@ -647,6 +670,7 @@ class CommerceService:
             CommerceLineRequest(id_variante=item.id_variante, cantidad=item.cantidad)
             for item in details
         ]
+        stripe_session: dict | None = None
         try:
             sale = await self._create_sale(
                 customer_id=customer.id_cliente,
@@ -656,6 +680,7 @@ class CommerceService:
                 mode=payload.modalidad_entrega,
                 lines=lines,
                 shipping_cost=shipping_cost,
+                state="PENDIENTE",
             )
             order = await self.repository.add(
                 Pedido(
@@ -665,18 +690,274 @@ class CommerceService:
                     estado="PENDIENTE",
                 )
             )
-            cart.estado = "CONVERTIDO"
-            await self._notify(
-                user_id,
-                "PEDIDO_CREADO",
-                "Pedido recibido",
-                f"Tu pedido #{order.id_pedido} fue registrado.",
+            method = await self.repository.payment_method("STRIPE")
+            if method is None:
+                raise InvalidCommerceOperationError("El método STRIPE no está configurado")
+            payment = await self.repository.add(
+                Pago(
+                    id_venta=sale.id_venta,
+                    id_metodo_pago=method.id_metodo_pago,
+                    monto=sale.total,
+                    moneda="BOB",
+                    estado="PROCESANDO",
+                )
             )
+            transaction = await self.repository.add(
+                TransaccionPasarela(
+                    id_pago=payment.id_pago,
+                    proveedor="STRIPE",
+                    estado="CREANDO",
+                    monto=sale.total,
+                    moneda="BOB",
+                    respuesta_resumen={
+                        "cart_id": cart.id_carrito,
+                        "order_id": order.id_pedido,
+                    },
+                )
+            )
+            sale_response = await self._sale_response(sale)
+            line_items = [
+                {
+                    "price_data": {
+                        "currency": "bob",
+                        "product_data": {
+                            "name": f"{item.producto} · {item.color} · {item.talla}",
+                        },
+                        "unit_amount": self._stripe_amount(item.precio_unitario),
+                    },
+                    "quantity": item.cantidad,
+                }
+                for item in sale_response.items
+            ]
+            if shipping_cost > 0:
+                line_items.append(
+                    {
+                        "price_data": {
+                            "currency": "bob",
+                            "product_data": {"name": "Envío"},
+                            "unit_amount": self._stripe_amount(shipping_cost),
+                        },
+                        "quantity": 1,
+                    }
+                )
+            expires_at = datetime.now(UTC) + timedelta(
+                minutes=self.checkout_expire_minutes,
+                seconds=60,
+            )
+            try:
+                stripe_session = await self.stripe_gateway.create_session(
+                    mode="payment",
+                    payment_method_types=["card"],
+                    line_items=line_items,
+                    customer_email=(await self.repository.get(Usuario, customer.id_usuario)).correo,
+                    client_reference_id=str(order.id_pedido),
+                    metadata={
+                        "payment_id": str(payment.id_pago),
+                        "sale_id": str(sale.id_venta),
+                        "order_id": str(order.id_pedido),
+                    },
+                    payment_intent_data={
+                        "metadata": {
+                            "payment_id": str(payment.id_pago),
+                            "sale_id": str(sale.id_venta),
+                            "order_id": str(order.id_pedido),
+                        }
+                    },
+                    success_url=(
+                        f"{self.public_web_url}/checkout?session_id={{CHECKOUT_SESSION_ID}}"
+                    ),
+                    cancel_url=f"{self.public_web_url}/checkout?pago_cancelado=1",
+                    expires_at=int(expires_at.timestamp()),
+                    locale="es",
+                    idempotency_key=f"capricho-checkout-{payment.id_pago}",
+                )
+            except Exception as exc:
+                raise PaymentGatewayError("No pudimos iniciar el pago seguro con Stripe") from exc
+            session_id = str(stripe_session["id"])
+            checkout_url = str(stripe_session["url"])
+            transaction.external_session_id = session_id
+            transaction.estado = str(stripe_session.get("status") or "open").upper()
+            cart.estado = "CONVERTIDO"
             await self.session.commit()
         except Exception:
             await self.session.rollback()
+            if stripe_session and stripe_session.get("id"):
+                try:
+                    await self.stripe_gateway.expire_session(str(stripe_session["id"]))
+                except Exception:
+                    pass
             raise
-        return await self._order_response(order)
+        return StripeCheckoutResponse(
+            session_id=session_id,
+            checkout_url=checkout_url,
+            expires_at=expires_at,
+        )
+
+    def construct_stripe_event(self, payload: bytes, signature: str) -> dict:
+        if self.stripe_gateway is None:
+            raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
+        return self.stripe_gateway.construct_event(payload, signature)
+
+    async def _stripe_transaction(self, session_id: str, *, lock: bool = False):
+        transaction = await self.repository.gateway_transaction_by_session(session_id, lock=lock)
+        if transaction is None:
+            raise CommerceNotFoundError("La sesión de pago no pertenece a Capricho Store")
+        payment = await self.repository.payment(transaction.id_pago, lock=lock)
+        if payment is None:
+            raise CommerceNotFoundError("El pago asociado no existe")
+        sale = await self.repository.get(Venta, payment.id_venta)
+        if sale is None:
+            raise CommerceNotFoundError("La venta asociada no existe")
+        order = await self.repository.order_by_sale(sale.id_venta)
+        if order is None:
+            raise CommerceNotFoundError("El pedido asociado no existe")
+        return transaction, payment, sale, order
+
+    async def _complete_stripe_checkout(self, stripe_session: dict) -> None:
+        session_id = str(stripe_session.get("id") or "")
+        transaction, payment, sale, order = await self._stripe_transaction(session_id, lock=True)
+        if payment.estado == "PAGADO":
+            return
+        amount_total = int(stripe_session.get("amount_total") or 0)
+        currency = str(stripe_session.get("currency") or "").upper()
+        if stripe_session.get("payment_status") != "paid":
+            raise InvalidCommerceOperationError("Stripe todavía no confirmó el pago")
+        if amount_total != self._stripe_amount(payment.monto) or currency != payment.moneda:
+            raise CommerceConflictError("El monto confirmado por Stripe no coincide con la venta")
+        now = datetime.now(UTC)
+        payment.estado = "PAGADO"
+        payment.fecha_confirmacion = now
+        sale.estado = "PAGADA"
+        transaction.estado = "PAGADO"
+        transaction.external_payment_id = str(stripe_session.get("payment_intent") or "") or None
+        transaction.external_customer_id = str(stripe_session.get("customer") or "") or None
+        transaction.fecha_confirmacion = now
+        transaction.respuesta_resumen = {
+            **(transaction.respuesta_resumen or {}),
+            "payment_status": stripe_session.get("payment_status"),
+            "status": stripe_session.get("status"),
+        }
+        customer = await self.repository.get(Cliente, sale.id_cliente)
+        await self._notify(
+            customer.id_usuario,
+            "PAGO_CONFIRMADO",
+            "Compra confirmada",
+            f"Stripe confirmó el pago de tu pedido #{order.id_pedido}.",
+        )
+        await self.session.commit()
+
+    async def _restore_checkout_cart(self, transaction: TransaccionPasarela) -> None:
+        summary = transaction.respuesta_resumen or {}
+        cart_id = summary.get("cart_id")
+        if not cart_id:
+            return
+        old_cart = await self.repository.get(Carrito, int(cart_id))
+        if old_cart is None:
+            return
+        active = await self.repository.active_cart(old_cart.id_cliente, lock=True)
+        if active is None:
+            old_cart.estado = "ACTIVO"
+            return
+        if active.id_carrito == old_cart.id_carrito:
+            return
+        for item in await self.repository.cart_details(old_cart.id_carrito):
+            current = await self.repository.cart_item_by_variant(
+                active.id_carrito, item.id_variante
+            )
+            if current:
+                current.cantidad += item.cantidad
+            else:
+                await self.repository.add(
+                    DetalleCarrito(
+                        id_carrito=active.id_carrito,
+                        id_variante=item.id_variante,
+                        cantidad=item.cantidad,
+                    )
+                )
+
+    async def _cancel_stripe_checkout(self, session_id: str, *, rejected: bool = False) -> None:
+        transaction, payment, sale, order = await self._stripe_transaction(session_id, lock=True)
+        if payment.estado == "PAGADO" or sale.estado == "PAGADA":
+            return
+        if payment.estado in {"CANCELADO", "RECHAZADO"}:
+            return
+        if sale.estado != "ANULADA":
+            await self._restore_sale_stock(
+                sale,
+                employee_id=None,
+                reference_type="PAGO_STRIPE",
+                reference_id=payment.id_pago,
+            )
+        payment.estado = "RECHAZADO" if rejected else "CANCELADO"
+        sale.estado = "ANULADA"
+        order.estado = "CANCELADO"
+        transaction.estado = payment.estado
+        await self._restore_checkout_cart(transaction)
+        await self.session.commit()
+
+    async def process_stripe_event(self, event: dict) -> None:
+        event_type = str(event.get("type") or "")
+        stripe_session = dict(event.get("data", {}).get("object", {}))
+        if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
+            await self._complete_stripe_checkout(stripe_session)
+        elif event_type == "checkout.session.async_payment_failed":
+            await self._cancel_stripe_checkout(str(stripe_session.get("id") or ""), rejected=True)
+        elif event_type == "checkout.session.expired":
+            await self._cancel_stripe_checkout(str(stripe_session.get("id") or ""))
+
+    async def stripe_checkout_status(
+        self, user_id: int, session_id: str
+    ) -> StripeCheckoutStatusResponse:
+        if self.stripe_gateway is None:
+            raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
+        customer = await self._customer(user_id)
+        transaction, payment, sale, order = await self._stripe_transaction(session_id)
+        if sale.id_cliente != customer.id_cliente:
+            raise CommerceNotFoundError("La sesión de pago no existe")
+        try:
+            remote = await self.stripe_gateway.retrieve_session(session_id)
+        except Exception as exc:
+            raise PaymentGatewayError("No pudimos consultar el estado del pago en Stripe") from exc
+        if remote.get("payment_status") == "paid":
+            await self._complete_stripe_checkout(remote)
+        elif remote.get("status") == "expired":
+            await self._cancel_stripe_checkout(session_id)
+        transaction, payment, sale, order = await self._stripe_transaction(session_id)
+        if payment.estado == "PAGADO":
+            return StripeCheckoutStatusResponse(
+                status="PAGADO",
+                message="Stripe confirmó el pago y la compra quedó registrada.",
+                order=await self._order_response(order),
+            )
+        if payment.estado in {"CANCELADO", "RECHAZADO"}:
+            return StripeCheckoutStatusResponse(
+                status=payment.estado,
+                message="El pago no se completó y las prendas volvieron a tu carrito.",
+            )
+        return StripeCheckoutStatusResponse(
+            status="PROCESANDO",
+            message="Stripe está terminando de confirmar el pago.",
+        )
+
+    async def cancel_stripe_checkout(self, user_id: int, session_id: str) -> None:
+        if self.stripe_gateway is None:
+            raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
+        customer = await self._customer(user_id)
+        _, payment, sale, _ = await self._stripe_transaction(session_id)
+        if sale.id_cliente != customer.id_cliente:
+            raise CommerceNotFoundError("La sesión de pago no existe")
+        if payment.estado == "PAGADO":
+            return
+        try:
+            remote = await self.stripe_gateway.retrieve_session(session_id)
+            if remote.get("payment_status") == "paid":
+                await self._complete_stripe_checkout(remote)
+                return
+            if remote.get("status") == "open":
+                await self.stripe_gateway.expire_session(session_id)
+        except Exception as exc:
+            raise PaymentGatewayError("No pudimos cancelar la sesión de Stripe") from exc
+        await self._cancel_stripe_checkout(session_id)
 
     async def _sale_response(self, sale: Venta) -> SaleResponse:
         branch = await self.repository.get(Sucursal, sale.id_sucursal)
@@ -817,6 +1098,8 @@ class CommerceService:
         if order is None:
             raise CommerceNotFoundError("El pedido no existe")
         sale = await self.repository.get(Venta, order.id_venta)
+        if sale is None or sale.estado != "PAGADA":
+            raise CommerceNotFoundError("El pedido no existe")
         if not operational:
             customer = await self._customer(user_id)
             if sale.id_cliente != customer.id_cliente:

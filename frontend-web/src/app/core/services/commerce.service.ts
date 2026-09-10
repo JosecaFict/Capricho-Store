@@ -10,6 +10,8 @@ import {
   ReturnRequest,
   Sale,
   ShippingQuote,
+  StripeCheckoutSession,
+  StripeCheckoutStatus,
   SupplierPurchaseHistoryPage,
 } from '../models/commerce.model';
 
@@ -63,7 +65,18 @@ export class CommerceService {
     return this.http.post<Reservation>(`${API_BASE_URL}/reservations/${id}/cancel`, {});
   }
   checkout(payload: object) {
-    return this.http.post<Order>(`${API_BASE_URL}/checkout`, payload);
+    return this.http.post<StripeCheckoutSession>(`${API_BASE_URL}/checkout`, payload);
+  }
+  checkoutStatus(sessionId: string) {
+    return this.http.get<StripeCheckoutStatus>(
+      `${API_BASE_URL}/checkout/${encodeURIComponent(sessionId)}/status`,
+    );
+  }
+  cancelCheckout(sessionId: string) {
+    return this.http.post<void>(
+      `${API_BASE_URL}/checkout/${encodeURIComponent(sessionId)}/cancel`,
+      {},
+    );
   }
   orders() {
     return this.http.get<Order[]>(`${API_BASE_URL}/orders`);

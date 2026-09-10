@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
@@ -201,6 +202,27 @@ class Pago(Base):
     estado: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'PENDIENTE'")
     )
+    fecha_creacion: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    fecha_confirmacion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TransaccionPasarela(Base):
+    __tablename__ = "transaccion_pasarela"
+
+    id_transaccion: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    id_pago: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("capricho.pago.id_pago", ondelete="CASCADE"), nullable=False
+    )
+    proveedor: Mapped[str] = mapped_column(String(30), nullable=False)
+    external_payment_id: Mapped[str | None] = mapped_column(String(255))
+    external_session_id: Mapped[str | None] = mapped_column(String(255))
+    external_customer_id: Mapped[str | None] = mapped_column(String(255))
+    estado: Mapped[str | None] = mapped_column(String(50))
+    monto: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    moneda: Mapped[str | None] = mapped_column(String(3), server_default=text("'BOB'"))
+    respuesta_resumen: Mapped[dict | None] = mapped_column(JSON)
     fecha_creacion: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

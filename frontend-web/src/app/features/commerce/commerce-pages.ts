@@ -1,7 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
 import { Branch } from '../../core/models/catalog.model';
 import {
@@ -13,6 +13,7 @@ import {
   ReturnRequest,
   Sale,
   ShippingQuote,
+  StripeCheckoutStatus,
 } from '../../core/models/commerce.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -182,7 +183,7 @@ export class CartPage {
       <header class="commerce-heading">
         <div>
           <h1>Confirmar pedido</h1>
-          <p>Elige cómo recibirás tus prendas.</p>
+          <p>Elige cómo recibirás tus prendas y completa el pago seguro.</p>
         </div>
       </header>
       @if (loading()) {
@@ -192,13 +193,13 @@ export class CartPage {
           kind="error"
           title="No pudimos preparar el checkout"
           [message]="error()"
-          (retry)="load()"
+          (retry)="retry()"
         />
       } @else if (completed(); as order) {
         <app-status-panel
-          title="Pedido registrado"
+          title="Compra confirmada"
           [message]="
-            'Tu número de pedido es #' +
+            'Stripe aprobó el pago. Tu número de pedido es #' +
             order.id_pedido +
             '. Puedes seguir su estado desde tu cuenta.'
           "
@@ -206,7 +207,20 @@ export class CartPage {
         <div class="commerce-empty-action">
           <a class="button button--primary" routerLink="/pedidos">Ver pedido</a>
         </div>
+      } @else if (paymentStatus(); as result) {
+        <app-status-panel title="Pago en verificación" [message]="result.message" />
+        <div class="commerce-empty-action">
+          <button class="button button--primary" type="button" (click)="verifyPayment()">
+            Consultar nuevamente
+          </button>
+          <a class="button button--quiet" routerLink="/pedidos">Ver mis pedidos</a>
+        </div>
       } @else if (cart(); as current) {
+        @if (cancelled()) {
+          <p class="notice notice--warning" role="status">
+            El pago fue cancelado. No se realizó ningún cobro y las prendas volvieron a tu carrito.
+          </p>
+        }
         <form class="commerce-layout" [formGroup]="form" (ngSubmit)="submit()">
           <div class="checkout-form">
             <fieldset class="delivery-choice">
@@ -302,9 +316,11 @@ export class CartPage {
               type="submit"
               [disabled]="submitting() || form.invalid || needsQuote()"
             >
-              {{ submitting() ? 'Registrando…' : 'Confirmar pedido' }}
+              {{ submitting() ? 'Preparando pago…' : 'Ir al pago seguro' }}
             </button>
-            <p>No se realizará un cobro digital en este ciclo.</p>
+            <p class="stripe-checkout-note">
+              Stripe procesará los datos de tu tarjeta. Capricho Store no almacena esos datos.
+            </p>
           </aside>
         </form>
       }
@@ -316,11 +332,15 @@ export class CheckoutPage {
   private readonly commerce = inject(CommerceService);
   private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
+  private readonly route = inject(ActivatedRoute);
   readonly cart = signal<Cart | null>(null);
   readonly branches = signal<Branch[]>([]);
   readonly addresses = signal<Address[]>([]);
   readonly quote = signal<ShippingQuote | null>(null);
   readonly completed = signal<Order | null>(null);
+  readonly paymentStatus = signal<StripeCheckoutStatus | null>(null);
+  readonly paymentSessionId = signal('');
+  readonly cancelled = signal(false);
   readonly loading = signal(true);
   readonly submitting = signal(false);
   readonly quoting = signal(false);
@@ -331,6 +351,16 @@ export class CheckoutPage {
     id_direccion: [''],
   });
   constructor() {
+    const sessionId = this.route.snapshot.queryParamMap.get('session_id') ?? '';
+    if (sessionId) {
+      this.paymentSessionId.set(sessionId);
+      this.verifyPayment();
+      return;
+    }
+    if (this.route.snapshot.queryParamMap.get('pago_cancelado') === '1') {
+      this.cancelPendingPayment();
+      return;
+    }
     this.load();
   }
   load(): void {
@@ -350,6 +380,13 @@ export class CheckoutPage {
         },
         error: (error) => this.error.set(this.errors.message(error, 'Intenta nuevamente.')),
       });
+  }
+  retry(): void {
+    if (this.paymentSessionId()) {
+      this.verifyPayment();
+    } else {
+      this.load();
+    }
   }
   canQuote(): boolean {
     return !!this.form.controls.id_sucursal.value && !!this.form.controls.id_direccion.value;
@@ -387,10 +424,84 @@ export class CheckoutPage {
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
-        next: (order) => this.completed.set(order),
+        next: (session) => {
+          this.rememberSession(session.session_id);
+          window.location.assign(session.checkout_url);
+        },
         error: (error) =>
-          this.error.set(this.errors.message(error, 'No pudimos registrar el pedido.')),
+          this.error.set(this.errors.message(error, 'No pudimos iniciar el pago con Stripe.')),
       });
+  }
+
+  verifyPayment(): void {
+    const sessionId = this.paymentSessionId();
+    if (!sessionId) return;
+    this.loading.set(true);
+    this.error.set('');
+    this.commerce
+      .checkoutStatus(sessionId)
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe({
+        next: (result) => {
+          if (result.status === 'PAGADO' && result.order) {
+            this.completed.set(result.order);
+            this.paymentStatus.set(null);
+            this.forgetSession();
+          } else {
+            this.paymentStatus.set(result);
+          }
+        },
+        error: (error) =>
+          this.error.set(
+            this.errors.message(error, 'No pudimos confirmar el estado del pago con Stripe.'),
+          ),
+      });
+  }
+
+  private cancelPendingPayment(): void {
+    const sessionId = this.recalledSession();
+    this.cancelled.set(true);
+    if (!sessionId) {
+      this.load();
+      return;
+    }
+    this.loading.set(true);
+    this.commerce.cancelCheckout(sessionId).subscribe({
+      next: () => {
+        this.forgetSession();
+        this.load();
+      },
+      error: (error) => {
+        this.loading.set(false);
+        this.error.set(
+          this.errors.message(error, 'No pudimos recuperar el carrito después de cancelar.'),
+        );
+      },
+    });
+  }
+
+  private rememberSession(sessionId: string): void {
+    try {
+      sessionStorage.setItem('capricho_stripe_session', sessionId);
+    } catch {
+      // Stripe still redirects back with the session id after a successful payment.
+    }
+  }
+
+  private recalledSession(): string {
+    try {
+      return sessionStorage.getItem('capricho_stripe_session') ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  private forgetSession(): void {
+    try {
+      sessionStorage.removeItem('capricho_stripe_session');
+    } catch {
+      // Storage can be unavailable in privacy modes; there is nothing else to clear.
+    }
   }
 }
 

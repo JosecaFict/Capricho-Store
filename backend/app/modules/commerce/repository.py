@@ -23,9 +23,11 @@ from app.modules.commerce.models import (
     DireccionCliente,
     MetodoPago,
     Notificacion,
+    Pago,
     Pedido,
     Reserva,
     TarifaEnvio,
+    TransaccionPasarela,
     Venta,
 )
 from app.modules.inventory.models import (
@@ -208,7 +210,7 @@ class CommerceRepository:
             (
                 await self.session.scalars(
                     select(Venta)
-                    .where(Venta.id_cliente == customer_id)
+                    .where(Venta.id_cliente == customer_id, Venta.estado == "PAGADA")
                     .order_by(Venta.fecha_venta.desc())
                 )
             ).all()
@@ -226,7 +228,7 @@ class CommerceRepository:
         statement = (
             select(Pedido)
             .join(Venta, Venta.id_venta == Pedido.id_venta)
-            .where(Venta.id_cliente == customer_id)
+            .where(Venta.id_cliente == customer_id, Venta.estado == "PAGADA")
             .order_by(Pedido.fecha_creacion.desc())
         )
         return list((await self.session.scalars(statement)).all())
@@ -234,7 +236,11 @@ class CommerceRepository:
     async def orders(
         self, *, state: str | None = None, branch_id: int | None = None
     ) -> list[Pedido]:
-        statement = select(Pedido).join(Venta, Venta.id_venta == Pedido.id_venta)
+        statement = (
+            select(Pedido)
+            .join(Venta, Venta.id_venta == Pedido.id_venta)
+            .where(Venta.estado == "PAGADA")
+        )
         if state:
             statement = statement.where(Pedido.estado == state)
         if branch_id:
@@ -401,6 +407,26 @@ class CommerceRepository:
         return await self.session.scalar(
             select(MetodoPago).where(MetodoPago.codigo == code, MetodoPago.activo.is_(True))
         )
+
+    async def payment(self, payment_id: int, *, lock: bool = False) -> Pago | None:
+        statement = select(Pago).where(Pago.id_pago == payment_id)
+        if lock:
+            statement = statement.with_for_update()
+        return await self.session.scalar(statement)
+
+    async def gateway_transaction_by_session(
+        self, session_id: str, *, lock: bool = False
+    ) -> TransaccionPasarela | None:
+        statement = select(TransaccionPasarela).where(
+            TransaccionPasarela.proveedor == "STRIPE",
+            TransaccionPasarela.external_session_id == session_id,
+        )
+        if lock:
+            statement = statement.with_for_update()
+        return await self.session.scalar(statement)
+
+    async def order_by_sale(self, sale_id: int) -> Pedido | None:
+        return await self.session.scalar(select(Pedido).where(Pedido.id_venta == sale_id))
 
     async def supplier_history(
         self,

@@ -40,3 +40,23 @@ def test_invalid_cors_origin_is_rejected() -> None:
             "postgresql://user:password@localhost/database",
             "web.example.com",
         )
+
+
+def test_stripe_checkout_configuration_is_normalized() -> None:
+    settings = Settings(
+        DATABASE_URL="postgresql://user:password@localhost/database",
+        SECRET_KEY="test-secret-key-not-for-production",
+        PUBLIC_WEB_URL="https://capricho-store.vercel.app/",
+        STRIPE_CHECKOUT_EXPIRE_MINUTES=45,
+    )
+    assert settings.public_web_url == "https://capricho-store.vercel.app"
+    assert settings.stripe_checkout_expire_minutes == 45
+
+
+def test_stripe_checkout_cannot_hold_stock_less_than_thirty_minutes() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            DATABASE_URL="postgresql://user:password@localhost/database",
+            SECRET_KEY="test-secret-key-not-for-production",
+            STRIPE_CHECKOUT_EXPIRE_MINUTES=10,
+        )

@@ -209,6 +209,18 @@ class OrderResponse(ORMResponse):
     items: list[CommerceLineResponse]
 
 
+class StripeCheckoutResponse(BaseModel):
+    session_id: str
+    checkout_url: str
+    expires_at: datetime
+
+
+class StripeCheckoutStatusResponse(BaseModel):
+    status: Literal["PROCESANDO", "PAGADO", "CANCELADO", "RECHAZADO"]
+    message: str
+    order: OrderResponse | None = None
+
+
 class ShippingQuoteCreate(BaseModel):
     id_sucursal: int = Field(gt=0)
     id_direccion: int = Field(gt=0)

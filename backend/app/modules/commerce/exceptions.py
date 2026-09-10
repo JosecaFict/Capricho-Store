@@ -14,3 +14,7 @@ class CommerceConflictError(CommerceDomainError):
 
 class InvalidCommerceOperationError(CommerceDomainError):
     pass
+
+
+class PaymentGatewayError(CommerceDomainError):
+    pass

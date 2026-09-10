@@ -63,6 +63,15 @@ class Settings(BaseSettings):
         ge=5,
         le=30,
     )
+    stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
+    stripe_webhook_secret: str | None = Field(default=None, alias="STRIPE_WEBHOOK_SECRET")
+    public_web_url: str = Field(default="http://localhost:4200", alias="PUBLIC_WEB_URL")
+    stripe_checkout_expire_minutes: int = Field(
+        default=30,
+        alias="STRIPE_CHECKOUT_EXPIRE_MINUTES",
+        ge=30,
+        le=1440,
+    )
     database_schema: Literal["capricho"] = "capricho"
 
     @field_validator("database_url")
@@ -83,6 +92,14 @@ class Settings(BaseSettings):
         if any(not origin.startswith(("http://", "https://")) for origin in origins):
             raise ValueError("CORS_ORIGINS must contain comma-separated HTTP(S) origins")
         return ",".join(origins)
+
+    @field_validator("public_web_url")
+    @classmethod
+    def validate_public_web_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("PUBLIC_WEB_URL must be an HTTP(S) URL")
+        return normalized
 
     @property
     def cors_origin_list(self) -> list[str]:

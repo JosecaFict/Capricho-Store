@@ -1,0 +1,191 @@
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
+from app.modules.auth.models import Cliente, Usuario
+from app.modules.commerce.exceptions import CommerceConflictError
+from app.modules.commerce.models import (
+    Carrito,
+    DetalleCarrito,
+    MetodoPago,
+    Pago,
+    Pedido,
+    TransaccionPasarela,
+    Venta,
+)
+from app.modules.commerce.schemas import CheckoutCreate
+from app.modules.commerce.service import CommerceService
+
+
+def checkout_records():
+    transaction = TransaccionPasarela(
+        id_transaccion=15,
+        id_pago=12,
+        proveedor="STRIPE",
+        external_session_id="cs_test_capricho",
+        estado="OPEN",
+        monto=Decimal("240.00"),
+        moneda="BOB",
+        respuesta_resumen={"cart_id": 3, "order_id": 8},
+    )
+    payment = Pago(
+        id_pago=12,
+        id_venta=6,
+        id_metodo_pago=2,
+        monto=Decimal("240.00"),
+        moneda="BOB",
+        estado="PROCESANDO",
+    )
+    sale = Venta(
+        id_venta=6,
+        id_cliente=4,
+        id_sucursal=1,
+        canal_venta="WEB",
+        modalidad_entrega="RETIRO_SUCURSAL",
+        estado="PENDIENTE",
+        subtotal=Decimal("240.00"),
+        descuento_total=Decimal("0"),
+        costo_envio=Decimal("0"),
+        total=Decimal("240.00"),
+    )
+    order = Pedido(id_pedido=8, id_venta=6, estado="PENDIENTE")
+    return transaction, payment, sale, order
+
+
+async def test_checkout_creates_stripe_session_from_server_prices() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    gateway = AsyncMock()
+    customer = Cliente(id_cliente=4, id_usuario=9, estado="ACTIVO")
+    cart = Carrito(id_carrito=3, id_cliente=4, estado="ACTIVO")
+    detail = DetalleCarrito(id_detalle_carrito=5, id_carrito=3, id_variante=7, cantidad=2)
+    sale = checkout_records()[2]
+    method = MetodoPago(id_metodo_pago=2, codigo="STRIPE", nombre="Stripe", tipo="PASARELA")
+    repository.customer_by_user.return_value = customer
+    repository.active_cart.return_value = cart
+    repository.cart_details.return_value = [detail]
+    repository.payment_method.return_value = method
+    repository.get.return_value = Usuario(id_usuario=9, correo="ana@example.com")
+
+    async def add(entity):
+        if isinstance(entity, Pedido):
+            entity.id_pedido = 8
+        elif isinstance(entity, Pago):
+            entity.id_pago = 12
+        elif isinstance(entity, TransaccionPasarela):
+            entity.id_transaccion = 15
+        return entity
+
+    repository.add.side_effect = add
+    gateway.create_session.return_value = {
+        "id": "cs_test_capricho",
+        "url": "https://checkout.stripe.com/c/pay/cs_test_capricho",
+        "status": "open",
+    }
+    service = CommerceService(session, repository, stripe_gateway=gateway)
+    service._create_sale = AsyncMock(return_value=sale)
+    service._sale_response = AsyncMock(
+        return_value=SimpleNamespace(
+            items=[
+                SimpleNamespace(
+                    producto="Polo Classic Fit",
+                    color="Azul marino",
+                    talla="S",
+                    precio_unitario=Decimal("120.00"),
+                    cantidad=2,
+                )
+            ]
+        )
+    )
+
+    result = await service.checkout(
+        9,
+        CheckoutCreate(id_sucursal=1, modalidad_entrega="RETIRO_SUCURSAL"),
+    )
+
+    assert result.session_id == "cs_test_capricho"
+    assert cart.estado == "CONVERTIDO"
+    params = gateway.create_session.await_args.kwargs
+    assert params["line_items"][0]["price_data"]["unit_amount"] == 12000
+    assert params["line_items"][0]["quantity"] == 2
+    assert params["metadata"] == {"payment_id": "12", "sale_id": "6", "order_id": "8"}
+    session.commit.assert_awaited_once()
+
+
+async def test_successful_stripe_session_marks_purchase_paid_once() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    transaction, payment, sale, order = checkout_records()
+    customer = Cliente(id_cliente=4, id_usuario=9, estado="ACTIVO")
+    repository.gateway_transaction_by_session.return_value = transaction
+    repository.payment.return_value = payment
+    repository.order_by_sale.return_value = order
+    repository.get.side_effect = lambda model, _identity: sale if model is Venta else customer
+    service = CommerceService(session, repository, stripe_gateway=AsyncMock())
+    service._notify = AsyncMock()
+    stripe_session = {
+        "id": "cs_test_capricho",
+        "payment_status": "paid",
+        "status": "complete",
+        "amount_total": 24000,
+        "currency": "bob",
+        "payment_intent": "pi_capricho",
+        "customer": "cus_capricho",
+    }
+
+    await service._complete_stripe_checkout(stripe_session)
+    await service._complete_stripe_checkout(stripe_session)
+
+    assert payment.estado == "PAGADO"
+    assert sale.estado == "PAGADA"
+    assert transaction.external_payment_id == "pi_capricho"
+    session.commit.assert_awaited_once()
+    service._notify.assert_awaited_once()
+
+
+async def test_stripe_amount_must_match_pending_payment() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    transaction, payment, sale, order = checkout_records()
+    repository.gateway_transaction_by_session.return_value = transaction
+    repository.payment.return_value = payment
+    repository.order_by_sale.return_value = order
+    repository.get.return_value = sale
+    service = CommerceService(session, repository, stripe_gateway=AsyncMock())
+
+    with pytest.raises(CommerceConflictError):
+        await service._complete_stripe_checkout(
+            {
+                "id": "cs_test_capricho",
+                "payment_status": "paid",
+                "amount_total": 23999,
+                "currency": "bob",
+            }
+        )
+
+    assert payment.estado == "PROCESANDO"
+    session.commit.assert_not_awaited()
+
+
+async def test_expired_stripe_session_restores_stock_and_cart() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    transaction, payment, sale, order = checkout_records()
+    repository.gateway_transaction_by_session.return_value = transaction
+    repository.payment.return_value = payment
+    repository.order_by_sale.return_value = order
+    repository.get.return_value = sale
+    service = CommerceService(session, repository, stripe_gateway=AsyncMock())
+    service._restore_sale_stock = AsyncMock()
+    service._restore_checkout_cart = AsyncMock()
+
+    await service._cancel_stripe_checkout("cs_test_capricho")
+
+    assert payment.estado == "CANCELADO"
+    assert sale.estado == "ANULADA"
+    assert order.estado == "CANCELADO"
+    service._restore_sale_stock.assert_awaited_once()
+    service._restore_checkout_cart.assert_awaited_once_with(transaction)
+    session.commit.assert_awaited_once()

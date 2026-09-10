@@ -61,4 +61,4 @@ Angular CLI no generó una configuración ESLint para este proyecto. La compilac
 
 ## Alcance actual
 
-No incluye carrito, reservas, ventas, pagos ni delivery. Los CTA públicos se limitan a navegación y consulta de información respaldada por FastAPI.
+El Ciclo II incluye carrito, reservas, checkout con Stripe, pedidos, historial, devoluciones y delivery cotizado por FastAPI.

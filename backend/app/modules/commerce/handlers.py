@@ -5,6 +5,7 @@ from app.modules.commerce.exceptions import (
     CommerceConflictError,
     CommerceNotFoundError,
     InvalidCommerceOperationError,
+    PaymentGatewayError,
 )
 
 
@@ -20,7 +21,15 @@ async def invalid_handler(_: Request, exc: InvalidCommerceOperationError) -> JSO
     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": exc.detail})
 
 
+async def gateway_handler(_: Request, exc: PaymentGatewayError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": exc.detail},
+    )
+
+
 def register_commerce_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(CommerceNotFoundError, not_found_handler)
     app.add_exception_handler(CommerceConflictError, conflict_handler)
     app.add_exception_handler(InvalidCommerceOperationError, invalid_handler)
+    app.add_exception_handler(PaymentGatewayError, gateway_handler)

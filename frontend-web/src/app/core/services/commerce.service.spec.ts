@@ -36,6 +36,23 @@ describe('CommerceService', () => {
     request.flush({});
   });
 
+  it('starts and verifies a Stripe Checkout session through FastAPI', () => {
+    service.checkout({ id_sucursal: 1, modalidad_entrega: 'RETIRO_SUCURSAL' }).subscribe();
+
+    const checkout = http.expectOne(`${API_BASE_URL}/checkout`);
+    expect(checkout.request.method).toBe('POST');
+    checkout.flush({
+      session_id: 'cs_test_capricho',
+      checkout_url: 'https://checkout.stripe.com/test',
+      expires_at: '2026-09-10T15:00:00Z',
+    });
+
+    service.checkoutStatus('cs_test_capricho').subscribe();
+    const status = http.expectOne(`${API_BASE_URL}/checkout/cs_test_capricho/status`);
+    expect(status.request.method).toBe('GET');
+    status.flush({ status: 'PAGADO', message: 'Confirmado', order: null });
+  });
+
   it('updates an existing delivery address through FastAPI', () => {
     service.updateAddress(9, { direccion: 'Av. Principal 50' }).subscribe();
 

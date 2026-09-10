@@ -93,6 +93,10 @@ PASSWORD_RESET_OTP_EXPIRE_MINUTES=10
 PASSWORD_RESET_OTP_MAX_ATTEMPTS=5
 PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS=60
 PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=10
+STRIPE_SECRET_KEY=sk_test_REEMPLAZAR
+STRIPE_WEBHOOK_SECRET=whsec_REEMPLAZAR
+PUBLIC_WEB_URL=https://capricho-store.vercel.app
+STRIPE_CHECKOUT_EXPIRE_MINUTES=30
 ```
 
 Si el servicio PostgreSQL tiene otro nombre, reemplaza `Postgres` por ese nombre
@@ -132,6 +136,26 @@ El código OTP dura 10 minutos, admite hasta 5 intentos y no se almacena en
 texto plano. El endpoint de solicitud devuelve el mismo mensaje exista o no el
 correo, para no revelar cuentas registradas. No se agrega ninguna tabla al
 esquema PostgreSQL: Redis conserva solo el estado temporal del proceso.
+
+### Pagos con Stripe
+
+1. En Stripe activa primero el modo de prueba y copia la clave secreta `sk_test_...` en
+   `STRIPE_SECRET_KEY`. Nunca publiques esa clave en Angular, GitHub o Vercel.
+2. En `Developers → Webhooks` registra el endpoint público:
+
+   ```text
+   https://TU_BACKEND_RAILWAY/api/v1/payments/stripe/webhook
+   ```
+
+3. Suscribe los eventos `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` y
+   `checkout.session.expired`.
+4. Copia el secreto de firma `whsec_...` del endpoint a `STRIPE_WEBHOOK_SECRET`.
+5. Mantén `PUBLIC_WEB_URL=https://capricho-store.vercel.app` para que Stripe regrese a la Web.
+
+El servidor calcula importes en BOB, reserva el inventario durante 30 minutos y marca la venta
+como pagada únicamente después de verificar Stripe. Una sesión cancelada o vencida revierte el
+inventario y recupera el carrito.
 
 ## 6. Desplegar y generar dominio
 
