@@ -37,6 +37,11 @@ import { PermissionService } from '../../core/permissions/permission.service';
             <a class="button button--primary" routerLink="/admin">Ir al panel administrativo</a>
           }
           <a class="button button--secondary" routerLink="/catalogo">Explorar catálogo</a>
+          <a class="button button--secondary" routerLink="/pedidos">Mis pedidos</a>
+          <a class="button button--secondary" routerLink="/reservas">Mis reservas</a>
+          <a class="button button--secondary" routerLink="/historial">Historial</a>
+          <a class="button button--secondary" routerLink="/direcciones">Direcciones</a>
+          <a class="button button--quiet" routerLink="/notificaciones">Notificaciones</a>
         </div>
       } @else {
         <p>Cargando tu cuenta…</p>

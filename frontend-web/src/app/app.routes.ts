@@ -1,6 +1,10 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
-import { adminGuard, requireAnyPermission } from './core/guards/permission.guard';
+import {
+  adminGuard,
+  requireAllPermissions,
+  requireAnyPermission,
+} from './core/guards/permission.guard';
 
 export const routes: Routes = [
   {
@@ -45,6 +49,53 @@ export const routes: Routes = [
         title: 'Mi cuenta | Capricho Store',
         canActivate: [authGuard],
         loadComponent: () => import('./features/auth/account').then((m) => m.Account),
+      },
+      {
+        path: 'carrito',
+        title: 'Carrito | Capricho Store',
+        canActivate: [authGuard],
+        loadComponent: () => import('./features/commerce/commerce-pages').then((m) => m.CartPage),
+      },
+      {
+        path: 'checkout',
+        title: 'Confirmar pedido | Capricho Store',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/commerce/commerce-pages').then((m) => m.CheckoutPage),
+      },
+      {
+        path: 'reservas',
+        title: 'Reservas | Capricho Store',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/commerce/commerce-pages').then((m) => m.ReservationsPage),
+      },
+      {
+        path: 'pedidos',
+        title: 'Pedidos | Capricho Store',
+        canActivate: [authGuard],
+        loadComponent: () => import('./features/commerce/commerce-pages').then((m) => m.OrdersPage),
+      },
+      {
+        path: 'historial',
+        title: 'Historial | Capricho Store',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/commerce/commerce-pages').then((m) => m.HistoryPage),
+      },
+      {
+        path: 'direcciones',
+        title: 'Direcciones | Capricho Store',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/commerce/commerce-pages').then((m) => m.AddressesPage),
+      },
+      {
+        path: 'notificaciones',
+        title: 'Notificaciones | Capricho Store',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/commerce/commerce-pages').then((m) => m.NotificationsPage),
       },
     ],
   },
@@ -123,6 +174,33 @@ export const routes: Routes = [
         canActivate: [requireAnyPermission('recepcion.registrar')],
         loadComponent: () =>
           import('./features/admin/operations-admin').then((m) => m.ReceiptsAdmin),
+      },
+      {
+        path: 'compras-proveedores',
+        canActivate: [requireAnyPermission('proveedores.ver')],
+        loadComponent: () =>
+          import('./features/admin/commerce-admin').then((m) => m.SupplierHistoryAdmin),
+      },
+      {
+        path: 'ventas',
+        canActivate: [requireAllPermissions('ventas.crear', 'pagos.registrar')],
+        loadComponent: () => import('./features/admin/commerce-admin').then((m) => m.PosSalesAdmin),
+      },
+      {
+        path: 'pedidos',
+        canActivate: [requireAnyPermission('ventas.ver')],
+        loadComponent: () => import('./features/admin/commerce-admin').then((m) => m.OrdersAdmin),
+      },
+      {
+        path: 'reservas',
+        canActivate: [requireAnyPermission('reservas.ver')],
+        loadComponent: () =>
+          import('./features/admin/commerce-admin').then((m) => m.ReservationsAdmin),
+      },
+      {
+        path: 'devoluciones',
+        canActivate: [requireAnyPermission('ventas.ver')],
+        loadComponent: () => import('./features/admin/commerce-admin').then((m) => m.ReturnsAdmin),
       },
       {
         path: 'inventario',

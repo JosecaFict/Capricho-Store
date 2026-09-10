@@ -3,6 +3,7 @@ export interface AdminNavItem {
   path: string;
   permissions: string[];
   exact?: boolean;
+  requireAll?: boolean;
 }
 export interface AdminNavGroup {
   label: string;
@@ -57,6 +58,25 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
         permissions: ['proveedores.ver', 'proveedores.gestionar'],
       },
       { label: 'Recepciones', path: '/admin/recepciones', permissions: ['recepcion.registrar'] },
+      {
+        label: 'Historial de compras',
+        path: '/admin/compras-proveedores',
+        permissions: ['proveedores.ver'],
+      },
+    ],
+  },
+  {
+    label: 'Ventas y pedidos',
+    items: [
+      {
+        label: 'Venta presencial',
+        path: '/admin/ventas',
+        permissions: ['ventas.crear', 'pagos.registrar'],
+        requireAll: true,
+      },
+      { label: 'Pedidos', path: '/admin/pedidos', permissions: ['ventas.ver'] },
+      { label: 'Reservas', path: '/admin/reservas', permissions: ['reservas.ver'] },
+      { label: 'Devoluciones', path: '/admin/devoluciones', permissions: ['ventas.ver'] },
     ],
   },
   {
@@ -105,7 +125,9 @@ export function visibleAdminNavigation(permissionCodes: readonly string[]): Admi
     items: group.items.filter(
       (item) =>
         !item.permissions.length ||
-        item.permissions.some((permission) => permissions.has(permission)),
+        (item.requireAll
+          ? item.permissions.every((permission) => permissions.has(permission))
+          : item.permissions.some((permission) => permissions.has(permission))),
     ),
   })).filter((group) => group.items.length);
 }

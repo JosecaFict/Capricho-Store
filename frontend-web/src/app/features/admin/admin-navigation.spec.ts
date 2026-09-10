@@ -9,7 +9,13 @@ describe('admin navigation permissions', () => {
       'pagos.registrar',
     ]).map((item) => item.label);
 
-    expect(labels).toEqual(['Productos']);
+    expect(labels).toEqual(['Productos', 'Venta presencial', 'Pedidos', 'Devoluciones']);
+  });
+
+  it('hides cash sales when payment permission is revoked', () => {
+    const labels = availableAdminModules(['ventas.crear']).map((item) => item.label);
+
+    expect(labels).not.toContain('Venta presencial');
   });
 
   it('limits an inventory assistant to receiving and inventory modules', () => {

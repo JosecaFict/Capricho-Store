@@ -22,22 +22,23 @@ recepciones e inventario desde un único panel adaptado a permisos efectivos.
 
 ## Product Purpose
 
-Capricho Store ofrece una experiencia pública de descubrimiento de ropa, una
-autenticación segura y el panel administrativo/operativo del Ciclo I. Angular
-consume únicamente los contratos existentes de FastAPI y adapta rutas,
-navegación y acciones a los permisos efectivos del usuario.
+Capricho Store ofrece descubrimiento de ropa, autenticación segura, compra y
+reserva para clientes, además de un panel administrativo/operativo para los
+Ciclos I y II. Angular consume únicamente FastAPI y adapta rutas, navegación y
+acciones a los permisos efectivos del usuario.
 
 ## Positioning
 
-El catálogo refleja directamente la estructura y disponibilidad expuestas por
-la API académica de Capricho Store, sin inventar promociones, precios,
-operaciones de compra ni capacidades que el backend todavía no ofrece.
+El catálogo y los flujos comerciales reflejan la estructura, precios,
+disponibilidad y operaciones expuestas por la API de Capricho Store, sin
+inventar promociones ni capacidades externas que el backend no ofrece.
 
 ## Operating Context
 
 La aplicación Angular consume FastAPI mediante una única URL base configurable.
 FastAPI es la única vía de acceso a PostgreSQL. La experiencia pública incluye
-inicio, catálogo, detalle de producto, registro, inicio y cierre de sesión.
+inicio, catálogo, detalle, identidad, carrito, checkout, reservas, pedidos,
+historial, direcciones, devoluciones y notificaciones operativas.
 
 ## Capabilities and Constraints
 
@@ -53,13 +54,21 @@ inicio, catálogo, detalle de producto, registro, inicio y cierre de sesión.
 - No existen dentro del alcance actual calzado, pantalones, vestidos, enterizos,
   chaquetas, accesorios, faldas, shorts, bolsos ni otras categorías.
 - El access token se envía como Bearer y no existe refresh token.
-- No se modifica FastAPI, PostgreSQL ni su esquema.
+- Ciclo II reutiliza las tablas PostgreSQL existentes sin modificar el esquema.
 - El panel del Ciclo I cubre empleados, catálogo, proveedores, órdenes de
   compra, recepciones, inventario, lotes, movimientos, ajustes y transferencias.
-- Quedan fuera carrito, reservas, ventas, caja, pedidos, pagos, delivery,
-  promociones, campañas, integraciones externas y recomendador. En Flutter,
-  cámara, MediaPipe y vestidor virtual quedan preparados para una etapa posterior.
-- La interfaz no presenta acciones de compra o reserva sin respaldo de API.
+- El Ciclo II Web incorpora carrito, reservas por sucursal, venta presencial,
+  pedidos con retiro o delivery, devolución, historial de compra y consulta de
+  compras a proveedores.
+- Las reservas y ventas validan disponibilidad y actualizan existencias y lotes
+  mediante transacciones; las salidas consumen capas FIFO.
+- La cotización local de delivery usa coordenadas y distancia geográfica. La
+  integración con un proveedor de rutas queda preparada, pero no forma parte del
+  alcance implementado.
+- Las notificaciones se registran como pendientes; el envío por correo o push
+  requiere un proveedor externo y queda fuera del alcance actual.
+- Quedan fuera promociones, campañas, pagos externos y recomendador. En Flutter,
+  cámara, MediaPipe y vestidor virtual permanecen para una etapa posterior.
 
 ## Brand Commitments
 
@@ -93,7 +102,6 @@ preferencias de accesibilidad del sistema.
 
 ## Mobile Scope
 
-Flutter ofrece al cliente registro, login, sesión segura, catálogo, filtros y
-detalle de producto en Android e iOS. Carrito, reservas, compra, pagos,
-notificaciones y vestidor virtual solo se habilitarán cuando existan los módulos
-de backend o del ciclo académico correspondientes.
+Flutter conserva el alcance completado del Ciclo I. Los nuevos flujos de carrito,
+reservas, compra, pedidos y devoluciones se implementan únicamente en Angular
+durante el Ciclo II; no se amplía Android ni iOS en esta entrega.

@@ -11,6 +11,7 @@ from app.core.logging import configure_logging
 from app.db.session import engine
 from app.modules.auth.handlers import register_auth_exception_handlers
 from app.modules.catalog.handlers import register_catalog_exception_handlers
+from app.modules.commerce.handlers import register_commerce_exception_handlers
 from app.modules.employees.handlers import register_employee_exception_handlers
 from app.modules.inventory.handlers import register_inventory_exception_handlers
 
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     register_auth_exception_handlers(application)
     register_employee_exception_handlers(application)
     register_catalog_exception_handlers(application)
+    register_commerce_exception_handlers(application)
     register_inventory_exception_handlers(application)
     return application
 

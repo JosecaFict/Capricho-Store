@@ -35,12 +35,9 @@ import { PermissionService } from '../../core/permissions/permission.service';
         >
         <a routerLink="/catalogo" routerLinkActive="active" (click)="closeMenu()">Catálogo</a>
         @if (auth.currentUser()) {
+          <a routerLink="/carrito" routerLinkActive="active" (click)="closeMenu()">Carrito</a>
           @if (permissions.hasAdminAccess()) {
-            <a
-              class="nav-admin"
-              routerLink="/admin"
-              routerLinkActive="active"
-              (click)="closeMenu()"
+            <a class="nav-admin" routerLink="/admin" routerLinkActive="active" (click)="closeMenu()"
               >Panel administrativo</a
             >
           }

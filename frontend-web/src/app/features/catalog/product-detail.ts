@@ -1,9 +1,11 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, of } from 'rxjs';
+import { AuthService } from '../../core/auth/auth.service';
 import { Branch, Product, ProductImage, ProductMeasurement } from '../../core/models/catalog.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
+import { CommerceService } from '../../core/services/commerce.service';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
 import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
 
@@ -91,10 +93,17 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
             }
             @if (availableSizes(item).length > 0) {
               <div class="product-options product-sizes">
-                <strong>Tallas disponibles</strong>
+                <strong>Talla</strong>
                 <div>
                   @for (size of availableSizes(item); track size) {
-                    <span>{{ size }}</span>
+                    <button
+                      type="button"
+                      [class.active]="selectedSize() === size"
+                      [attr.aria-pressed]="selectedSize() === size"
+                      (click)="selectedSize.set(size)"
+                    >
+                      {{ size }}
+                    </button>
                   }
                 </div>
               </div>
@@ -132,9 +141,39 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                 no forma parte de esta etapa.
               </p>
             }
-            <div class="scope-note">
-              <strong>Consulta de producto</strong>
-              <p>La compra, reserva y pago todavía no están habilitados.</p>
+            <div class="product-purchase">
+              @if (actionMessage()) {
+                <p
+                  class="notice"
+                  [class.notice--error]="actionError()"
+                  [class.notice--success]="!actionError()"
+                  role="status"
+                >
+                  {{ actionMessage() }}
+                </p>
+              }
+              @if (auth.currentUser()) {
+                <button
+                  class="button button--primary button--full"
+                  type="button"
+                  [disabled]="
+                    adding() ||
+                    !selectedVariant(item) ||
+                    selectedVariant(item)!.stock_disponible === 0
+                  "
+                  (click)="addToCart(item)"
+                >
+                  {{ adding() ? 'Agregando…' : 'Agregar al carrito' }}
+                </button>
+                <p>
+                  Selecciona color, talla y sucursal. La disponibilidad se valida nuevamente al
+                  confirmar.
+                </p>
+              } @else {
+                <a class="button button--primary button--full" routerLink="/login"
+                  >Ingresa para comprar o reservar</a
+                >
+              }
             </div>
           </article>
         </div>
@@ -177,10 +216,13 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
 export class ProductDetail {
   private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
+  private readonly commerce = inject(CommerceService);
   private readonly route = inject(ActivatedRoute);
+  readonly auth = inject(AuthService);
   readonly product = signal<Product | null>(null);
   readonly images = signal<ProductImage[]>([]);
   readonly selectedColorId = signal<number | null>(null);
+  readonly selectedSize = signal<string | null>(null);
   readonly measurements = signal<ProductMeasurement[]>([]);
   readonly branches = signal<Branch[]>([]);
   readonly selectedBranchId = signal<number | null>(null);
@@ -188,6 +230,9 @@ export class ProductDetail {
   readonly activeImageIsFallback = signal(true);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
+  readonly actionMessage = signal('');
+  readonly actionError = signal(false);
+  readonly adding = signal(false);
   readonly visibleImages = computed(() => {
     const selected = this.selectedColorId();
     const all = this.images();
@@ -223,6 +268,7 @@ export class ProductDetail {
           this.measurements.set(measurements);
           const firstColor = product.variantes.find((variant) => variant.activo)?.id_color ?? null;
           this.selectedColorId.set(firstColor);
+          this.selectedSize.set(this.availableSizes(product)[0] ?? null);
           this.syncActiveImage(product);
         },
         error: (error) =>
@@ -243,7 +289,10 @@ export class ProductDetail {
   selectColor(colorId: number): void {
     this.selectedColorId.set(colorId);
     const item = this.product();
-    if (item) this.syncActiveImage(item);
+    if (item) {
+      this.selectedSize.set(this.availableSizes(item)[0] ?? null);
+      this.syncActiveImage(item);
+    }
   }
   availableColors(item: Product) {
     return item.variantes.filter(
@@ -296,5 +345,36 @@ export class ProductDetail {
     if (stocks.length === 0) return 'Consulta una sucursal para conocer el stock';
     const total = stocks.reduce((sum, stock) => sum + stock, 0);
     return total > 0 ? `${total} unidades registradas` : 'Agotado';
+  }
+
+  selectedVariant(item: Product) {
+    return item.variantes.find(
+      (variant) =>
+        variant.activo &&
+        variant.id_color === this.selectedColorId() &&
+        variant.talla === this.selectedSize(),
+    );
+  }
+
+  addToCart(item: Product): void {
+    const variant = this.selectedVariant(item);
+    if (!variant) return;
+    this.adding.set(true);
+    this.actionMessage.set('');
+    this.commerce
+      .addCartItem(variant.id_variante)
+      .pipe(finalize(() => this.adding.set(false)))
+      .subscribe({
+        next: () => {
+          this.actionError.set(false);
+          this.actionMessage.set('La prenda se agregó al carrito.');
+        },
+        error: (error) => {
+          this.actionError.set(true);
+          this.actionMessage.set(
+            this.errors.message(error, 'No pudimos agregar la prenda al carrito.'),
+          );
+        },
+      });
   }
 }

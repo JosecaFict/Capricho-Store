@@ -17,6 +17,11 @@ export const ADMIN_PERMISSIONS = [
   'recepcion.registrar',
   'inventario.ver',
   'inventario.movimiento',
+  'reservas.ver',
+  'reservas.gestionar',
+  'ventas.ver',
+  'ventas.crear',
+  'pagos.registrar',
 ] as const;
 
 @Injectable({ providedIn: 'root' })

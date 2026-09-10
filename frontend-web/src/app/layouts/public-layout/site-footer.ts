@@ -11,10 +11,10 @@ import { RouterLink } from '@angular/router';
         <p>Catálogo académico de moda conectado a datos reales.</p>
       </div>
       <nav aria-label="Navegación de pie de página">
-        <a routerLink="/catalogo">Catálogo</a><a routerLink="/login">Ingresar</a
-        ><a routerLink="/registro">Crear cuenta</a>
+        <a routerLink="/catalogo">Catálogo</a><a routerLink="/carrito">Carrito</a
+        ><a routerLink="/pedidos">Pedidos</a>
       </nav>
-      <p class="site-footer__note">Sin carrito, reservas ni pagos en esta etapa.</p>
+      <p class="site-footer__note">Compra online sin cobro digital y retiro o delivery estimado.</p>
     </footer>
   `,
 })

@@ -36,3 +36,18 @@ export const requireAnyPermission =
       ),
     );
   };
+
+export const requireAllPermissions =
+  (...permissions: readonly string[]): CanActivateFn =>
+  () => {
+    const auth = inject(AuthService);
+    const router = inject(Router);
+    if (!auth.token()) return router.createUrlTree(['/login']);
+    return resolveUser(auth).pipe(
+      map((user) =>
+        user && permissions.every((permission) => user.permisos.includes(permission))
+          ? true
+          : router.createUrlTree(['/admin/403']),
+      ),
+    );
+  };

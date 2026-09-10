@@ -9,6 +9,7 @@ import {
   CatalogFilters,
   CatalogOptions,
   Category,
+  City,
   Color,
   Product,
   ProductImage,
@@ -46,6 +47,10 @@ export class CatalogService {
 
   branches(): Observable<Branch[]> {
     return this.http.get<Branch[]>(`${API_BASE_URL}/branches`);
+  }
+
+  cities(): Observable<City[]> {
+    return this.http.get<City[]>(`${API_BASE_URL}/cities`);
   }
 
   options(): Observable<CatalogOptions> {

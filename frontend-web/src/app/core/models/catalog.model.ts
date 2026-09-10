@@ -47,6 +47,12 @@ export interface Branch {
   nombre: string;
   direccion: string;
 }
+export interface City {
+  id_ciudad: number;
+  nombre: string;
+  departamento: string;
+  pais: string;
+}
 
 export interface ProductImage {
   id_imagen: number;
