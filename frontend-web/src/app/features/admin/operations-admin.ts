@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiErrorService } from '../../core/services/api-error.service';
@@ -386,70 +386,116 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
               Este proveedor no tiene productos asociados. Configúralos primero desde Proveedores.
             </p>
           }
-          <div formArrayName="detalles" class="admin-repeater field--wide">
-            @for (row of details.controls; track $index) {
-              <div [formGroupName]="$index" class="purchase-line">
-                <header class="purchase-line__heading">
-                  <strong>Producto {{ $index + 1 }}</strong>
+          <div formArrayName="detalles" class="purchase-products field--wide">
+            @for (row of details.controls; track row; let productIndex = $index) {
+              <section [formGroupName]="productIndex" class="purchase-product">
+                <header class="purchase-product__heading">
+                  <strong>Producto {{ productIndex + 1 }}</strong>
                   <button
                     type="button"
                     class="button button--quiet button--danger-text"
                     [disabled]="details.length === 1"
-                    (click)="removeRow($index)"
+                    (click)="removeRow(productIndex)"
                   >
-                    Quitar línea
+                    Quitar producto
                   </button>
                 </header>
-                <label class="field"
-                  ><span>Marca</span
-                  ><select formControlName="marca" (change)="changeDetailFilter($index, 'marca')">
-                    <option value="">Seleccionar marca</option>
-                    @for (brand of brandsForRow($index); track brand) {
-                      <option [value]="brand">{{ brand }}</option>
-                    }
-                  </select></label
-                ><label class="field"
-                  ><span>Color</span
-                  ><select formControlName="color" (change)="changeDetailFilter($index, 'color')">
-                    <option value="">Seleccionar color</option>
-                    @for (color of colorsForRow($index); track color) {
-                      <option [value]="color">{{ color }}</option>
-                    }
-                  </select></label
-                ><label class="field"
-                  ><span>Talla</span
-                  ><select formControlName="talla" (change)="changeDetailFilter($index, 'talla')">
-                    <option value="">Seleccionar talla</option>
-                    @for (size of sizesForRow($index); track size) {
-                      <option [value]="size">{{ size }}</option>
-                    }
-                  </select></label
-                ><label class="field"
-                  ><span>Producto y variante</span
-                  ><select formControlName="id_variante">
-                    <option value="">Seleccionar variante</option>
-                    @for (variant of variantsForRow($index); track variant['id_variante']) {
-                      <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
-                    }
-                  </select></label
-                ><label class="field"
-                  ><span>Cantidad</span
-                  ><input type="number" min="1" formControlName="cantidad" /></label
-                ><label class="field"
-                  ><span>Costo estimado</span
-                  ><input
-                    type="number"
-                    min="0"
-                    step=".01"
-                    formControlName="costo_unitario_estimado"
-                /></label>
-              </div>
+                <div class="purchase-product__selectors">
+                  <label class="field"
+                    ><span>Marca</span
+                    ><select formControlName="marca" (change)="changeProductBrand(productIndex)">
+                      <option value="">Seleccionar marca</option>
+                      @for (brand of brandsForProduct(productIndex); track brand) {
+                        <option [value]="brand">{{ brand }}</option>
+                      }
+                    </select></label
+                  ><label class="field"
+                    ><span>Producto</span
+                    ><select
+                      formControlName="id_producto"
+                      (change)="prepareProductMatrix(productIndex)"
+                    >
+                      <option value="">Seleccionar producto</option>
+                      @for (product of productsForRow(productIndex); track product['id_producto']) {
+                        <option [value]="product['id_producto']">{{ product['nombre'] }}</option>
+                      }
+                    </select></label
+                  ><label class="field"
+                    ><span>Costo unitario estimado</span
+                    ><input
+                      type="number"
+                      min="0"
+                      step=".01"
+                      formControlName="costo_unitario_estimado"
+                  /></label>
+                </div>
+                @if (productVariants(productIndex).length > 0) {
+                  <div class="purchase-matrix-wrap">
+                    <div class="purchase-matrix-intro">
+                      <div>
+                        <strong>Cantidades por color y talla</strong>
+                        <small>Deja en 0 las combinaciones que no necesitas.</small>
+                      </div>
+                      <span
+                        >{{ rowVariantCount(productIndex) }} variantes ·
+                        {{ rowUnitCount(productIndex) }} unidades</span
+                      >
+                    </div>
+                    <div formGroupName="cantidades" class="purchase-matrix-scroll">
+                      <table class="purchase-matrix">
+                        <thead>
+                          <tr>
+                            <th scope="col">Color</th>
+                            @for (size of productSizes(productIndex); track size) {
+                              <th scope="col">{{ size }}</th>
+                            }
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (color of productColors(productIndex); track color) {
+                            <tr>
+                              <th scope="row">{{ color }}</th>
+                              @for (size of productSizes(productIndex); track size) {
+                                <td>
+                                  @if (variantForCell(productIndex, color, size); as variant) {
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      inputmode="numeric"
+                                      [formControlName]="variant['id_variante']"
+                                      [attr.aria-label]="'Cantidad de ' + color + ', talla ' + size"
+                                    />
+                                  } @else {
+                                    <span
+                                      class="purchase-matrix__missing"
+                                      aria-label="No disponible"
+                                      >—</span
+                                    >
+                                  }
+                                </td>
+                              }
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                } @else if (row.get('id_producto')?.value) {
+                  <p class="admin-complete-state">Este producto no tiene variantes disponibles.</p>
+                }
+              </section>
             }
           </div>
           <div class="admin-form-actions">
-            <button type="button" class="button button--secondary" (click)="addRow()">
-              Añadir línea</button
-            ><button class="button button--primary" [disabled]="form.invalid || savingOrder()">
+            <button
+              type="button"
+              class="button button--secondary"
+              [disabled]="!canAddProduct()"
+              (click)="addRow()"
+            >
+              Añadir producto</button
+            ><button class="button button--primary" [disabled]="!canSubmitOrder()">
               {{ savingOrder() ? 'Creando orden…' : 'Crear orden' }}
             </button>
           </div>
@@ -526,9 +572,6 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
       error: (e) => this.fail(e),
     });
   }
-  variantLabel(variant: Entity) {
-    return `${variant['producto']} — ${variant['sku']}`;
-  }
   supplierName(id: number) {
     return (
       this.suppliers().find((supplier) => supplier['id_proveedor'] === id)?.['razon_social'] ??
@@ -544,11 +587,9 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
     this.details.push(
       this.fb.group({
         marca: ['', Validators.required],
-        color: ['', Validators.required],
-        talla: ['', Validators.required],
-        id_variante: [null, Validators.required],
-        cantidad: [1, [Validators.required, Validators.min(1)]],
-        costo_unitario_estimado: [null],
+        id_producto: [null as number | null, Validators.required],
+        costo_unitario_estimado: [null, Validators.min(0)],
+        cantidades: this.fb.group({}),
       }),
     );
   }
@@ -558,7 +599,7 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
   selectSupplier() {
     const supplierId = Number(this.form.value.id_proveedor);
     this.supplierProducts.set([]);
-    this.details.controls.forEach((_, index) => this.resetDetailFilters(index));
+    this.details.controls.forEach((_, index) => this.resetProductRow(index));
     if (!supplierId) return;
     this.loadingSupplierProducts.set(true);
     this.api.list(`suppliers/${supplierId}/products`).subscribe({
@@ -574,76 +615,102 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
       },
     });
   }
-  brandsForRow(index: number): string[] {
+  brandsForProduct(index: number): string[] {
     return this.uniqueSorted(
-      this.eligibleVariants(index).map((variant) => this.variantBrand(variant)),
+      this.productsForRow(index, false).map((product) => String(product['marca'])),
     );
   }
-  colorsForRow(index: number): string[] {
-    const brand = this.detailValue(index, 'marca');
-    return this.uniqueSorted(
-      this.eligibleVariants(index)
-        .filter((variant) => this.variantBrand(variant) === brand)
-        .map((variant) => String(variant['color'])),
-    );
-  }
-  sizesForRow(index: number): string[] {
-    const brand = this.detailValue(index, 'marca');
-    const color = this.detailValue(index, 'color');
-    return this.uniqueSizes(
-      this.eligibleVariants(index)
-        .filter((variant) => this.variantBrand(variant) === brand && variant['color'] === color)
-        .map((variant) => String(variant['talla'])),
-    );
-  }
-  variantsForRow(index: number): Entity[] {
-    const brand = this.detailValue(index, 'marca');
-    const color = this.detailValue(index, 'color');
-    const size = this.detailValue(index, 'talla');
-    if (!brand || !color || !size) return [];
-    return this.eligibleVariants(index).filter(
-      (variant) =>
-        this.variantBrand(variant) === brand &&
-        variant['color'] === color &&
-        variant['talla'] === size,
-    );
-  }
-  changeDetailFilter(index: number, field: 'marca' | 'color' | 'talla') {
-    const row = this.details.at(index);
-    if (field === 'marca') row.patchValue({ color: '', talla: '', id_variante: null });
-    if (field === 'color') row.patchValue({ talla: '', id_variante: null });
-    if (field === 'talla') row.patchValue({ id_variante: null });
-  }
-  private resetDetailFilters(index: number) {
-    this.details.at(index).patchValue({
-      marca: '',
-      color: '',
-      talla: '',
-      id_variante: null,
-    });
-  }
-  private eligibleVariants(index: number): Entity[] {
+  productsForRow(index: number, filterBrand = true): Entity[] {
     const productIds = new Set(
       this.supplierProducts().map((product) => Number(product['id_producto'])),
     );
     const selectedElsewhere = new Set(
       this.details.controls
         .filter((_, detailIndex) => detailIndex !== index)
-        .map((control) => Number(control.get('id_variante')?.value))
+        .map((control) => Number(control.get('id_producto')?.value))
         .filter(Boolean),
     );
-    return this.variants().filter(
-      (variant) =>
-        productIds.has(Number(variant['id_producto'])) &&
-        !selectedElsewhere.has(Number(variant['id_variante'])),
+    const brand = filterBrand ? this.detailValue(index, 'marca') : '';
+    return this.catalogProducts().filter(
+      (product) =>
+        productIds.has(Number(product['id_producto'])) &&
+        !selectedElsewhere.has(Number(product['id_producto'])) &&
+        (!filterBrand || !brand || product['marca'] === brand),
     );
   }
-  private variantBrand(variant: Entity): string {
-    return String(
-      this.catalogProducts().find(
-        (product) => Number(product['id_producto']) === Number(variant['id_producto']),
-      )?.['marca'] || 'Marca sin identificar',
+  changeProductBrand(index: number) {
+    this.details.at(index).patchValue({ id_producto: null });
+    this.clearQuantityControls(index);
+  }
+  prepareProductMatrix(index: number) {
+    this.clearQuantityControls(index);
+    const quantities = this.quantityGroup(index);
+    this.productVariants(index).forEach((variant) => {
+      quantities.addControl(
+        String(variant['id_variante']),
+        this.fb.control(0, [Validators.min(0), Validators.pattern(/^\d+$/)]),
+      );
+    });
+  }
+  productVariants(index: number): Entity[] {
+    const productId = Number(this.details.at(index).get('id_producto')?.value);
+    if (!productId) return [];
+    return this.variants().filter((variant) => Number(variant['id_producto']) === productId);
+  }
+  productColors(index: number): string[] {
+    return this.uniqueSorted(
+      this.productVariants(index).map((variant) => String(variant['color'])),
     );
+  }
+  productSizes(index: number): string[] {
+    return this.uniqueSizes(this.productVariants(index).map((variant) => String(variant['talla'])));
+  }
+  variantForCell(index: number, color: string, size: string): Entity | undefined {
+    return this.productVariants(index).find(
+      (variant) => variant['color'] === color && variant['talla'] === size,
+    );
+  }
+  rowVariantCount(index: number): number {
+    return this.productVariants(index).filter(
+      (variant) => this.quantityValue(index, Number(variant['id_variante'])) > 0,
+    ).length;
+  }
+  rowUnitCount(index: number): number {
+    return this.productVariants(index).reduce(
+      (total, variant) => total + this.quantityValue(index, Number(variant['id_variante'])),
+      0,
+    );
+  }
+  canAddProduct(): boolean {
+    return Boolean(this.form.value.id_proveedor) && this.productsForRow(-1, false).length > 0;
+  }
+  canSubmitOrder(): boolean {
+    return (
+      this.canManage() &&
+      !this.savingOrder() &&
+      this.form.controls.id_proveedor.valid &&
+      this.form.controls.id_sucursal.valid &&
+      this.details.length > 0 &&
+      this.details.controls.every((_, index) =>
+        Boolean(this.details.at(index).get('id_producto')?.value && this.rowUnitCount(index) > 0),
+      ) &&
+      this.details.controls.every((control) => control.valid)
+    );
+  }
+  private resetProductRow(index: number) {
+    this.details.at(index).patchValue({ marca: '', id_producto: null });
+    this.clearQuantityControls(index);
+  }
+  private clearQuantityControls(index: number) {
+    const quantities = this.quantityGroup(index);
+    Object.keys(quantities.controls).forEach((key) => quantities.removeControl(key));
+  }
+  private quantityGroup(index: number): FormGroup {
+    return this.details.at(index).get('cantidades') as FormGroup;
+  }
+  private quantityValue(index: number, variantId: number): number {
+    const value = Number(this.quantityGroup(index).get(String(variantId))?.value || 0);
+    return Number.isFinite(value) && value > 0 ? value : 0;
   }
   private detailValue(index: number, field: string): string {
     return String(this.details.at(index).get(field)?.value || '');
@@ -661,17 +728,23 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
     });
   }
   save() {
-    if (!this.canManage() || this.form.invalid || this.savingOrder()) return;
+    if (!this.canSubmitOrder()) return;
     const raw = this.form.getRawValue();
+    const detalles = this.details.controls.flatMap((row, index) => {
+      const cost = row.get('costo_unitario_estimado')?.value;
+      return this.productVariants(index)
+        .map((variant) => ({
+          id_variante: variant['id_variante'],
+          cantidad: this.quantityValue(index, Number(variant['id_variante'])),
+          costo_unitario_estimado: cost === null || cost === '' ? null : Number(cost),
+        }))
+        .filter((detail) => detail.cantidad > 0);
+    });
     const payload = {
       ...raw,
       fecha_estimada: raw.fecha_estimada || null,
       observacion: raw.observacion?.trim() || null,
-      detalles: (raw.detalles as Entity[]).map((detail) => ({
-        id_variante: detail['id_variante'],
-        cantidad: detail['cantidad'],
-        costo_unitario_estimado: detail['costo_unitario_estimado'],
-      })),
+      detalles,
     };
     this.savingOrder.set(true);
     this.api.post('purchase-orders', payload).subscribe({
