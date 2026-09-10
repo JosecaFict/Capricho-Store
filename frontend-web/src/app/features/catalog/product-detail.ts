@@ -112,7 +112,7 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                           sizeStock(item, size) === 0)
                       "
                       [attr.aria-pressed]="selectedSize() === size"
-                      (click)="selectedSize.set(size)"
+                      (click)="selectSize(size)"
                     >
                       {{ size }}
                     </button>
@@ -135,16 +135,6 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                 }
               </select>
             </label>
-            <p
-              id="detail-branch-status"
-              class="branch-stock-state"
-              [class.is-loading]="availabilityLoading()"
-              [class.is-empty]="selectedBranchId() !== null && totalStock(item) === 0"
-              role="status"
-              aria-live="polite"
-            >
-              {{ branchAvailability(item) }}
-            </p>
             <dl class="product-specs">
               <div>
                 <dt>Público</dt>
@@ -157,6 +147,19 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
               <div>
                 <dt>Colores</dt>
                 <dd>{{ item.colores_disponibles.join(', ') || 'Sin colores publicados' }}</dd>
+              </div>
+              <div>
+                <dt>Disponibilidad</dt>
+                <dd
+                  id="detail-branch-status"
+                  class="branch-stock-state"
+                  [class.is-loading]="availabilityLoading()"
+                  [class.is-empty]="selectedBranchId() !== null && totalStock(item) === 0"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {{ branchAvailability(item) }}
+                </dd>
               </div>
             </dl>
             @if (item.permite_vestidor) {
@@ -177,6 +180,31 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                 </p>
               }
               @if (auth.currentUser()) {
+                <label class="field product-quantity" for="detail-quantity">
+                  <span>Cantidad</span>
+                  <input
+                    id="detail-quantity"
+                    type="number"
+                    inputmode="numeric"
+                    min="1"
+                    [max]="selectedVariantStock(item)"
+                    [value]="quantity()"
+                    [disabled]="
+                      availabilityLoading() ||
+                      !!availabilityError() ||
+                      selectedBranchId() === null ||
+                      selectedVariantStock(item) === 0
+                    "
+                    (input)="setQuantity($event, item)"
+                  />
+                  <small>
+                    @if (selectedBranchId() === null) {
+                      Elige una sucursal para definir el máximo disponible.
+                    } @else {
+                      Máximo disponible: {{ selectedVariantStock(item) }}
+                    }
+                  </small>
+                </label>
                 <button
                   class="button button--primary button--full"
                   type="button"
@@ -186,7 +214,8 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                     !!availabilityError() ||
                     selectedBranchId() === null ||
                     !selectedVariant(item) ||
-                    selectedVariant(item)!.stock_disponible === 0
+                    selectedVariantStock(item) === 0 ||
+                    quantity() > selectedVariantStock(item)
                   "
                   (click)="addToCart(item)"
                 >
@@ -253,6 +282,7 @@ export class ProductDetail {
   readonly measurements = signal<ProductMeasurement[]>([]);
   readonly branches = signal<Branch[]>([]);
   readonly selectedBranchId = signal<number | null>(null);
+  readonly quantity = signal(1);
   readonly availabilityLoading = signal(false);
   readonly availabilityError = signal('');
   readonly activeImage = signal('/images/catalogo-prendas-oficiales.jpg');
@@ -309,6 +339,7 @@ export class ProductDetail {
     const value = (event.target as HTMLSelectElement).value;
     const branchId = value ? Number(value) : null;
     this.selectedBranchId.set(branchId);
+    this.quantity.set(1);
     this.availabilityError.set('');
     this.actionMessage.set('');
     this.loadBranchAvailability(branchId);
@@ -349,11 +380,18 @@ export class ProductDetail {
   }
   selectColor(colorId: number): void {
     this.selectedColorId.set(colorId);
+    this.quantity.set(1);
+    this.actionMessage.set('');
     const item = this.product();
     if (item) {
       this.selectedSize.set(this.availableSizes(item)[0] ?? null);
       this.syncActiveImage(item);
     }
+  }
+  selectSize(size: string): void {
+    this.selectedSize.set(size);
+    this.quantity.set(1);
+    this.actionMessage.set('');
   }
   availableColors(item: Product) {
     return item.variantes.filter(
@@ -464,6 +502,7 @@ export class ProductDetail {
               Number(variant.stock_disponible ?? 0) > 0,
           )?.talla ?? null);
     this.selectedSize.set(size);
+    this.quantity.set(1);
     this.syncActiveImage(item);
   }
 
@@ -476,18 +515,38 @@ export class ProductDetail {
     );
   }
 
+  selectedVariantStock(item: Product): number {
+    return Math.max(0, Number(this.selectedVariant(item)?.stock_disponible ?? 0));
+  }
+
+  setQuantity(event: Event, item: Product): void {
+    const input = event.target as HTMLInputElement;
+    const maximum = this.selectedVariantStock(item);
+    const requested = Number.parseInt(input.value, 10);
+    const next =
+      maximum > 0 && Number.isInteger(requested) ? Math.min(Math.max(requested, 1), maximum) : 1;
+    this.quantity.set(next);
+    input.value = String(next);
+    this.actionMessage.set('');
+  }
+
   addToCart(item: Product): void {
     const variant = this.selectedVariant(item);
     if (!variant) return;
+    const quantity = this.quantity();
     this.adding.set(true);
     this.actionMessage.set('');
     this.commerce
-      .addCartItem(variant.id_variante)
+      .addCartItem(variant.id_variante, quantity)
       .pipe(finalize(() => this.adding.set(false)))
       .subscribe({
         next: () => {
           this.actionError.set(false);
-          this.actionMessage.set('La prenda se agregó al carrito.');
+          this.actionMessage.set(
+            quantity === 1
+              ? 'La prenda se agregó al carrito.'
+              : `Se agregaron ${quantity} unidades al carrito.`,
+          );
         },
         error: (error) => {
           this.actionError.set(true);

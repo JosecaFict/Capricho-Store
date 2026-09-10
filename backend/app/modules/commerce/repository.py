@@ -115,7 +115,6 @@ class CommerceRepository:
                     ImagenProducto.id_color == VarianteProducto.id_color,
                     ImagenProducto.id_color.is_(None),
                 ),
-                ImagenProducto.activo.is_(True),
             )
             .order_by(ImagenProducto.es_principal.desc(), ImagenProducto.orden)
             .limit(1)

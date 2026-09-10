@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from httpx import ASGITransport, AsyncClient, Response
 
@@ -9,6 +9,7 @@ from app.modules.auth.dependencies import CurrentPrincipal, get_current_principa
 from app.modules.auth.models import Usuario
 from app.modules.commerce.dependencies import get_commerce_service
 from app.modules.commerce.exceptions import CommerceConflictError, CommerceNotFoundError
+from app.modules.commerce.repository import CommerceRepository
 from app.modules.commerce.schemas import CheckoutCreate
 from app.modules.commerce.service import ORDER_TRANSITIONS, RESERVATION_TRANSITIONS, CommerceService
 
@@ -137,6 +138,18 @@ async def test_add_item_to_cart() -> None:
     )
     assert response.status_code == 201
     assert response.json()["items"][0]["talla"] == "M"
+
+
+async def test_variant_query_uses_only_existing_image_fields() -> None:
+    session = AsyncMock()
+    result = MagicMock()
+    result.mappings.return_value.one_or_none.return_value = {"id_variante": 7}
+    session.execute.return_value = result
+
+    row = await CommerceRepository(session).variant_row(7)
+
+    assert row == {"id_variante": 7}
+    session.execute.assert_awaited_once()
 
 
 async def test_cart_reports_insufficient_stock() -> None:

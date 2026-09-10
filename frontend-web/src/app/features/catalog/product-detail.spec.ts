@@ -47,6 +47,7 @@ const product = (stock: number): Product => ({
 
 describe('ProductDetail', () => {
   it('keeps the selected branch visible and explains when it has no stock', () => {
+    const commerce = { addCartItem: vi.fn(() => of({})) };
     const catalog = {
       branches: vi.fn(() =>
         of([
@@ -65,7 +66,7 @@ describe('ProductDetail', () => {
       providers: [
         provideRouter([]),
         { provide: CatalogService, useValue: catalog },
-        { provide: CommerceService, useValue: { addCartItem: vi.fn() } },
+        { provide: CommerceService, useValue: commerce },
         {
           provide: AuthService,
           useValue: {
@@ -102,5 +103,20 @@ describe('ProductDetail', () => {
       (fixture.nativeElement.querySelector('.product-purchase button') as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+
+    select.value = '1';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const quantity = fixture.nativeElement.querySelector('#detail-quantity') as HTMLInputElement;
+    quantity.value = '3';
+    quantity.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.product-purchase button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(quantity.max).toBe('5');
+    expect(fixture.componentInstance.quantity()).toBe(3);
+    expect(commerce.addCartItem).toHaveBeenCalledWith(11, 3);
+    expect(fixture.nativeElement.textContent).toContain('Se agregaron 3 unidades al carrito.');
   });
 });
