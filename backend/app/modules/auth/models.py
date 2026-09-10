@@ -143,6 +143,24 @@ class UsuarioPermiso(Base):
     )
 
 
+class Ciudad(Base):
+    __tablename__ = "ciudad"
+
+    id_ciudad: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(100), nullable=False)
+    departamento: Mapped[str] = mapped_column(String(100), nullable=False)
+    pais: Mapped[str] = mapped_column(
+        String(100), nullable=False, server_default=text("'Bolivia'")
+    )
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class Sucursal(Base):
     __tablename__ = "sucursal"
 

@@ -19,6 +19,16 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
     items: [{ label: 'Empleados', path: '/admin/empleados', permissions: ['empleados.ver'] }],
   },
   {
+    label: 'Organización',
+    items: [
+      {
+        label: 'Sucursales',
+        path: '/admin/organizacion/sucursales',
+        permissions: ['sucursales.ver'],
+      },
+    ],
+  },
+  {
     label: 'Catálogo',
     items: [
       {

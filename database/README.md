@@ -43,6 +43,10 @@ El orden actual es:
 
 1. `changes/20260909_ajustar_permisos_roles.sql`
 2. `changes/20260909_cargar_marcas.sql`
+3. `changes/20260909_cargar_colores.sql`
+4. `changes/20260909_cargar_temporadas_colecciones.sql`
+5. `changes/20260909_normalizar_codigos_barras_vacios.sql`
+6. `changes/20260909_administrar_sucursales.sql`
 
 ## Política
 

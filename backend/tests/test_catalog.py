@@ -110,6 +110,24 @@ IMAGE = {
     "alto_px": 1000,
     "created_at": NOW,
 }
+BRANCH = {
+    "id_sucursal": 1,
+    "id_ciudad": 1,
+    "ciudad": "Santa Cruz de la Sierra",
+    "departamento": "Santa Cruz",
+    "pais": "Bolivia",
+    "nombre": "Capricho Store Central",
+    "direccion": "Av. Principal 123",
+    "telefono": "70000000",
+    "latitud": None,
+    "longitud": None,
+    "place_id": None,
+    "hora_apertura": "09:00:00",
+    "hora_cierre": "20:00:00",
+    "activo": True,
+    "created_at": NOW,
+    "updated_at": NOW,
+}
 
 
 def make_principal(*permissions: str) -> CurrentPrincipal:
@@ -177,6 +195,68 @@ async def test_list_branches_is_public() -> None:
     response = await call_catalog("GET", "/api/v1/branches", service=service)
     assert response.status_code == 200
     assert response.json()[0]["nombre"] == "Central"
+
+
+async def test_list_branches_admin_requires_permission() -> None:
+    service = AsyncMock()
+    service.list_branches_admin.return_value = [BRANCH]
+    response = await call_catalog(
+        "GET",
+        "/api/v1/branches/admin",
+        service=service,
+        principal=make_principal("sucursales.ver"),
+    )
+    assert response.status_code == 200
+    assert response.json()[0]["ciudad"] == "Santa Cruz de la Sierra"
+
+
+async def test_list_branches_admin_rejects_missing_permission() -> None:
+    response = await call_catalog(
+        "GET",
+        "/api/v1/branches/admin",
+        service=AsyncMock(),
+        principal=make_principal(),
+    )
+    assert response.status_code == 403
+
+
+async def test_create_branch_with_permission() -> None:
+    service = AsyncMock()
+    service.create_branch.return_value = BRANCH
+    response = await call_catalog(
+        "POST",
+        "/api/v1/branches",
+        service=service,
+        principal=make_principal("sucursales.crear"),
+        json={
+            "id_ciudad": 1,
+            "nombre": "Capricho Store Central",
+            "direccion": "Av. Principal 123",
+            "telefono": "",
+            "hora_apertura": "09:00",
+            "hora_cierre": "20:00",
+        },
+    )
+    assert response.status_code == 201
+    payload = service.create_branch.await_args.args[0]
+    assert payload.telefono is None
+
+
+async def test_create_branch_rejects_invalid_schedule() -> None:
+    response = await call_catalog(
+        "POST",
+        "/api/v1/branches",
+        service=AsyncMock(),
+        principal=make_principal("sucursales.crear"),
+        json={
+            "id_ciudad": 1,
+            "nombre": "Capricho Store Norte",
+            "direccion": "Av. Norte 20",
+            "hora_apertura": "20:00",
+            "hora_cierre": "09:00",
+        },
+    )
+    assert response.status_code == 422
 
 
 async def test_create_category() -> None:
@@ -298,7 +378,11 @@ async def test_create_collection() -> None:
 async def test_list_products_without_filters() -> None:
     service = AsyncMock()
     service.list_products.return_value = {
-        "items": [PRODUCT], "page": 1, "page_size": 20, "total": 1, "pages": 1
+        "items": [PRODUCT],
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "pages": 1,
     }
     response = await call_catalog("GET", "/api/v1/products", service=service)
     assert response.status_code == 200
@@ -317,7 +401,11 @@ async def test_list_products_without_filters() -> None:
 async def test_product_catalog_filters(query: str, expected: dict) -> None:
     service = AsyncMock()
     service.list_products.return_value = {
-        "items": [], "page": 1, "page_size": 20, "total": 0, "pages": 0
+        "items": [],
+        "page": 1,
+        "page_size": 20,
+        "total": 0,
+        "pages": 0,
     }
     response = await call_catalog("GET", f"/api/v1/products?{query}", service=service)
     assert response.status_code == 200
@@ -401,9 +489,10 @@ async def test_create_valid_variant() -> None:
         "/api/v1/products/1/variants",
         service=service,
         principal=make_principal("productos.crear"),
-        json={"id_talla": 1, "id_color": 1, "sku": "POL-NEG-S"},
+        json={"id_talla": 1, "id_color": 1, "sku": "POL-NEG-S", "codigo_barras": ""},
     )
     assert response.status_code == 201
+    assert service.create_variant.await_args.args[1].codigo_barras is None
 
 
 async def test_reject_duplicate_variant() -> None:

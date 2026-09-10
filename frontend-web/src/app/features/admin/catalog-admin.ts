@@ -725,7 +725,12 @@ export class ProductAdminDetail implements OnInit {
     });
   }
   addVariant() {
-    this.api.post(`products/${this.id}/variants`, this.variantForm.getRawValue()).subscribe({
+    const values = this.variantForm.getRawValue();
+    const payload = {
+      ...values,
+      codigo_barras: values.codigo_barras?.trim() || null,
+    };
+    this.api.post(`products/${this.id}/variants`, payload).subscribe({
       next: () => {
         this.ok('Variante creada.');
         this.variantForm.reset({ activo: true });

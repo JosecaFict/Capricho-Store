@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.audit_context import AuditContext, apply_audit_context
-from app.modules.auth.models import Empleado, Sucursal
+from app.modules.auth.models import Ciudad, Empleado, Sucursal
 from app.modules.catalog.models import InventarioSucursal, Producto, VarianteProducto
 from app.modules.inventory.exceptions import (
     InvalidInventoryOperationError,
@@ -14,7 +14,6 @@ from app.modules.inventory.exceptions import (
     InventoryNotFoundError,
 )
 from app.modules.inventory.models import (
-    Ciudad,
     DetalleOrdenCompra,
     DetalleRecepcion,
     DetalleTransferencia,

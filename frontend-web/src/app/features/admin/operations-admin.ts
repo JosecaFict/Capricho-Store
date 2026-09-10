@@ -632,7 +632,13 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
     </header>
     <form [formGroup]="filters" (ngSubmit)="load()" class="admin-filterbar">
       <label class="field"
-        ><span>Sucursal</span><input type="number" formControlName="sucursal" /></label
+        ><span>Sucursal</span
+        ><select formControlName="sucursal">
+          <option value="">Todas las sucursales</option>
+          @for (branch of branches(); track branch['id_sucursal']) {
+            <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+          }
+        </select></label
       ><label class="check-field"
         ><input type="checkbox" formControlName="stock_bajo" /> Solo stock bajo</label
       ><label class="check-field"
@@ -728,6 +734,7 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
   private permissions = inject(PermissionService);
   canMove = () => this.permissions.has('inventario.movimiento');
   items = signal<Entity[]>([]);
+  branches = signal<Entity[]>([]);
   selected = signal<Entity | null>(null);
   filters = this.fb.group({
     sucursal: [null as number | null],
@@ -741,12 +748,20 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
     motivo: ['', Validators.required],
   });
   ngOnInit() {
+    this.loadBranches();
     this.load();
   }
   load() {
-    this.api
-      .list('inventory', this.filters.getRawValue() as any)
-      .subscribe({ next: (v) => this.items.set(v), error: (e) => this.fail(e) });
+    this.api.list('inventory', this.filters.getRawValue()).subscribe({
+      next: (inventory) => this.items.set(inventory),
+      error: (e) => this.fail(e),
+    });
+  }
+  private loadBranches() {
+    this.api.list('branches').subscribe({
+      next: (branches) => this.branches.set(branches),
+      error: (e) => this.fail(e),
+    });
   }
   select(i: Entity) {
     this.api.get(`inventory/${i['id_inventario']}`).subscribe({

@@ -14,20 +14,20 @@ export interface ProductPage {
 @Injectable({ providedIn: 'root' })
 export class AdminApiService {
   private readonly http = inject(HttpClient);
-  list(path: string, params?: Record<string, string | number | boolean | undefined>) {
+  list(path: string, params?: Record<string, string | number | boolean | null | undefined>) {
     let p = new HttpParams();
     Object.entries(params ?? {}).forEach(([k, v]) => {
-      if (v !== undefined && v !== '') p = p.set(k, String(v));
+      if (v !== undefined && v !== null && v !== '') p = p.set(k, String(v));
     });
     return this.http.get<Entity[]>(`${API_BASE_URL}/${path}`, { params: p });
   }
   get(path: string) {
     return this.http.get<Entity>(`${API_BASE_URL}/${path}`);
   }
-  query(path: string, params?: Record<string, string | number | boolean | undefined>) {
+  query(path: string, params?: Record<string, string | number | boolean | null | undefined>) {
     let p = new HttpParams();
     Object.entries(params ?? {}).forEach(([key, value]) => {
-      if (value !== undefined && value !== '') p = p.set(key, String(value));
+      if (value !== undefined && value !== null && value !== '') p = p.set(key, String(value));
     });
     return this.http.get<Entity>(`${API_BASE_URL}/${path}`, { params: p });
   }
@@ -46,10 +46,10 @@ export class AdminApiService {
   delete(path: string) {
     return this.http.delete<Entity>(`${API_BASE_URL}/${path}`);
   }
-  products(params?: Record<string, string | number | boolean | undefined>) {
+  products(params?: Record<string, string | number | boolean | null | undefined>) {
     let p = new HttpParams();
     Object.entries(params ?? {}).forEach(([k, v]) => {
-      if (v !== undefined && v !== '') p = p.set(k, String(v));
+      if (v !== undefined && v !== null && v !== '') p = p.set(k, String(v));
     });
     return this.http.get<ProductPage>(`${API_BASE_URL}/products`, { params: p });
   }

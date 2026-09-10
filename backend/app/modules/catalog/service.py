@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.audit_context import AuditContext, apply_audit_context
+from app.modules.auth.models import Ciudad, Sucursal
 from app.modules.catalog.exceptions import (
     CatalogConflictError,
     CatalogNotFoundError,
@@ -25,17 +26,22 @@ from app.modules.catalog.models import (
     VarianteProducto,
 )
 from app.modules.catalog.repository import (
+    BranchRecord,
     CatalogRepository,
     MeasurementRecord,
     ProductCore,
     VariantRecord,
 )
 from app.modules.catalog.schemas import (
+    BranchCreate,
     BranchOption,
+    BranchResponse,
+    BranchUpdate,
     BrandCreate,
     BrandUpdate,
     CategoryCreate,
     CategoryUpdate,
+    CityOption,
     CollectionCreate,
     CollectionUpdate,
     ColorCreate,
@@ -70,6 +76,64 @@ class CatalogService:
     async def list_branches(self) -> list[BranchOption]:
         branches = await self.repository.list_active_branches()
         return [BranchOption.model_validate(branch, from_attributes=True) for branch in branches]
+
+    async def list_cities(self) -> list[CityOption]:
+        cities = await self.repository.list_active_cities()
+        return [CityOption.model_validate(city, from_attributes=True) for city in cities]
+
+    async def list_branches_admin(self) -> list[BranchResponse]:
+        records = await self.repository.list_branch_records()
+        return [self._branch_response(record) for record in records]
+
+    async def get_branch_admin(self, branch_id: int) -> BranchResponse:
+        record = await self.repository.get_branch_record(branch_id)
+        if record is None:
+            raise CatalogNotFoundError("Sucursal no encontrada")
+        return self._branch_response(record)
+
+    async def create_branch(
+        self, payload: BranchCreate, audit_context: AuditContext
+    ) -> BranchResponse:
+        city = await self._require_active(Ciudad, payload.id_ciudad, "Ciudad")
+        if await self.repository.find_branch_by_city_and_name(payload.id_ciudad, payload.nombre):
+            raise CatalogConflictError("Ya existe una sucursal con ese nombre en la ciudad")
+        branch = Sucursal(**payload.model_dump())
+        await self._mutate(audit_context, self.repository.add(branch), result=branch)
+        return self._branch_response(BranchRecord(branch=branch, city=city))
+
+    async def update_branch(
+        self,
+        branch_id: int,
+        payload: BranchUpdate,
+        audit_context: AuditContext,
+    ) -> BranchResponse:
+        record = await self.repository.get_branch_record(branch_id)
+        if record is None:
+            raise CatalogNotFoundError("Sucursal no encontrada")
+        values = payload.model_dump(exclude_unset=True)
+        city_id = values.get("id_ciudad", record.branch.id_ciudad)
+        city = record.city
+        if city_id != record.branch.id_ciudad:
+            city = await self._require_active(Ciudad, city_id, "Ciudad")
+        name = values.get("nombre", record.branch.nombre)
+        if await self.repository.find_branch_by_city_and_name(
+            city_id, name, exclude_branch_id=branch_id
+        ):
+            raise CatalogConflictError("Ya existe una sucursal con ese nombre en la ciudad")
+        opening = values.get("hora_apertura", record.branch.hora_apertura)
+        closing = values.get("hora_cierre", record.branch.hora_cierre)
+        if bool(opening) != bool(closing):
+            raise InvalidCatalogDataError(
+                "Debes completar ambas horas o dejar las dos vacías"
+            )
+        if opening and closing and closing <= opening:
+            raise InvalidCatalogDataError(
+                "La hora de cierre debe ser posterior a la hora de apertura"
+            )
+        for key, value in values.items():
+            setattr(record.branch, key, value)
+        await self._mutate(audit_context, self.repository.flush(), result=record.branch)
+        return self._branch_response(BranchRecord(branch=record.branch, city=city))
 
     async def list_variant_options(self) -> list[VariantOption]:
         records = await self.repository.list_active_variant_options()
@@ -161,9 +225,7 @@ class CatalogService:
     async def get_season(self, season_id: int) -> Temporada:
         return await self._require(Temporada, season_id, "Season")
 
-    async def create_season(
-        self, payload: SeasonCreate, audit_context: AuditContext
-    ) -> Temporada:
+    async def create_season(self, payload: SeasonCreate, audit_context: AuditContext) -> Temporada:
         return await self._create_named(
             Temporada, Temporada.nombre, payload, audit_context, "Season"
         )
@@ -432,9 +494,7 @@ class CatalogService:
             raise CatalogConflictError("Product is already assigned to this season")
         await self._mutate(
             audit_context,
-            self.repository.add(
-                ProductoTemporada(id_producto=product_id, id_temporada=season_id)
-            ),
+            self.repository.add(ProductoTemporada(id_producto=product_id, id_temporada=season_id)),
         )
         return season
 
@@ -537,9 +597,7 @@ class CatalogService:
             raise CatalogNotFoundError(f"{label} not found")
         return entity
 
-    async def _require_active(
-        self, model: type[EntityT], identity: int, label: str
-    ) -> EntityT:
+    async def _require_active(self, model: type[EntityT], identity: int, label: str) -> EntityT:
         entity = await self._require(model, identity, label)
         if not getattr(entity, "activo", False):
             raise InvalidCatalogDataError(f"{label} is inactive")
@@ -664,6 +722,28 @@ class CatalogService:
             ancho_px=image.ancho_px,
             alto_px=image.alto_px,
             created_at=image.created_at,
+        )
+
+    @staticmethod
+    def _branch_response(record: BranchRecord) -> BranchResponse:
+        branch = record.branch
+        return BranchResponse(
+            id_sucursal=branch.id_sucursal,
+            id_ciudad=branch.id_ciudad,
+            ciudad=record.city.nombre,
+            departamento=record.city.departamento,
+            pais=record.city.pais,
+            nombre=branch.nombre,
+            direccion=branch.direccion,
+            telefono=branch.telefono,
+            latitud=branch.latitud,
+            longitud=branch.longitud,
+            place_id=branch.place_id,
+            hora_apertura=branch.hora_apertura,
+            hora_cierre=branch.hora_cierre,
+            activo=branch.activo,
+            created_at=branch.created_at,
+            updated_at=branch.updated_at,
         )
 
     async def _mutate(

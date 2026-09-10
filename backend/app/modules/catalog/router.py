@@ -12,13 +12,17 @@ from app.modules.auth.dependencies import (
 from app.modules.catalog.dependencies import get_catalog_service, get_cloudinary_storage
 from app.modules.catalog.exceptions import CatalogStorageError, InvalidCatalogDataError
 from app.modules.catalog.schemas import (
+    BranchCreate,
     BranchOption,
+    BranchResponse,
+    BranchUpdate,
     BrandCreate,
     BrandResponse,
     BrandUpdate,
     CategoryCreate,
     CategoryResponse,
     CategoryUpdate,
+    CityOption,
     CollectionCreate,
     CollectionRelationRequest,
     CollectionResponse,
@@ -65,6 +69,52 @@ async def list_branches(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
     return await service.list_branches()
+
+
+@router.get("/cities", response_model=list[CityOption])
+async def list_cities(
+    _: Annotated[CurrentPrincipal, Depends(require_permission("sucursales.ver"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.list_cities()
+
+
+@router.get("/branches/admin", response_model=list[BranchResponse])
+async def list_branches_admin(
+    _: Annotated[CurrentPrincipal, Depends(require_permission("sucursales.ver"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.list_branches_admin()
+
+
+@router.get("/branches/{branch_id}", response_model=BranchResponse)
+async def get_branch_admin(
+    branch_id: int,
+    _: Annotated[CurrentPrincipal, Depends(require_permission("sucursales.ver"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.get_branch_admin(branch_id)
+
+
+@router.post("/branches", response_model=BranchResponse, status_code=status.HTTP_201_CREATED)
+async def create_branch(
+    payload: BranchCreate,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("sucursales.crear"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.create_branch(payload, audit_context_for(request, principal))
+
+
+@router.patch("/branches/{branch_id}", response_model=BranchResponse)
+async def update_branch(
+    branch_id: int,
+    payload: BranchUpdate,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("sucursales.editar"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.update_branch(branch_id, payload, audit_context_for(request, principal))
 
 
 @router.get("/variants", response_model=list[VariantOption])
@@ -221,9 +271,7 @@ async def get_collection(
     return await service.get_collection(collection_id)
 
 
-@router.post(
-    "/collections", response_model=CollectionResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/collections", response_model=CollectionResponse, status_code=status.HTTP_201_CREATED)
 async def create_collection(
     payload: CollectionCreate,
     request: Request,
@@ -260,8 +308,7 @@ async def list_products(
     activo: bool | None = True,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    sort: Literal["nombre", "-nombre", "precio", "-precio", "created_at", "-created_at"] =
-        "nombre",
+    sort: Literal["nombre", "-nombre", "precio", "-precio", "created_at", "-created_at"] = "nombre",
 ):
     return await service.list_products(
         category=categoria,
@@ -330,9 +377,7 @@ async def create_variant(
     principal: Annotated[CurrentPrincipal, Depends(require_permission("productos.crear"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
-    return await service.create_variant(
-        product_id, payload, audit_context_for(request, principal)
-    )
+    return await service.create_variant(product_id, payload, audit_context_for(request, principal))
 
 
 @router.patch("/variants/{variant_id}", response_model=VariantResponse)
@@ -353,9 +398,7 @@ async def list_measurements(
     return await service.list_measurements(product_id)
 
 
-@router.put(
-    "/products/{product_id}/measurements/{size_id}", response_model=MeasurementResponse
-)
+@router.put("/products/{product_id}/measurements/{size_id}", response_model=MeasurementResponse)
 async def upsert_measurement(
     product_id: int,
     size_id: int,

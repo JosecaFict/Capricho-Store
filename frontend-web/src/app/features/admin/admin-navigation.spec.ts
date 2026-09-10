@@ -28,6 +28,15 @@ describe('admin navigation permissions', () => {
     ]);
   });
 
+  it('shows branches only to users with organization access', () => {
+    expect(availableAdminModules(['sucursales.ver']).map((item) => item.label)).toEqual([
+      'Sucursales',
+    ]);
+    expect(availableAdminModules(['productos.ver']).map((item) => item.label)).not.toContain(
+      'Sucursales',
+    );
+  });
+
   it('marks only route roots that must use exact active matching', () => {
     const items = visibleAdminNavigation(['inventario.ver']).flatMap((group) => group.items);
 

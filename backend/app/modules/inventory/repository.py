@@ -3,7 +3,7 @@ from typing import Any, TypeVar
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import Empleado, Sucursal
+from app.modules.auth.models import Ciudad, Empleado, Sucursal
 from app.modules.catalog.models import (
     Categoria,
     Color,
@@ -13,7 +13,6 @@ from app.modules.catalog.models import (
     VarianteProducto,
 )
 from app.modules.inventory.models import (
-    Ciudad,
     DetalleOrdenCompra,
     DetalleRecepcion,
     DetalleTransferencia,

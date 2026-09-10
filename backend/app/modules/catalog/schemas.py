@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Literal
 
@@ -19,6 +19,104 @@ class BranchOption(BaseModel):
     id_sucursal: int
     nombre: str
     direccion: str
+
+
+class CityOption(ORMResponse):
+    id_ciudad: int
+    nombre: str
+    departamento: str
+    pais: str
+
+
+class BranchCreate(BaseModel):
+    id_ciudad: int = Field(gt=0)
+    nombre: str = Field(min_length=1, max_length=120)
+    direccion: str = Field(min_length=1, max_length=255)
+    telefono: str | None = Field(default=None, max_length=30)
+    latitud: Decimal | None = Field(default=None, ge=-90, le=90)
+    longitud: Decimal | None = Field(default=None, ge=-180, le=180)
+    place_id: str | None = Field(default=None, max_length=255)
+    hora_apertura: time | None = None
+    hora_cierre: time | None = None
+    activo: bool = True
+
+    @field_validator("nombre", "direccion")
+    @classmethod
+    def clean_required_text(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("El valor no puede ser nulo")
+        value = value.strip()
+        if not value:
+            raise ValueError("El valor no puede estar vacío")
+        return value
+
+    @field_validator("telefono", "place_id", mode="before")
+    @classmethod
+    def blank_to_none(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @model_validator(mode="after")
+    def valid_hours(self) -> "BranchCreate":
+        if bool(self.hora_apertura) != bool(self.hora_cierre):
+            raise ValueError("Debes completar ambas horas o dejar las dos vacías")
+        if self.hora_apertura and self.hora_cierre and self.hora_cierre <= self.hora_apertura:
+            raise ValueError("La hora de cierre debe ser posterior a la hora de apertura")
+        return self
+
+
+class BranchUpdate(BaseModel):
+    id_ciudad: int | None = Field(default=None, gt=0)
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    direccion: str | None = Field(default=None, min_length=1, max_length=255)
+    telefono: str | None = Field(default=None, max_length=30)
+    latitud: Decimal | None = Field(default=None, ge=-90, le=90)
+    longitud: Decimal | None = Field(default=None, ge=-180, le=180)
+    place_id: str | None = Field(default=None, max_length=255)
+    hora_apertura: time | None = None
+    hora_cierre: time | None = None
+    activo: bool | None = None
+
+    _clean_required_text = field_validator("nombre", "direccion")(
+        BranchCreate.clean_required_text.__func__
+    )
+    _blank_to_none = field_validator("telefono", "place_id", mode="before")(
+        BranchCreate.blank_to_none.__func__
+    )
+
+    @field_validator("id_ciudad", "activo")
+    @classmethod
+    def required_when_present(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("El valor no puede ser nulo")
+        return value
+
+    @model_validator(mode="after")
+    def has_fields(self) -> "BranchUpdate":
+        if not self.model_fields_set:
+            raise ValueError("At least one field is required")
+        return self
+
+
+class BranchResponse(ORMResponse):
+    id_sucursal: int
+    id_ciudad: int
+    ciudad: str
+    departamento: str
+    pais: str
+    nombre: str
+    direccion: str
+    telefono: str | None
+    latitud: Decimal | None
+    longitud: Decimal | None
+    place_id: str | None
+    hora_apertura: time | None
+    hora_cierre: time | None
+    activo: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 class VariantOption(BaseModel):
@@ -255,6 +353,14 @@ class VariantCreate(BaseModel):
     codigo_barras: str | None = Field(default=None, max_length=80)
     activo: bool = True
 
+    @field_validator("codigo_barras", mode="before")
+    @classmethod
+    def empty_barcode_is_null(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
 
 class VariantUpdate(BaseModel):
     id_talla: int | None = Field(default=None, gt=0)
@@ -262,6 +368,14 @@ class VariantUpdate(BaseModel):
     sku: str | None = Field(default=None, min_length=1, max_length=80)
     codigo_barras: str | None = Field(default=None, max_length=80)
     activo: bool | None = None
+
+    @field_validator("codigo_barras", mode="before")
+    @classmethod
+    def empty_barcode_is_null(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
 
     @model_validator(mode="after")
     def has_fields(self) -> "VariantUpdate":

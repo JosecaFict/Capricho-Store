@@ -78,6 +78,12 @@ export const routes: Routes = [
           import('./features/admin/employees-admin').then((m) => m.EmployeeDetail),
       },
       {
+        path: 'organizacion/sucursales',
+        title: 'Sucursales | Capricho Store',
+        canActivate: [requireAnyPermission('sucursales.ver')],
+        loadComponent: () => import('./features/admin/branches-admin').then((m) => m.BranchesAdmin),
+      },
+      {
         path: 'productos',
         canActivate: [requireAnyPermission('productos.ver', 'productos.crear', 'productos.editar')],
         loadComponent: () => import('./features/admin/catalog-admin').then((m) => m.ProductsAdmin),

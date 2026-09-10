@@ -6,7 +6,7 @@ from typing import Any, TypeVar
 from sqlalchemy import Select, and_, asc, desc, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import Sucursal
+from app.modules.auth.models import Ciudad, Sucursal
 from app.modules.catalog.models import (
     Categoria,
     Coleccion,
@@ -59,6 +59,12 @@ class MeasurementRecord:
     size: str
 
 
+@dataclass(frozen=True)
+class BranchRecord:
+    branch: Sucursal
+    city: Ciudad
+
+
 class CatalogRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -100,6 +106,46 @@ class CatalogRepository:
         statement = select(Sucursal).where(Sucursal.activo.is_(True)).order_by(Sucursal.nombre)
         return list((await self.session.scalars(statement)).all())
 
+    async def list_active_cities(self) -> list[Ciudad]:
+        statement = (
+            select(Ciudad)
+            .where(Ciudad.activo.is_(True))
+            .order_by(Ciudad.departamento, Ciudad.nombre)
+        )
+        return list((await self.session.scalars(statement)).all())
+
+    async def list_branch_records(self) -> list[BranchRecord]:
+        statement = (
+            select(Sucursal, Ciudad)
+            .join(Ciudad, Ciudad.id_ciudad == Sucursal.id_ciudad)
+            .order_by(Sucursal.nombre)
+        )
+        return [BranchRecord(*row) for row in (await self.session.execute(statement)).all()]
+
+    async def get_branch_record(self, branch_id: int) -> BranchRecord | None:
+        statement = (
+            select(Sucursal, Ciudad)
+            .join(Ciudad, Ciudad.id_ciudad == Sucursal.id_ciudad)
+            .where(Sucursal.id_sucursal == branch_id)
+        )
+        row = (await self.session.execute(statement)).one_or_none()
+        return BranchRecord(*row) if row else None
+
+    async def find_branch_by_city_and_name(
+        self,
+        city_id: int,
+        name: str,
+        *,
+        exclude_branch_id: int | None = None,
+    ) -> Sucursal | None:
+        statement = select(Sucursal).where(
+            Sucursal.id_ciudad == city_id,
+            func.lower(Sucursal.nombre) == name.strip().lower(),
+        )
+        if exclude_branch_id is not None:
+            statement = statement.where(Sucursal.id_sucursal != exclude_branch_id)
+        return await self.session.scalar(statement)
+
     async def list_active_variant_options(self) -> list[VariantOptionRecord]:
         statement = (
             select(VarianteProducto, Producto.nombre, Talla.codigo, Color.nombre)
@@ -133,9 +179,11 @@ class CatalogRepository:
         )
 
     async def get_product(self, product_id: int) -> ProductCore | None:
-        row = (await self.session.execute(
-            self._product_core_statement().where(Producto.id_producto == product_id)
-        )).one_or_none()
+        row = (
+            await self.session.execute(
+                self._product_core_statement().where(Producto.id_producto == product_id)
+            )
+        ).one_or_none()
         return ProductCore(*row) if row else None
 
     async def list_products(
@@ -237,11 +285,13 @@ class CatalogRepository:
             .where(*filters)
         )
         total = int(await self.session.scalar(total_statement) or 0)
-        rows = (await self.session.execute(
-            statement.order_by(sort_map[sort], Producto.id_producto)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )).all()
+        rows = (
+            await self.session.execute(
+                statement.order_by(sort_map[sort], Producto.id_producto)
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        ).all()
         return [ProductCore(*row) for row in rows], total
 
     async def list_variants(
@@ -262,15 +312,12 @@ class CatalogRepository:
         if branch_id is not None:
             available = InventarioSucursal.stock_fisico - InventarioSucursal.stock_reservado
             minimum = InventarioSucursal.stock_minimo
-            statement = (
-                statement.add_columns(available, minimum)
-                .outerjoin(
-                    InventarioSucursal,
-                    and_(
-                        InventarioSucursal.id_variante == VarianteProducto.id_variante,
-                        InventarioSucursal.id_sucursal == branch_id,
-                    ),
-                )
+            statement = statement.add_columns(available, minimum).outerjoin(
+                InventarioSucursal,
+                and_(
+                    InventarioSucursal.id_variante == VarianteProducto.id_variante,
+                    InventarioSucursal.id_sucursal == branch_id,
+                ),
             )
         if active_only:
             statement = statement.where(VarianteProducto.activo.is_(True))
@@ -316,17 +363,17 @@ class CatalogRepository:
         return await self.session.scalar(statement) is not None
 
     async def list_measurements(self, product_id: int) -> list[MeasurementRecord]:
-        rows = (await self.session.execute(
-            select(MedidaTallaProducto, Talla.codigo)
-            .join(Talla, Talla.id_talla == MedidaTallaProducto.id_talla)
-            .where(MedidaTallaProducto.id_producto == product_id)
-            .order_by(Talla.orden)
-        )).all()
+        rows = (
+            await self.session.execute(
+                select(MedidaTallaProducto, Talla.codigo)
+                .join(Talla, Talla.id_talla == MedidaTallaProducto.id_talla)
+                .where(MedidaTallaProducto.id_producto == product_id)
+                .order_by(Talla.orden)
+            )
+        ).all()
         return [MeasurementRecord(*row) for row in rows]
 
-    async def get_measurement(
-        self, product_id: int, size_id: int
-    ) -> MedidaTallaProducto | None:
+    async def get_measurement(self, product_id: int, size_id: int) -> MedidaTallaProducto | None:
         return await self.session.scalar(
             select(MedidaTallaProducto).where(
                 MedidaTallaProducto.id_producto == product_id,
@@ -335,11 +382,15 @@ class CatalogRepository:
         )
 
     async def list_images(self, product_id: int) -> list[ImagenProducto]:
-        return list((await self.session.scalars(
-            select(ImagenProducto)
-            .where(ImagenProducto.id_producto == product_id)
-            .order_by(ImagenProducto.es_principal.desc(), ImagenProducto.orden)
-        )).all())
+        return list(
+            (
+                await self.session.scalars(
+                    select(ImagenProducto)
+                    .where(ImagenProducto.id_producto == product_id)
+                    .order_by(ImagenProducto.es_principal.desc(), ImagenProducto.orden)
+                )
+            ).all()
+        )
 
     async def clear_principal_image(self, product_id: int, except_id: int | None = None) -> None:
         statement = update(ImagenProducto).where(
@@ -359,11 +410,15 @@ class CatalogRepository:
         )
 
     async def list_price_history(self, product_id: int) -> list[HistorialPrecio]:
-        return list((await self.session.scalars(
-            select(HistorialPrecio)
-            .where(HistorialPrecio.id_producto == product_id)
-            .order_by(HistorialPrecio.fecha_inicio.desc())
-        )).all())
+        return list(
+            (
+                await self.session.scalars(
+                    select(HistorialPrecio)
+                    .where(HistorialPrecio.id_producto == product_id)
+                    .order_by(HistorialPrecio.fecha_inicio.desc())
+                )
+            ).all()
+        )
 
     async def replace_current_price(
         self,
@@ -386,12 +441,18 @@ class CatalogRepository:
         return await self.add(new_price)
 
     async def list_product_seasons(self, product_id: int) -> list[Temporada]:
-        return list((await self.session.scalars(
-            select(Temporada)
-            .join(ProductoTemporada, ProductoTemporada.id_temporada == Temporada.id_temporada)
-            .where(ProductoTemporada.id_producto == product_id)
-            .order_by(Temporada.nombre)
-        )).all())
+        return list(
+            (
+                await self.session.scalars(
+                    select(Temporada)
+                    .join(
+                        ProductoTemporada, ProductoTemporada.id_temporada == Temporada.id_temporada
+                    )
+                    .where(ProductoTemporada.id_producto == product_id)
+                    .order_by(Temporada.nombre)
+                )
+            ).all()
+        )
 
     async def get_product_season_link(
         self, product_id: int, season_id: int
@@ -404,12 +465,18 @@ class CatalogRepository:
         )
 
     async def list_product_collections(self, product_id: int) -> list[Coleccion]:
-        return list((await self.session.scalars(
-            select(Coleccion)
-            .join(ProductoColeccion, ProductoColeccion.id_coleccion == Coleccion.id_coleccion)
-            .where(ProductoColeccion.id_producto == product_id)
-            .order_by(Coleccion.nombre)
-        )).all())
+        return list(
+            (
+                await self.session.scalars(
+                    select(Coleccion)
+                    .join(
+                        ProductoColeccion, ProductoColeccion.id_coleccion == Coleccion.id_coleccion
+                    )
+                    .where(ProductoColeccion.id_producto == product_id)
+                    .order_by(Coleccion.nombre)
+                )
+            ).all()
+        )
 
     async def get_product_collection_link(
         self, product_id: int, collection_id: int

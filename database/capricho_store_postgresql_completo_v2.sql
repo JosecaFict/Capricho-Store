@@ -836,6 +836,7 @@ END LOOP; END $$;
 CREATE TRIGGER audit_usuario AFTER INSERT OR UPDATE OR DELETE ON usuario FOR EACH ROW EXECUTE FUNCTION fn_bitacora_generica('SEGURIDAD','id_usuario');
 CREATE TRIGGER audit_usuario_rol AFTER INSERT OR UPDATE OR DELETE ON usuario_rol FOR EACH ROW EXECUTE FUNCTION fn_bitacora_generica('SEGURIDAD','id_usuario_rol');
 CREATE TRIGGER audit_usuario_permiso AFTER INSERT OR UPDATE OR DELETE ON usuario_permiso FOR EACH ROW EXECUTE FUNCTION fn_bitacora_generica('SEGURIDAD','id_usuario_permiso');
+CREATE TRIGGER audit_sucursal AFTER INSERT OR UPDATE OR DELETE ON sucursal FOR EACH ROW EXECUTE FUNCTION fn_bitacora_generica('ORGANIZACION','id_sucursal');
 CREATE TRIGGER audit_producto AFTER INSERT OR UPDATE OR DELETE ON producto FOR EACH ROW EXECUTE FUNCTION fn_bitacora_generica('CATALOGO','id_producto');
 CREATE TRIGGER audit_historial_precio AFTER INSERT OR UPDATE OR DELETE ON historial_precio FOR EACH ROW EXECUTE FUNCTION fn_bitacora_generica('CATALOGO','id_historial_precio');
 CREATE TRIGGER audit_proveedor AFTER INSERT OR UPDATE OR DELETE ON proveedor FOR EACH ROW EXECUTE FUNCTION fn_bitacora_generica('PROVEEDORES','id_proveedor');
@@ -907,6 +908,43 @@ INSERT INTO marca(nombre,descripcion,pais_origen) VALUES
 ('Bershka','Moda juvenil con propuestas actuales y atrevidas.','España'),
 ('Lacoste','Moda deportiva y casual reconocida por el polo de piqué.','Francia')
 ON CONFLICT(nombre) DO NOTHING;
+INSERT INTO color(nombre,codigo_hex) VALUES
+('Negro','#000000'),
+('Blanco','#FFFFFF'),
+('Gris','#808080'),
+('Azul marino','#1F2A44'),
+('Azul','#0057B8'),
+('Celeste','#87CEEB'),
+('Rojo','#C62828'),
+('Verde','#2E7D32'),
+('Beige','#D6C6A5'),
+('Marrón','#795548'),
+('Rosado','#E78DA7'),
+('Morado','#6A1B9A'),
+('Amarillo','#FBC02D'),
+('Naranja','#EF6C00')
+ON CONFLICT(nombre) DO NOTHING;
+INSERT INTO temporada(nombre,anio,fecha_inicio,fecha_fin) VALUES
+('Permanente',NULL,NULL,NULL),
+('Otoño-Invierno 2026',2026,'2026-03-21','2026-09-20'),
+('Primavera-Verano 2026-2027',2026,'2026-09-21','2027-03-20');
+
+INSERT INTO coleccion(id_temporada,nombre,descripcion)
+SELECT t.id_temporada,'Clásicos Esenciales','Prendas clásicas y versátiles disponibles durante todo el año.'
+FROM temporada t WHERE t.nombre='Permanente' AND t.anio IS NULL
+ORDER BY t.id_temporada LIMIT 1;
+INSERT INTO coleccion(id_temporada,nombre,descripcion)
+SELECT t.id_temporada,'Deportiva Urbana','Prendas deportivas y casuales para el uso cotidiano.'
+FROM temporada t WHERE t.nombre='Permanente' AND t.anio IS NULL
+ORDER BY t.id_temporada LIMIT 1;
+INSERT INTO coleccion(id_temporada,nombre,descripcion)
+SELECT t.id_temporada,'Otoño-Invierno 2026','Selección para la temporada de clima fresco de 2026.'
+FROM temporada t WHERE t.nombre='Otoño-Invierno 2026' AND t.anio=2026
+ORDER BY t.id_temporada LIMIT 1;
+INSERT INTO coleccion(id_temporada,nombre,descripcion)
+SELECT t.id_temporada,'Primavera-Verano 2026-2027','Selección para la temporada cálida 2026-2027.'
+FROM temporada t WHERE t.nombre='Primavera-Verano 2026-2027' AND t.anio=2026
+ORDER BY t.id_temporada LIMIT 1;
 INSERT INTO metodo_pago(codigo,nombre,tipo) VALUES ('EFECTIVO','Efectivo','EFECTIVO'),('QR','Pago QR','QR'),('STRIPE','Stripe','PASARELA') ON CONFLICT(codigo) DO NOTHING;
 INSERT INTO tarifa_envio(tarifa_base,distancia_base_km,costo_km_adicional,activo)
 SELECT 5,1,2.5,TRUE WHERE NOT EXISTS(SELECT 1 FROM tarifa_envio WHERE activo=TRUE);
@@ -915,6 +953,7 @@ SELECT 40,20,15,10,10,5,TRUE WHERE NOT EXISTS(SELECT 1 FROM configuracion_recome
 
 INSERT INTO permiso(codigo,nombre,modulo) VALUES
 ('empleados.ver','Ver empleados','SEGURIDAD'),('empleados.crear','Crear empleados','SEGURIDAD'),('empleados.editar','Editar empleados','SEGURIDAD'),('permisos.asignar','Asignar permisos','SEGURIDAD'),
+('sucursales.ver','Ver sucursales','ORGANIZACION'),('sucursales.crear','Crear sucursales','ORGANIZACION'),('sucursales.editar','Editar sucursales','ORGANIZACION'),
 ('productos.ver','Ver productos','CATALOGO'),('productos.crear','Crear productos','CATALOGO'),('productos.editar','Editar productos','CATALOGO'),
 ('inventario.ver','Ver inventario','INVENTARIO'),('inventario.movimiento','Registrar movimientos','INVENTARIO'),('recepcion.registrar','Registrar recepción','INVENTARIO'),
 ('proveedores.ver','Ver proveedores','PROVEEDORES'),('proveedores.gestionar','Gestionar proveedores','PROVEEDORES'),
@@ -931,7 +970,7 @@ SELECT r.id_rol,p.id_permiso FROM rol r JOIN permiso p ON p.codigo IN ('ventas.v
 ON CONFLICT(id_rol,id_permiso) DO NOTHING;
 
 INSERT INTO rol_permiso(id_rol,id_permiso)
-SELECT r.id_rol,p.id_permiso FROM rol r JOIN permiso p ON p.codigo IN ('inventario.ver','reservas.ver','reservas.gestionar','ventas.ver','productos.ver','proveedores.ver') WHERE r.nombre='ENCARGADO_SUCURSAL'
+SELECT r.id_rol,p.id_permiso FROM rol r JOIN permiso p ON p.codigo IN ('inventario.ver','reservas.ver','reservas.gestionar','ventas.ver','productos.ver','proveedores.ver','sucursales.ver') WHERE r.nombre='ENCARGADO_SUCURSAL'
 ON CONFLICT(id_rol,id_permiso) DO NOTHING;
 
 INSERT INTO rol_permiso(id_rol,id_permiso)
