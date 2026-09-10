@@ -158,10 +158,6 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                 <dt>Colores</dt>
                 <dd>{{ item.colores_disponibles.join(', ') || 'Sin colores publicados' }}</dd>
               </div>
-              <div>
-                <dt>Disponibilidad</dt>
-                <dd>{{ availability(item) }}</dd>
-              </div>
             </dl>
             @if (item.permite_vestidor) {
               <p class="feature-note">
@@ -403,24 +399,19 @@ export class ProductDetail {
     (event.target as HTMLImageElement).hidden = true;
   }
 
-  availability(item: Product): string {
-    const stocks = item.variantes
-      .map((variant) => variant.stock_disponible)
-      .filter((stock): stock is number => typeof stock === 'number');
-    if (stocks.length === 0) return 'Consulta una sucursal para conocer el stock';
-    const total = stocks.reduce((sum, stock) => sum + stock, 0);
-    return total > 0 ? `${total} unidades registradas` : 'Agotado';
-  }
-
   branchAvailability(item: Product): string {
     if (this.availabilityLoading()) return 'Consultando disponibilidad…';
     if (this.availabilityError()) return this.availabilityError();
     const branchName = this.selectedBranchName();
     if (!branchName) return 'Selecciona una sucursal para conocer su stock.';
-    const total = this.totalStock(item);
-    return total > 0
-      ? `${total} unidades disponibles en ${branchName}.`
-      : `Sin stock disponible en ${branchName}.`;
+    const variant = this.selectedVariant(item);
+    if (!variant) return `Selecciona color y talla para consultar el stock en ${branchName}.`;
+    const stock = Math.max(0, Number(variant.stock_disponible ?? 0));
+    if (stock === 0) {
+      return `Sin stock de ${variant.color}, talla ${variant.talla}, en ${branchName}.`;
+    }
+    const unitLabel = stock === 1 ? 'unidad disponible' : 'unidades disponibles';
+    return `${stock} ${unitLabel} de ${variant.color}, talla ${variant.talla}, en ${branchName}.`;
   }
 
   totalStock(item: Product): number {

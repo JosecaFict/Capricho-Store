@@ -9,7 +9,7 @@ export class ApiErrorService {
   ): string {
     if (!(error instanceof HttpErrorResponse)) return fallback;
     if (error.status === 0)
-      return 'No pudimos conectar con el servicio. Verifica que FastAPI esté activo.';
+      return 'No recibimos respuesta del servicio. Revisa tu conexión e intenta nuevamente.';
     if (error.status === 401) return 'Tu sesión no es válida o ha expirado.';
     if (error.status === 403) return 'No tienes permiso para realizar esta acción.';
     if (error.status === 404) return 'No encontramos la información solicitada.';

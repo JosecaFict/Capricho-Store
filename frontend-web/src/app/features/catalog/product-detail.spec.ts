@@ -96,7 +96,7 @@ describe('ProductDetail', () => {
     expect(fixture.componentInstance.selectedBranchId()).toBe(2);
     expect(select.value).toBe('2');
     expect(fixture.nativeElement.textContent).toContain(
-      'Sin stock disponible en Capricho Store Banzer.',
+      'Sin stock de Azul marino, talla S, en Capricho Store Banzer.',
     );
     expect(
       (fixture.nativeElement.querySelector('.product-purchase button') as HTMLButtonElement)
