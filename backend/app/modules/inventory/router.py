@@ -8,6 +8,7 @@ from app.modules.auth.dependencies import (
     build_request_audit_context,
     require_permission,
 )
+from app.modules.auth.exceptions import PermissionDeniedError
 from app.modules.inventory.dependencies import get_inventory_service
 from app.modules.inventory.schemas import (
     AdjustmentCreate,
@@ -42,6 +43,16 @@ def audit_for(request: Request, principal: CurrentPrincipal):
     )
 
 
+def assigned_branch(principal: CurrentPrincipal, requested: int | None = None) -> int | None:
+    if "ADMIN" in principal.roles:
+        return requested
+    if principal.id_sucursal is None:
+        raise PermissionDeniedError
+    if requested is not None and requested != principal.id_sucursal:
+        raise PermissionDeniedError
+    return principal.id_sucursal
+
+
 @router.get("/suppliers", response_model=list[SupplierResponse])
 async def list_suppliers(
     _: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.ver"))],
@@ -63,9 +74,7 @@ async def get_supplier(
 async def create_supplier(
     payload: SupplierCreate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
     return await service.create_supplier(payload, audit_for(request, principal))
@@ -76,9 +85,7 @@ async def update_supplier(
     supplier_id: int,
     payload: SupplierUpdate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
     return await service.update_supplier(supplier_id, payload, audit_for(request, principal))
@@ -103,9 +110,7 @@ async def add_supplier_product(
     product_id: int,
     payload: SupplierProductRequest,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
     return await service.add_supplier_product(
@@ -120,32 +125,28 @@ async def remove_supplier_product(
     supplier_id: int,
     product_id: int,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    await service.remove_supplier_product(
-        supplier_id, product_id, audit_for(request, principal)
-    )
+    await service.remove_supplier_product(supplier_id, product_id, audit_for(request, principal))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/purchase-orders", response_model=list[PurchaseOrderResponse])
 async def list_purchase_orders(
-    _: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.ver"))],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.ver"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.list_purchase_orders()
+    return await service.list_purchase_orders(assigned_branch(principal))
 
 
 @router.get("/purchase-orders/{order_id}", response_model=PurchaseOrderResponse)
 async def get_purchase_order(
     order_id: int,
-    _: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.ver"))],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.ver"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.get_purchase_order(order_id)
+    return await service.get_purchase_order(order_id, assigned_branch(principal))
 
 
 @router.post(
@@ -156,12 +157,14 @@ async def get_purchase_order(
 async def create_purchase_order(
     payload: PurchaseOrderCreate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.create_purchase_order(payload, audit_for(request, principal))
+    return await service.create_purchase_order(
+        payload,
+        audit_for(request, principal),
+        assigned_branch(principal, payload.id_sucursal),
+    )
 
 
 @router.patch("/purchase-orders/{order_id}", response_model=PurchaseOrderResponse)
@@ -169,43 +172,46 @@ async def update_purchase_order(
     order_id: int,
     payload: PurchaseOrderUpdate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("proveedores.gestionar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
     return await service.update_purchase_order(
-        order_id, payload, audit_for(request, principal)
+        order_id,
+        payload,
+        audit_for(request, principal),
+        assigned_branch(principal),
     )
 
 
 @router.get("/receipts", response_model=list[ReceiptResponse])
 async def list_receipts(
-    _: Annotated[CurrentPrincipal, Depends(require_permission("recepcion.registrar"))],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("recepcion.registrar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.list_receipts()
+    return await service.list_receipts(assigned_branch(principal))
 
 
 @router.get("/receipts/{receipt_id}", response_model=ReceiptResponse)
 async def get_receipt(
     receipt_id: int,
-    _: Annotated[CurrentPrincipal, Depends(require_permission("recepcion.registrar"))],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("recepcion.registrar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.get_receipt(receipt_id)
+    return await service.get_receipt(receipt_id, assigned_branch(principal))
 
 
 @router.post("/receipts", response_model=ReceiptResponse, status_code=status.HTTP_201_CREATED)
 async def create_receipt(
     payload: ReceiptCreate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("recepcion.registrar"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("recepcion.registrar"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.create_receipt(payload, audit_for(request, principal))
+    return await service.create_receipt(
+        payload,
+        audit_for(request, principal),
+        assigned_branch(principal),
+    )
 
 
 @router.get("/inventory/lots", response_model=list[LotResponse])
@@ -259,14 +265,10 @@ async def update_minimum_stock(
     inventory_id: int,
     payload: MinimumStockUpdate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("inventario.movimiento"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("inventario.movimiento"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.update_minimum_stock(
-        inventory_id, payload, audit_for(request, principal)
-    )
+    return await service.update_minimum_stock(inventory_id, payload, audit_for(request, principal))
 
 
 @router.get("/inventory/movements", response_model=list[MovementResponse])
@@ -304,9 +306,7 @@ async def adjust_inventory(
     inventory_id: int,
     payload: AdjustmentCreate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("inventario.movimiento"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("inventario.movimiento"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
     return await service.adjust_inventory(
@@ -342,9 +342,7 @@ async def get_transfer(
 async def create_transfer(
     payload: TransferCreate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("inventario.movimiento"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("inventario.movimiento"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
     return await service.create_transfer(payload, audit_for(request, principal))
@@ -355,14 +353,10 @@ async def update_transfer_status(
     transfer_id: int,
     payload: TransferStatusUpdate,
     request: Request,
-    principal: Annotated[
-        CurrentPrincipal, Depends(require_permission("inventario.movimiento"))
-    ],
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("inventario.movimiento"))],
     service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await service.update_transfer_status(
-        transfer_id, payload, audit_for(request, principal)
-    )
+    return await service.update_transfer_status(transfer_id, payload, audit_for(request, principal))
 
 
 @router.get("/inventory/{inventory_id}", response_model=InventoryResponse)

@@ -92,4 +92,6 @@ async def me(
         created_at=user.created_at,
         roles=sorted(principal.roles),
         permisos=sorted(principal.permissions),
+        id_sucursal=principal.id_sucursal,
+        sucursal=principal.sucursal,
     )

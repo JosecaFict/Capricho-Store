@@ -55,6 +55,8 @@ class UserResponse(BaseModel):
     created_at: datetime
     roles: list[str] = Field(default_factory=list)
     permisos: list[str] = Field(default_factory=list)
+    id_sucursal: int | None = None
+    sucursal: str | None = None
 
 
 class TokenResponse(BaseModel):

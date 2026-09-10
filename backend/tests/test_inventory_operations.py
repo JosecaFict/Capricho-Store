@@ -100,7 +100,11 @@ TRANSFER = {
 }
 
 
-def principal(*permissions: str) -> CurrentPrincipal:
+def principal(
+    *permissions: str,
+    roles: frozenset[str] = frozenset({"ADMIN"}),
+    branch_id: int | None = None,
+) -> CurrentPrincipal:
     user = Usuario(
         id_usuario=99,
         nombres="Admin",
@@ -114,9 +118,11 @@ def principal(*permissions: str) -> CurrentPrincipal:
     )
     return CurrentPrincipal(
         user=user,
-        roles=frozenset({"ADMIN"}),
+        roles=roles,
         permissions=frozenset(permissions),
         session_id="inventory-test",
+        id_sucursal=branch_id,
+        sucursal="Sucursal asignada" if branch_id else None,
     )
 
 
@@ -226,9 +232,7 @@ async def test_create_purchase_order_with_variants() -> None:
         json={
             "id_proveedor": 1,
             "id_sucursal": 1,
-            "detalles": [
-                {"id_variante": 1, "cantidad": 10, "costo_unitario_estimado": 70}
-            ],
+            "detalles": [{"id_variante": 1, "cantidad": 10, "costo_unitario_estimado": 70}],
         },
     )
     assert response.status_code == 201
@@ -314,12 +318,46 @@ async def test_register_receipt() -> None:
         actor=principal("recepcion.registrar"),
         json={
             "id_orden_compra": 1,
-            "detalles": [
-                {"id_variante": 1, "cantidad_recibida": 10, "costo_unitario": 70}
-            ],
+            "detalles": [{"id_variante": 1, "cantidad_recibida": 10, "costo_unitario": 70}],
         },
     )
     assert response.status_code == 201
+
+
+async def test_employee_purchase_orders_are_scoped_to_assigned_branch() -> None:
+    service = AsyncMock()
+    service.list_purchase_orders.return_value = []
+    actor = principal(
+        "proveedores.ver",
+        roles=frozenset({"ENCARGADO_SUCURSAL"}),
+        branch_id=4,
+    )
+
+    response = await call("GET", "/api/v1/purchase-orders", service=service, actor=actor)
+
+    assert response.status_code == 200
+    service.list_purchase_orders.assert_awaited_once_with(4)
+
+
+async def test_employee_cannot_create_purchase_order_for_another_branch() -> None:
+    actor = principal(
+        "proveedores.gestionar",
+        roles=frozenset({"ENCARGADO_SUCURSAL"}),
+        branch_id=4,
+    )
+    response = await call(
+        "POST",
+        "/api/v1/purchase-orders",
+        service=AsyncMock(),
+        actor=actor,
+        json={
+            "id_proveedor": 1,
+            "id_sucursal": 2,
+            "detalles": [{"id_variante": 1, "cantidad": 10}],
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def inventory_row(physical: int, reserved: int, minimum: int):
@@ -521,8 +559,7 @@ def test_transfer_cannot_cancel_after_dispatch() -> None:
 def test_destination_lots_keep_distinct_fifo_costs() -> None:
     source = [(lot(1, 3, "70"), 3), (lot(2, 5, "80"), 3)]
     destination = [
-        (item.id_detalle_recepcion, quantity, item.costo_unitario)
-        for item, quantity in source
+        (item.id_detalle_recepcion, quantity, item.costo_unitario) for item, quantity in source
     ]
     assert destination == [(1, 3, Decimal("70")), (2, 3, Decimal("80"))]
 
@@ -540,9 +577,7 @@ async def test_authorized_inventory_access() -> None:
 
 
 async def test_inventory_access_without_permission() -> None:
-    response = await call(
-        "GET", "/api/v1/inventory", service=AsyncMock(), actor=principal()
-    )
+    response = await call("GET", "/api/v1/inventory", service=AsyncMock(), actor=principal())
     assert response.status_code == 403
 
 
@@ -677,9 +712,7 @@ async def test_transfer_dispatch_creates_fifo_exit_and_breakdown() -> None:
         estado="APROBADA",
     )
     repository.movement_exists.return_value = False
-    repository.transfer_details.return_value = [
-        SimpleTransferDetail(id_variante=1, cantidad=6)
-    ]
+    repository.transfer_details.return_value = [SimpleTransferDetail(id_variante=1, cantidad=6)]
     repository.get_or_create_inventory.return_value = InventarioSucursal(
         id_inventario=1, id_sucursal=1, id_variante=1
     )
@@ -693,9 +726,7 @@ async def test_transfer_dispatch_creates_fifo_exit_and_breakdown() -> None:
 
     repository.add.side_effect = add_entity
     service = InventoryService(AsyncMock(), repository)
-    service._fifo_allocations = AsyncMock(
-        return_value=[(lot(1, 3, "70"), 3), (lot(2, 5, "80"), 3)]
-    )
+    service._fifo_allocations = AsyncMock(return_value=[(lot(1, 3, "70"), 3), (lot(2, 5, "80"), 3)])
     await service._dispatch_transfer(transfer)
     movement = next(item for item in created if isinstance(item, MovimientoInventario))
     breakdowns = [item for item in created if isinstance(item, MovimientoLote)]
@@ -722,9 +753,7 @@ async def test_transfer_receipt_clones_cost_layers_without_fake_receipt() -> Non
     repository.movement_exists.return_value = False
     repository.transfer_details.return_value = [SimpleTransferDetail(1, 6)]
     origin_inventory = InventarioSucursal(id_inventario=1, id_sucursal=1, id_variante=1)
-    destination_inventory = InventarioSucursal(
-        id_inventario=2, id_sucursal=2, id_variante=1
-    )
+    destination_inventory = InventarioSucursal(id_inventario=2, id_sucursal=2, id_variante=1)
     repository.get_or_create_inventory.side_effect = [origin_inventory, destination_inventory]
     repository.referenced_movement.return_value = MovimientoInventario(
         id_movimiento=10,

@@ -110,6 +110,8 @@ class PurchaseDetailResponse(ORMResponse):
     id_variante: int
     cantidad: int
     costo_unitario_estimado: Decimal | None
+    cantidad_recibida: int = 0
+    cantidad_pendiente: int = 0
 
 
 class PurchaseOrderResponse(ORMResponse):
@@ -218,6 +220,7 @@ class AdjustmentCreate(BaseModel):
     motivo: str = Field(min_length=1, max_length=255)
     costo_unitario: Decimal | None = Field(default=None, ge=0)
     id_detalle_recepcion: int | None = Field(default=None, gt=0)
+
 
 class TransferDetailCreate(BaseModel):
     id_variante: int = Field(gt=0)

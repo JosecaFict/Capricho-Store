@@ -31,6 +31,12 @@ import { PermissionService } from '../../core/permissions/permission.service';
             <dt>Rol</dt>
             <dd>{{ user.roles.join(', ') || 'Cliente' }}</dd>
           </div>
+          @if (user.sucursal) {
+            <div>
+              <dt>Sucursal asignada</dt>
+              <dd>{{ user.sucursal }}</dd>
+            </div>
+          }
         </dl>
         <div class="account-actions">
           @if (permissions.hasAdminAccess()) {

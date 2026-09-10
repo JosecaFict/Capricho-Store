@@ -230,6 +230,28 @@ async def test_me_with_valid_token() -> None:
     assert "password_hash" not in response.json()
 
 
+async def test_me_includes_employee_branch_context() -> None:
+    principal = CurrentPrincipal(
+        user=make_user(),
+        roles=frozenset({"CAJERO"}),
+        permissions=frozenset({"ventas.crear"}),
+        session_id="session-id",
+        id_sucursal=3,
+        sucursal="Sucursal Norte",
+    )
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/auth/me")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["id_sucursal"] == 3
+    assert response.json()["sucursal"] == "Sucursal Norte"
+
+
 async def test_me_without_token() -> None:
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

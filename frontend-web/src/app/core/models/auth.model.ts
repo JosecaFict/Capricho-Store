@@ -54,4 +54,6 @@ export interface UserResponse {
   created_at: string;
   roles: string[];
   permisos: string[];
+  id_sucursal?: number | null;
+  sucursal?: string | null;
 }

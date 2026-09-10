@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PermissionService } from '../../core/permissions/permission.service';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { AdminApiService } from './admin-api.service';
-import { PurchasesAdmin } from './operations-admin';
+import { PurchasesAdmin, ReceiptsAdmin } from './operations-admin';
 
 describe('PurchasesAdmin', () => {
   it('groups variants into a color and size matrix and expands quantities on save', () => {
@@ -94,5 +94,100 @@ describe('PurchasesAdmin', () => {
         ],
       }),
     );
+  });
+});
+
+describe('ReceiptsAdmin', () => {
+  it('loads the ordered balance and sends only quantities received now', () => {
+    const order = {
+      id_orden_compra: 8,
+      id_sucursal: 2,
+      estado: 'EN_TRANSITO',
+      detalles: [
+        {
+          id_detalle_orden_compra: 80,
+          id_variante: 11,
+          cantidad: 5,
+          cantidad_recibida: 2,
+          cantidad_pendiente: 3,
+          costo_unitario_estimado: 150,
+        },
+        {
+          id_detalle_orden_compra: 81,
+          id_variante: 12,
+          cantidad: 4,
+          cantidad_recibida: 0,
+          cantidad_pendiente: 4,
+          costo_unitario_estimado: 160,
+        },
+      ],
+    };
+    const api = {
+      list: vi.fn((path: string) => {
+        if (path === 'purchase-orders') return of([order]);
+        if (path === 'branches') return of([{ id_sucursal: 2, nombre: 'Central' }]);
+        if (path === 'variants')
+          return of([
+            {
+              id_variante: 11,
+              producto: 'Polo Classic Fit',
+              sku: 'POLO-AZM-S',
+              color: 'Azul marino',
+              talla: 'S',
+            },
+            {
+              id_variante: 12,
+              producto: 'Polo Classic Fit',
+              sku: 'POLO-AZM-M',
+              color: 'Azul marino',
+              talla: 'M',
+            },
+          ]);
+        return of([]);
+      }),
+      post: vi.fn(() => of({})),
+    };
+    TestBed.configureTestingModule({
+      imports: [ReceiptsAdmin],
+      providers: [
+        { provide: AdminApiService, useValue: api },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ReceiptsAdmin);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    component.show.set(true);
+    component.form.patchValue({ id_orden_compra: 8, observacion: 'Una unidad con demora' });
+    component.selectOrder();
+
+    expect(component.details.length).toBe(2);
+    expect(component.details.at(0).value).toMatchObject({
+      cantidad_solicitada: 5,
+      cantidad_recibida_anterior: 2,
+      cantidad_pendiente: 3,
+      cantidad_recibida: 3,
+    });
+    expect(component.pendingTotal()).toBe(7);
+    expect(component.completesOrder()).toBe(true);
+
+    component.details.at(0).patchValue({ cantidad_recibida: 1, numero_lote: 'L-001' });
+    component.details.at(1).patchValue({ cantidad_recibida: 0 });
+    expect(component.completesOrder()).toBe(false);
+    component.save();
+
+    expect(api.post).toHaveBeenCalledWith('receipts', {
+      id_orden_compra: 8,
+      observacion: 'Una unidad con demora',
+      detalles: [
+        {
+          id_variante: 11,
+          cantidad_recibida: 1,
+          costo_unitario: 150,
+          numero_lote: 'L-001',
+        },
+      ],
+    });
   });
 });

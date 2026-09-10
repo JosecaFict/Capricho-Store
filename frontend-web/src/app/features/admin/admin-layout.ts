@@ -70,7 +70,9 @@ import { AdminNavGroup, visibleAdminNavigation } from './admin-navigation';
             Menú
           </button>
           <div>
-            <span class="admin-context">Panel operativo</span><strong>{{ roleLabel() }}</strong>
+            <span class="admin-context">Panel operativo</span>
+            <strong>{{ roleLabel() }}</strong>
+            <small class="admin-branch-context">{{ branchLabel() }}</small>
           </div>
           <div class="admin-user">
             <span>{{ user()?.nombres }} {{ user()?.apellidos }}</span
@@ -89,6 +91,11 @@ export class AdminLayout {
   readonly expandedGroups = signal<Record<string, boolean>>({});
   readonly user = this.auth.currentUser;
   readonly roleLabel = computed(() => this.user()?.roles.join(' · ') || 'Sin rol asignado');
+  readonly branchLabel = computed(() => {
+    const user = this.user();
+    if (user?.roles.includes('ADMIN')) return 'Todas las sucursales';
+    return user?.sucursal ? `Sucursal asignada: ${user.sucursal}` : 'Sin sucursal asignada';
+  });
   readonly visibleNavigation = computed(() => visibleAdminNavigation(this.user()?.permisos ?? []));
 
   isGroupExpanded(group: AdminNavGroup): boolean {

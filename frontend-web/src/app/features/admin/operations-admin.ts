@@ -514,8 +514,43 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
           </header>
           <p>
             {{ supplierName(o['id_proveedor']) }} · {{ branchName(o['id_sucursal']) }} ·
-            {{ o['detalles']?.length }} líneas
+            {{ orderUnitCount(o) }} unidades en {{ o['detalles']?.length }} variantes
           </p>
+          <details class="purchase-order-detail">
+            <summary>Revisar cantidades solicitadas</summary>
+            <div class="purchase-order-detail__scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Producto y variante</th>
+                    <th>Pedido</th>
+                    <th>Recibido</th>
+                    <th>Pendiente</th>
+                    <th>Costo estimado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (detail of o['detalles']; track detail['id_detalle_orden']) {
+                    <tr>
+                      <td>{{ variantName(detail['id_variante']) }}</td>
+                      <td>{{ detail['cantidad'] }}</td>
+                      <td>{{ detail['cantidad_recibida'] || 0 }}</td>
+                      <td>
+                        <strong>{{ detail['cantidad_pendiente'] ?? detail['cantidad'] }}</strong>
+                      </td>
+                      <td>
+                        {{
+                          detail['costo_unitario_estimado'] === null
+                            ? 'Sin estimación'
+                            : (detail['costo_unitario_estimado'] | number: '1.2-2')
+                        }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </details>
           @if (canManage()) {
             <div class="admin-row-actions">
               @for (state of nextStates(o['estado']); track state) {
@@ -581,6 +616,21 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
   branchName(id: number) {
     return (
       this.branches().find((branch) => branch['id_sucursal'] === id)?.['nombre'] ?? `Sucursal ${id}`
+    );
+  }
+  variantName(id: number): string {
+    const variant = this.variants().find(
+      (candidate) => Number(candidate['id_variante']) === Number(id),
+    );
+    return variant ? this.variantLabel(variant) : `Variante #${id}`;
+  }
+  variantLabel(variant: Entity): string {
+    return `${variant['producto']} · ${variant['color']} · ${variant['talla']} (${variant['sku']})`;
+  }
+  orderUnitCount(order: Entity): number {
+    return (order['detalles'] ?? []).reduce(
+      (total: number, detail: Entity) => total + Number(detail['cantidad'] || 0),
+      0,
     );
   }
   addRow() {
@@ -800,6 +850,12 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
     }
     @if (show()) {
       <section class="admin-editor">
+        <header>
+          <div>
+            <h2>Registrar recepción</h2>
+            <p>Compara lo solicitado con lo que llegó realmente.</p>
+          </div>
+        </header>
         <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
           <label class="field"
             ><span>Orden de compra</span
@@ -814,37 +870,114 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
           ><label class="field field--wide"
             ><span>Observación</span><textarea formControlName="observacion"></textarea>
           </label>
-          <div formArrayName="detalles" class="admin-repeater field--wide">
-            @for (row of details.controls; track $index) {
-              <div [formGroupName]="$index">
-                <label class="field"
-                  ><span>Producto y variante</span
-                  ><select formControlName="id_variante">
-                    <option value="">Seleccionar variante</option>
-                    @for (variant of variants(); track variant['id_variante']) {
-                      <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
-                    }
-                  </select></label
-                ><label class="field"
-                  ><span>Cantidad recibida</span
-                  ><input type="number" min="1" formControlName="cantidad_recibida" /></label
-                ><label class="field"
-                  ><span>Costo unitario</span
-                  ><input
-                    type="number"
-                    min="0"
-                    step=".01"
-                    formControlName="costo_unitario" /></label
-                ><label class="field"
-                  ><span>Número de lote</span><input formControlName="numero_lote"
-                /></label>
+          @if (selectedOrder(); as order) {
+            <div class="receipt-order-context field--wide">
+              <div>
+                <span>Orden</span>
+                <strong>#{{ order['id_orden_compra'] }}</strong>
               </div>
-            }
-          </div>
+              <div>
+                <span>Sucursal</span>
+                <strong>{{ branchName(order['id_sucursal']) }}</strong>
+              </div>
+              <div>
+                <span>Estado actual</span>
+                <strong>{{ order['estado'] }}</strong>
+              </div>
+              <div>
+                <span>Pendiente total</span>
+                <strong>{{ pendingTotal() }} unidades</strong>
+              </div>
+            </div>
+            <div formArrayName="detalles" class="receipt-lines field--wide">
+              <div class="receipt-lines__heading">
+                <div>
+                  <h3>Control de cantidades</h3>
+                  <p>Ingresa 0 en una variante que todavía no llegó.</p>
+                </div>
+                <button type="button" class="button button--secondary" (click)="markAllReceived()">
+                  Marcar todo recibido
+                </button>
+              </div>
+              <div class="receipt-lines__scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Producto y variante</th>
+                      <th>Pedido</th>
+                      <th>Recibido antes</th>
+                      <th>Pendiente</th>
+                      <th>Recibido ahora</th>
+                      <th>Costo unitario</th>
+                      <th>Número de lote</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of details.controls; track row; let index = $index) {
+                      <tr [formGroupName]="index">
+                        <td>
+                          <strong>{{ variantName(row.value.id_variante) }}</strong>
+                        </td>
+                        <td>{{ row.value.cantidad_solicitada }}</td>
+                        <td>{{ row.value.cantidad_recibida_anterior }}</td>
+                        <td>{{ row.value.cantidad_pendiente }}</td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            inputmode="numeric"
+                            formControlName="cantidad_recibida"
+                            [max]="row.value.cantidad_pendiente"
+                            [attr.aria-label]="
+                              'Cantidad recibida de ' + variantName(row.value.id_variante)
+                            "
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            step=".01"
+                            formControlName="costo_unitario"
+                            [attr.aria-label]="
+                              'Costo unitario de ' + variantName(row.value.id_variante)
+                            "
+                          />
+                        </td>
+                        <td>
+                          <input
+                            formControlName="numero_lote"
+                            [attr.aria-label]="
+                              'Número de lote de ' + variantName(row.value.id_variante)
+                            "
+                          />
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <div class="receipt-result">
+                <span>Se registran {{ receivedNowTotal() }} unidades</span>
+                <strong>
+                  {{
+                    completesOrder()
+                      ? 'La orden quedará recibida'
+                      : 'Se registrará una recepción parcial'
+                  }}
+                </strong>
+              </div>
+            </div>
+          } @else {
+            <p class="admin-complete-state field--wide">
+              Selecciona una orden para revisar las cantidades solicitadas.
+            </p>
+          }
           <div class="admin-form-actions">
-            <button type="button" class="button button--secondary" (click)="addRow()">
-              Añadir línea</button
-            ><button class="button button--primary">Confirmar recepción</button>
+            <button class="button button--primary" [disabled]="!canSubmitReceipt()">
+              {{ savingReceipt() ? 'Registrando…' : 'Confirmar recepción' }}
+            </button>
           </div>
         </form>
       </section>
@@ -880,9 +1013,16 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
   orders = signal<Entity[]>([]);
   variants = signal<Entity[]>([]);
   branches = signal<Entity[]>([]);
+  savingReceipt = signal(false);
   availableOrders = () =>
     this.orders().filter((order) => !['RECIBIDA', 'CANCELADA'].includes(order['estado']));
   show = signal(false);
+  selectedOrder = computed(
+    () =>
+      this.orders().find(
+        (order) => Number(order['id_orden_compra']) === Number(this.form.value.id_orden_compra),
+      ) ?? null,
+  );
   form = this.fb.group({
     id_orden_compra: [null as number | null, Validators.required],
     observacion: [''],
@@ -911,12 +1051,22 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
     });
   }
   addRow(detail?: Entity) {
+    const pending = Number(detail?.['cantidad_pendiente'] ?? detail?.['cantidad'] ?? 0);
+    if (pending <= 0) return;
     this.details.push(
       this.fb.group({
         id_variante: [detail?.['id_variante'] ?? null, Validators.required],
+        cantidad_solicitada: [Number(detail?.['cantidad'] ?? 0)],
+        cantidad_recibida_anterior: [Number(detail?.['cantidad_recibida'] ?? 0)],
+        cantidad_pendiente: [pending],
         cantidad_recibida: [
-          detail?.['cantidad_solicitada'] ?? 1,
-          [Validators.required, Validators.min(1)],
+          pending,
+          [
+            Validators.required,
+            Validators.min(0),
+            Validators.max(pending),
+            Validators.pattern(/^\d+$/),
+          ],
         ],
         costo_unitario: [
           detail?.['costo_unitario_estimado'] ?? 0,
@@ -934,7 +1084,42 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
     for (const detail of selected?.['detalles'] ?? []) this.addRow(detail);
   }
   variantLabel(variant: Entity) {
-    return `${variant['producto']} - ${variant['talla']} / ${variant['color']} (${variant['sku']})`;
+    return `${variant['producto']} · ${variant['color']} · ${variant['talla']} (${variant['sku']})`;
+  }
+  variantName(id: number): string {
+    const variant = this.variants().find(
+      (candidate) => Number(candidate['id_variante']) === Number(id),
+    );
+    return variant ? this.variantLabel(variant) : `Variante #${id}`;
+  }
+  pendingTotal(): number {
+    return this.details.controls.reduce(
+      (total, row) => total + Number(row.value.cantidad_pendiente || 0),
+      0,
+    );
+  }
+  receivedNowTotal(): number {
+    return this.details.controls.reduce(
+      (total, row) => total + Number(row.value.cantidad_recibida || 0),
+      0,
+    );
+  }
+  completesOrder(): boolean {
+    return this.pendingTotal() > 0 && this.receivedNowTotal() === this.pendingTotal();
+  }
+  markAllReceived(): void {
+    this.details.controls.forEach((row) =>
+      row.patchValue({ cantidad_recibida: Number(row.value.cantidad_pendiente || 0) }),
+    );
+  }
+  canSubmitReceipt(): boolean {
+    return (
+      !this.savingReceipt() &&
+      this.form.controls.id_orden_compra.valid &&
+      this.details.length > 0 &&
+      this.details.valid &&
+      this.receivedNowTotal() > 0
+    );
   }
   branchName(id: number) {
     return (
@@ -942,13 +1127,40 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
     );
   }
   save() {
-    this.api.post('receipts', this.form.getRawValue()).subscribe({
+    if (!this.canSubmitReceipt()) return;
+    const raw = this.form.getRawValue();
+    const receiptDetails = raw.detalles as Array<{
+      id_variante: number | null;
+      cantidad_recibida: number | null;
+      costo_unitario: number | null;
+      numero_lote: string | null;
+    }>;
+    const payload = {
+      id_orden_compra: raw.id_orden_compra,
+      observacion: raw.observacion?.trim() || null,
+      detalles: receiptDetails
+        .filter((detail) => Number(detail.cantidad_recibida) > 0)
+        .map((detail) => ({
+          id_variante: detail.id_variante,
+          cantidad_recibida: Number(detail.cantidad_recibida),
+          costo_unitario: Number(detail.costo_unitario),
+          numero_lote: detail.numero_lote?.trim() || null,
+        })),
+    };
+    this.savingReceipt.set(true);
+    this.api.post('receipts', payload).subscribe({
       next: () => {
+        this.savingReceipt.set(false);
         this.show.set(false);
+        this.form.reset({ id_orden_compra: null, observacion: '' });
+        this.details.clear();
         this.load();
         this.ok('Recepción registrada.');
       },
-      error: (e) => this.fail(e),
+      error: (e) => {
+        this.savingReceipt.set(false);
+        this.fail(e);
+      },
     });
   }
 }

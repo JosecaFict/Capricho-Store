@@ -81,9 +81,7 @@ class InventoryService:
     async def get_supplier(self, supplier_id: int) -> Proveedor:
         return await self._require(Proveedor, supplier_id, "Supplier")
 
-    async def create_supplier(
-        self, payload: SupplierCreate, audit: AuditContext
-    ) -> Proveedor:
+    async def create_supplier(self, payload: SupplierCreate, audit: AuditContext) -> Proveedor:
         await self._validate_supplier(payload)
         supplier = Proveedor(**payload.model_dump())
         return await self._commit(audit, self.repository.add(supplier))
@@ -97,9 +95,7 @@ class InventoryService:
             setattr(supplier, key, value)
         return await self._commit(audit, self.repository.flush(), result=supplier)
 
-    async def list_supplier_products(
-        self, supplier_id: int
-    ) -> list[SupplierProductResponse]:
+    async def list_supplier_products(self, supplier_id: int) -> list[SupplierProductResponse]:
         await self.get_supplier(supplier_id)
         return [
             SupplierProductResponse(
@@ -147,17 +143,26 @@ class InventoryService:
             raise InventoryNotFoundError("Supplier-product relation not found")
         await self._commit(audit, self.repository.remove(link))
 
-    async def list_purchase_orders(self) -> list[PurchaseOrderResponse]:
-        orders = await self.repository.list_purchase_orders()
+    async def list_purchase_orders(
+        self, branch_id: int | None = None
+    ) -> list[PurchaseOrderResponse]:
+        orders = await self.repository.list_purchase_orders(branch_id)
         return [await self._purchase_response(order) for order in orders]
 
-    async def get_purchase_order(self, order_id: int) -> PurchaseOrderResponse:
+    async def get_purchase_order(
+        self, order_id: int, branch_id: int | None = None
+    ) -> PurchaseOrderResponse:
         order = await self._require(OrdenCompra, order_id, "Purchase order")
+        self._require_branch(order.id_sucursal, branch_id, "Purchase order")
         return await self._purchase_response(order)
 
     async def create_purchase_order(
-        self, payload: PurchaseOrderCreate, audit: AuditContext
+        self,
+        payload: PurchaseOrderCreate,
+        audit: AuditContext,
+        branch_id: int | None = None,
     ) -> PurchaseOrderResponse:
+        self._require_branch(payload.id_sucursal, branch_id, "Purchase order")
         supplier = await self._require_active(Proveedor, payload.id_proveedor, "Supplier")
         await self._require_active(Sucursal, payload.id_sucursal, "Branch")
         if payload.id_empleado is not None:
@@ -165,9 +170,7 @@ class InventoryService:
         if len({item.id_variante for item in payload.detalles}) != len(payload.detalles):
             raise InventoryConflictError("A variant cannot be repeated in an order")
         for detail in payload.detalles:
-            variant = await self._require_active(
-                VarianteProducto, detail.id_variante, "Variant"
-            )
+            variant = await self._require_active(VarianteProducto, detail.id_variante, "Variant")
             supplier_product = await self.repository.supplier_product_link(
                 payload.id_proveedor, variant.id_producto
             )
@@ -202,11 +205,16 @@ class InventoryService:
         return await self._purchase_response(order)
 
     async def update_purchase_order(
-        self, order_id: int, payload: PurchaseOrderUpdate, audit: AuditContext
+        self,
+        order_id: int,
+        payload: PurchaseOrderUpdate,
+        audit: AuditContext,
+        branch_id: int | None = None,
     ) -> PurchaseOrderResponse:
         order = await self.repository.purchase_order_for_update(order_id)
         if order is None:
             raise InventoryNotFoundError("Purchase order not found")
+        self._require_branch(order.id_sucursal, branch_id, "Purchase order")
         if order.estado in {"RECIBIDA", "CANCELADA"}:
             raise InvalidInventoryOperationError("A terminal purchase order cannot be modified")
         if payload.estado is not None:
@@ -216,22 +224,27 @@ class InventoryService:
         await self._commit(audit, self.repository.flush())
         return await self._purchase_response(order)
 
-    async def list_receipts(self) -> list[ReceiptResponse]:
-        receipts = await self.repository.list_receipts()
+    async def list_receipts(self, branch_id: int | None = None) -> list[ReceiptResponse]:
+        receipts = await self.repository.list_receipts(branch_id)
         return [await self._receipt_response(item) for item in receipts]
 
-    async def get_receipt(self, receipt_id: int) -> ReceiptResponse:
+    async def get_receipt(self, receipt_id: int, branch_id: int | None = None) -> ReceiptResponse:
         receipt = await self._require(RecepcionMercaderia, receipt_id, "Receipt")
+        self._require_branch(receipt.id_sucursal, branch_id, "Receipt")
         return await self._receipt_response(receipt)
 
     async def create_receipt(
-        self, payload: ReceiptCreate, audit: AuditContext
+        self,
+        payload: ReceiptCreate,
+        audit: AuditContext,
+        branch_id: int | None = None,
     ) -> ReceiptResponse:
         try:
             await apply_audit_context(self.session, audit)
             order = await self.repository.purchase_order_for_update(payload.id_orden_compra)
             if order is None:
                 raise InventoryNotFoundError("Purchase order not found")
+            self._require_branch(order.id_sucursal, branch_id, "Purchase order")
             if order.estado not in {"CONFIRMADA", "EN_TRANSITO", "PARCIAL"}:
                 raise InvalidInventoryOperationError("Purchase order cannot be received")
             await self._require_active(Proveedor, order.id_proveedor, "Supplier")
@@ -588,9 +601,7 @@ class InventoryService:
                 raise InvalidInventoryOperationError(
                     "Positive adjustment needs acquisition origin and cost when no lot has capacity"
                 )
-            await self._require(
-                DetalleRecepcion, payload.id_detalle_recepcion, "Receipt detail"
-            )
+            await self._require(DetalleRecepcion, payload.id_detalle_recepcion, "Receipt detail")
             lot = await self.repository.add(
                 LoteInventario(
                     id_detalle_recepcion=payload.id_detalle_recepcion,
@@ -622,6 +633,11 @@ class InventoryService:
         return employee
 
     @staticmethod
+    def _require_branch(actual: int, expected: int | None, label: str) -> None:
+        if expected is not None and actual != expected:
+            raise InventoryNotFoundError(f"{label} not found")
+
+    @staticmethod
     def validate_transition(current: str, target: str, transitions: dict[str, set[str]]) -> None:
         if target not in transitions.get(current, set()):
             raise InvalidInventoryOperationError(
@@ -634,15 +650,15 @@ class InventoryService:
             raise InventoryNotFoundError(f"{label} not found")
         return entity
 
-    async def _require_active(
-        self, model: type[EntityT], identity: int, label: str
-    ) -> EntityT:
+    async def _require_active(self, model: type[EntityT], identity: int, label: str) -> EntityT:
         entity = await self._require(model, identity, label)
         if not getattr(entity, "activo", False):
             raise InvalidInventoryOperationError(f"{label} is inactive")
         return entity
 
     async def _purchase_response(self, order: OrdenCompra) -> PurchaseOrderResponse:
+        received = await self.repository.received_quantities(order.id_orden_compra)
+        details = await self.repository.purchase_details(order.id_orden_compra)
         return PurchaseOrderResponse(
             id_orden_compra=order.id_orden_compra,
             id_proveedor=order.id_proveedor,
@@ -653,8 +669,15 @@ class InventoryService:
             fecha_estimada=order.fecha_estimada,
             observacion=order.observacion,
             detalles=[
-                PurchaseDetailResponse.model_validate(item)
-                for item in await self.repository.purchase_details(order.id_orden_compra)
+                PurchaseDetailResponse(
+                    id_detalle_orden=item.id_detalle_orden,
+                    id_variante=item.id_variante,
+                    cantidad=item.cantidad,
+                    costo_unitario_estimado=item.costo_unitario_estimado,
+                    cantidad_recibida=received.get(item.id_variante, 0),
+                    cantidad_pendiente=max(0, item.cantidad - received.get(item.id_variante, 0)),
+                )
+                for item in details
             ],
         )
 
@@ -683,8 +706,10 @@ class InventoryService:
     def _inventory_response(row: Any) -> InventoryResponse:
         inventory = row[0]
         available = inventory.stock_fisico - inventory.stock_reservado
-        state = "AGOTADO" if available == 0 else (
-            "STOCK_BAJO" if available <= inventory.stock_minimo else "DISPONIBLE"
+        state = (
+            "AGOTADO"
+            if available == 0
+            else ("STOCK_BAJO" if available <= inventory.stock_minimo else "DISPONIBLE")
         )
         return InventoryResponse(
             id_inventario=inventory.id_inventario,

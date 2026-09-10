@@ -145,6 +145,12 @@
   color: var(--ink-soft);
   font-size: 0.75rem;
 }
+.admin-branch-context {
+  margin-top: 3px;
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
 .admin-user {
   align-items: flex-end;
 }
@@ -1102,6 +1108,137 @@ textarea {
 .admin-card-list p {
   color: var(--ink-soft);
 }
+.purchase-order-detail__scroll,
+.receipt-lines__scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.purchase-order-detail {
+  margin-top: 16px;
+}
+.purchase-order-detail summary {
+  padding: 9px 0;
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.purchase-order-detail summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  outline-offset: 3px;
+}
+.purchase-order-detail table,
+.receipt-lines table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.purchase-order-detail table {
+  min-width: 680px;
+}
+.purchase-order-detail th,
+.purchase-order-detail td,
+.receipt-lines th,
+.receipt-lines td {
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.purchase-order-detail th:last-child,
+.purchase-order-detail td:last-child,
+.receipt-lines th:last-child,
+.receipt-lines td:last-child {
+  border-right: 0;
+}
+.purchase-order-detail tbody tr:last-child td,
+.receipt-lines tbody tr:last-child td {
+  border-bottom: 0;
+}
+.purchase-order-detail th,
+.receipt-lines th {
+  background: var(--surface-muted);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.purchase-order-detail td {
+  font-size: 0.8rem;
+}
+.receipt-order-context {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.receipt-order-context > div {
+  min-width: 0;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+}
+.receipt-order-context > div:last-child {
+  border-right: 0;
+}
+.receipt-order-context span,
+.receipt-order-context strong {
+  display: block;
+}
+.receipt-order-context span {
+  margin-bottom: 4px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+.receipt-order-context strong {
+  font-size: 0.88rem;
+}
+.receipt-lines__heading,
+.receipt-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.receipt-lines__heading {
+  padding: 4px 0 12px;
+}
+.receipt-lines__heading h3,
+.receipt-lines__heading p {
+  margin: 0;
+}
+.receipt-lines__heading h3 {
+  font-size: 1rem;
+}
+.receipt-lines__heading p {
+  margin-top: 3px;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+.receipt-lines table {
+  min-width: 1100px;
+}
+.receipt-lines td:first-child {
+  min-width: 280px;
+}
+.receipt-lines input {
+  width: 130px;
+  min-height: 40px;
+  padding: 0.45rem 0.55rem;
+  font-variant-numeric: tabular-nums;
+}
+.receipt-result {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+.receipt-result strong {
+  color: var(--accent-dark);
+}
 .admin-lot-trace {
   display: flex;
   flex-wrap: wrap;
@@ -1414,6 +1551,15 @@ textarea {
   .admin-card-list {
     grid-template-columns: 1fr;
   }
+  .receipt-order-context {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .receipt-order-context > div:nth-child(2) {
+    border-right: 0;
+  }
+  .receipt-order-context > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
   .supplier-brand-summary {
     grid-template-columns: 1fr;
   }
@@ -1441,9 +1587,17 @@ textarea {
   .admin-header {
     padding-inline: 16px;
   }
-  .admin-context,
-  .admin-header > div:first-of-type {
+  .admin-context {
     display: none;
+  }
+  .admin-header > div:first-of-type strong {
+    font-size: 0.78rem;
+  }
+  .admin-branch-context {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .admin-user span {
     max-width: 150px;
@@ -1493,6 +1647,21 @@ textarea {
     align-items: flex-start;
     flex-direction: column;
     gap: 6px;
+  }
+  .receipt-order-context {
+    grid-template-columns: 1fr;
+  }
+  .receipt-order-context > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .receipt-order-context > div:last-child {
+    border-bottom: 0;
+  }
+  .receipt-lines__heading,
+  .receipt-result {
+    align-items: stretch;
+    flex-direction: column;
   }
   .variant-builder__controls {
     grid-template-columns: 1fr;

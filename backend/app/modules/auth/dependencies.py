@@ -32,6 +32,8 @@ class CurrentPrincipal:
     roles: frozenset[str]
     permissions: frozenset[str]
     session_id: str
+    id_sucursal: int | None = None
+    sucursal: str | None = None
 
 
 def build_request_audit_context(
@@ -116,6 +118,7 @@ async def get_current_principal(
 
     roles = await repository.get_role_names(user.id_usuario)
     permissions = await repository.get_effective_permissions(user.id_usuario)
+    employee_branch = await repository.get_employee_branch(user.id_usuario)
     await apply_audit_context(
         session,
         build_request_audit_context(
@@ -129,6 +132,8 @@ async def get_current_principal(
         roles=frozenset(roles),
         permissions=frozenset(permissions),
         session_id=claims.session_id,
+        id_sucursal=employee_branch[0] if employee_branch else None,
+        sucursal=employee_branch[1] if employee_branch else None,
     )
 
 

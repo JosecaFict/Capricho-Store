@@ -5,9 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import (
     Cliente,
+    Empleado,
     Permiso,
     Rol,
     RolPermiso,
+    Sucursal,
     Usuario,
     UsuarioPermiso,
     UsuarioRol,
@@ -33,6 +35,15 @@ class AuthRepository:
 
     async def get_user_by_id(self, user_id: int) -> Usuario | None:
         return await self.session.get(Usuario, user_id)
+
+    async def get_employee_branch(self, user_id: int) -> tuple[int, str] | None:
+        statement = (
+            select(Empleado.id_sucursal, Sucursal.nombre)
+            .join(Sucursal, Sucursal.id_sucursal == Empleado.id_sucursal)
+            .where(Empleado.id_usuario == user_id)
+        )
+        row = (await self.session.execute(statement)).one_or_none()
+        return (int(row[0]), str(row[1])) if row else None
 
     async def get_active_role_by_name(self, name: str) -> Rol | None:
         statement = select(Rol).where(Rol.nombre == name, Rol.activo.is_(True))
