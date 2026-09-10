@@ -28,7 +28,12 @@ from app.modules.inventory.models import (
     TransferenciaInventario,
 )
 from app.modules.inventory.repository import InventoryRepository
-from app.modules.inventory.schemas import ReceiptCreate, ReceiptDetailCreate
+from app.modules.inventory.schemas import (
+    PurchaseDetailCreate,
+    PurchaseOrderCreate,
+    ReceiptCreate,
+    ReceiptDetailCreate,
+)
 from app.modules.inventory.service import (
     PURCHASE_TRANSITIONS,
     TRANSFER_TRANSITIONS,
@@ -228,6 +233,44 @@ async def test_create_purchase_order_with_variants() -> None:
     )
     assert response.status_code == 201
     assert response.json()["detalles"][0]["cantidad"] == 10
+
+
+async def test_purchase_order_rejects_product_not_supplied_by_selected_supplier() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    supplier = Proveedor(id_proveedor=1, razon_social="Proveedor", activo=True)
+    branch = Sucursal(
+        id_sucursal=1,
+        id_ciudad=1,
+        nombre="Central",
+        direccion="Centro",
+        activo=True,
+    )
+    variant = VarianteProducto(
+        id_variante=1,
+        id_producto=8,
+        id_talla=1,
+        id_color=1,
+        sku="SKU-8-S",
+        activo=True,
+    )
+
+    async def get_entity(model, identity):
+        return {Proveedor: supplier, Sucursal: branch, VarianteProducto: variant}.get(model)
+
+    repository.get.side_effect = get_entity
+    repository.supplier_product_link.return_value = None
+    service = InventoryService(session, repository)
+    payload = PurchaseOrderCreate(
+        id_proveedor=1,
+        id_sucursal=1,
+        detalles=[PurchaseDetailCreate(id_variante=1, cantidad=2)],
+    )
+
+    with pytest.raises(InvalidInventoryOperationError):
+        await service.create_purchase_order(payload, AuditContext(usuario_id=99))
+
+    repository.add.assert_not_awaited()
 
 
 def test_valid_purchase_state_transition() -> None:

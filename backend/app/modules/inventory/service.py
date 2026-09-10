@@ -165,7 +165,16 @@ class InventoryService:
         if len({item.id_variante for item in payload.detalles}) != len(payload.detalles):
             raise InventoryConflictError("A variant cannot be repeated in an order")
         for detail in payload.detalles:
-            await self._require_active(VarianteProducto, detail.id_variante, "Variant")
+            variant = await self._require_active(
+                VarianteProducto, detail.id_variante, "Variant"
+            )
+            supplier_product = await self.repository.supplier_product_link(
+                payload.id_proveedor, variant.id_producto
+            )
+            if supplier_product is None or not supplier_product.activo:
+                raise InvalidInventoryOperationError(
+                    "El producto seleccionado no está asociado con este proveedor"
+                )
         if not supplier.activo:
             raise InvalidInventoryOperationError("Supplier is inactive")
         try:

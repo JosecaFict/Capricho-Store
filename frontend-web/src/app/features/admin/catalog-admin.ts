@@ -575,7 +575,7 @@ export class ProductsAdmin implements OnInit {
           }
           <label class="field"
             ><span>Tipo</span
-            ><select formControlName="tipo">
+            ><select formControlName="tipo" (change)="syncImageColorSelection()">
               <option>CATALOGO</option>
               <option>MINIATURA</option>
               <option>PROMOCIONAL</option>
@@ -584,10 +584,8 @@ export class ProductsAdmin implements OnInit {
             ><span>Color de la prenda</span
             ><select formControlName="id_color">
               <option value="">Seleccionar color</option>
-              @for (c of productColors(); track c['id_color']) {
-                @if (c['active']) {
-                  <option [value]="c['id_color']">{{ c['color'] }}</option>
-                }
+              @for (c of availableImageColors(); track c['id_color']) {
+                <option [value]="c['id_color']">{{ c['color'] }}</option>
               }
             </select></label
           ><label class="field"
@@ -601,22 +599,68 @@ export class ProductsAdmin implements OnInit {
             {{ uploadingImage() ? 'Subiendo...' : 'Subir imagen' }}
           </button>
         </form>
+        @if (imageForm.value.tipo === 'CATALOGO' && availableImageColors().length === 0) {
+          <p class="admin-complete-state">
+            Todos los colores ya tienen una imagen de catálogo. Puedes reemplazar o eliminar una
+            desde su ficha.
+          </p>
+        }
         <div class="admin-image-list">
           @for (i of images(); track i['id_imagen']) {
-            <span>
+            <article class="admin-image-card">
               <img
                 [src]="i['secure_url']"
                 [alt]="'Imagen ' + i['tipo'] + ' del producto'"
                 (error)="handleImageError($event)"
               />
-              <a [href]="i['secure_url']" target="_blank" rel="noopener">{{ i['tipo'] }}</a>
-              <small>{{ colorName(i['id_color']) }}</small>
+              <div class="admin-image-card__body">
+                <div>
+                  <a [href]="i['secure_url']" target="_blank" rel="noopener">{{ i['tipo'] }}</a>
+                  <small>{{ colorName(i['id_color']) }} · Orden {{ i['orden'] }}</small>
+                </div>
+                @if (i['es_principal']) {
+                  <span class="status-chip">Principal</span>
+                }
+              </div>
               @if (canEdit()) {
-                <button class="button button--quiet" (click)="toggleImage(i)">
-                  {{ i['es_principal'] ? 'Quitar principal' : 'Marcar principal' }}
-                </button>
-              }</span
-            >
+                <div class="admin-image-card__actions">
+                  <label
+                    class="button button--quiet"
+                    [class.is-disabled]="replacingImageId() === i['id_imagen']"
+                  >
+                    {{ replacingImageId() === i['id_imagen'] ? 'Reemplazando...' : 'Reemplazar' }}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      [disabled]="replacingImageId() !== null || deletingImageId() !== null"
+                      (change)="replaceImage(i, $event)"
+                    />
+                  </label>
+                  <button class="button button--quiet" (click)="toggleImage(i)">
+                    {{ i['es_principal'] ? 'Quitar principal' : 'Marcar principal' }}
+                  </button>
+                  @if (confirmDeleteImageId() === i['id_imagen']) {
+                    <button
+                      class="button button--danger"
+                      [disabled]="deletingImageId() !== null"
+                      (click)="deleteImage(i)"
+                    >
+                      {{ deletingImageId() === i['id_imagen'] ? 'Eliminando...' : 'Confirmar' }}
+                    </button>
+                    <button class="button button--quiet" (click)="confirmDeleteImageId.set(null)">
+                      Cancelar
+                    </button>
+                  } @else {
+                    <button
+                      class="button button--quiet button--danger-text"
+                      (click)="confirmDeleteImageId.set(i['id_imagen'])"
+                    >
+                      Eliminar ×
+                    </button>
+                  }
+                </div>
+              }
+            </article>
           }
         </div>
       </section>
@@ -696,8 +740,8 @@ export class ProductsAdmin implements OnInit {
                   <button (click)="removeSeason(s['id_temporada'])" aria-label="Quitar temporada">
                     ×
                   </button>
-                }</span
-              >
+                }
+              </span>
             }
           </div>
           <form [formGroup]="relationForm" class="admin-inline-form">
@@ -729,8 +773,8 @@ export class ProductsAdmin implements OnInit {
                   >
                     ×
                   </button>
-                }</span
-              >
+                }
+              </span>
             }
           </div>
         </section>
@@ -763,6 +807,9 @@ export class ProductAdminDetail implements OnInit {
   selectedImage = signal<File | null>(null);
   imagePreview = signal<string | null>(null);
   uploadingImage = signal(false);
+  replacingImageId = signal<number | null>(null);
+  deletingImageId = signal<number | null>(null);
+  confirmDeleteImageId = signal<number | null>(null);
   savingVariants = signal(false);
   selectedSizeIds = signal<number[]>([]);
   message = signal('');
@@ -842,6 +889,7 @@ export class ProductAdminDetail implements OnInit {
         this.collections.set(v.collections);
         this.productSeasons.set(v.productSeasons);
         this.productCollections.set(v.productCollections);
+        this.syncImageColorSelection();
       },
       error: (e) => this.fail(e),
     });
@@ -984,6 +1032,62 @@ export class ProductAdminDetail implements OnInit {
       },
       error: (e) => {
         this.uploadingImage.set(false);
+        this.fail(e);
+      },
+    });
+  }
+  availableImageColors(): Entity[] {
+    const activeColors = this.productColors().filter((color) => color['active']);
+    if (this.imageForm.value.tipo !== 'CATALOGO') return activeColors;
+    const colorsWithCatalogImage = new Set(
+      this.images()
+        .filter((image) => image['tipo'] === 'CATALOGO' && image['id_color'] != null)
+        .map((image) => Number(image['id_color'])),
+    );
+    return activeColors.filter((color) => !colorsWithCatalogImage.has(Number(color['id_color'])));
+  }
+  syncImageColorSelection() {
+    const selected = Number(this.imageForm.value.id_color);
+    const available = this.availableImageColors();
+    if (!available.some((color) => Number(color['id_color']) === selected)) {
+      this.imageForm.controls.id_color.setValue(null);
+    }
+  }
+  replaceImage(image: Entity, event: Event) {
+    if (!this.canEdit() || this.replacingImageId() !== null) return;
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const payload = new FormData();
+    payload.append('file', file);
+    this.replacingImageId.set(Number(image['id_imagen']));
+    this.api.putForm(`product-images/${image['id_imagen']}/replace`, payload).subscribe({
+      next: () => {
+        this.replacingImageId.set(null);
+        input.value = '';
+        this.ok(`Imagen de ${this.colorName(image['id_color'])} reemplazada.`);
+        this.load();
+      },
+      error: (e) => {
+        this.replacingImageId.set(null);
+        input.value = '';
+        this.fail(e);
+      },
+    });
+  }
+  deleteImage(image: Entity) {
+    if (!this.canEdit() || this.deletingImageId() !== null) return;
+    const imageId = Number(image['id_imagen']);
+    this.deletingImageId.set(imageId);
+    this.api.delete(`product-images/${imageId}`).subscribe({
+      next: () => {
+        this.deletingImageId.set(null);
+        this.confirmDeleteImageId.set(null);
+        this.ok(`Imagen de ${this.colorName(image['id_color'])} eliminada.`);
+        this.load();
+      },
+      error: (e) => {
+        this.deletingImageId.set(null);
         this.fail(e);
       },
     });

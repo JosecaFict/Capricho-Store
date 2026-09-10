@@ -544,6 +544,65 @@ async def upload_image(
         raise
 
 
+@router.put("/product-images/{image_id}/replace", response_model=ProductImageResponse)
+async def replace_image(
+    image_id: int,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("productos.editar"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    storage: Annotated[CloudinaryStorage, Depends(get_cloudinary_storage)],
+    file: Annotated[UploadFile, File()],
+):
+    if file.content_type not in ALLOWED_PRODUCT_IMAGE_TYPES:
+        raise InvalidCatalogDataError("Usa una imagen JPG, PNG o WebP")
+    content = await file.read(MAX_PRODUCT_IMAGE_BYTES + 1)
+    await file.close()
+    if not content:
+        raise InvalidCatalogDataError("El archivo de imagen está vacío")
+    if len(content) > MAX_PRODUCT_IMAGE_BYTES:
+        raise InvalidCatalogDataError("La imagen no debe superar 5 MB")
+    current = await service.get_image(image_id)
+    try:
+        uploaded = await storage.upload_product_image(
+            product_id=current.id_producto,
+            content=content,
+            filename=file.filename or "producto",
+            content_type=file.content_type,
+        )
+    except CloudinaryError as exc:
+        raise CatalogStorageError(str(exc)) from exc
+    try:
+        replaced = await service.update_image(
+            image_id,
+            ProductImageUpdate(
+                public_id=uploaded.public_id,
+                secure_url=uploaded.secure_url,
+                formato=uploaded.formato,
+                ancho_px=uploaded.ancho_px,
+                alto_px=uploaded.alto_px,
+            ),
+            audit_context_for(request, principal),
+        )
+    except Exception:
+        await storage.destroy(uploaded.public_id)
+        raise
+    await storage.destroy(current.public_id)
+    return replaced
+
+
+@router.delete("/product-images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_image(
+    image_id: int,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("productos.editar"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    storage: Annotated[CloudinaryStorage, Depends(get_cloudinary_storage)],
+):
+    public_id = await service.delete_image(image_id, audit_context_for(request, principal))
+    await storage.destroy(public_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.patch("/product-images/{image_id}", response_model=ProductImageResponse)
 async def update_image(
     image_id: int,

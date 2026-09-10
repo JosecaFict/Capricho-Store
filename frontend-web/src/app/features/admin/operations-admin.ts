@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
@@ -57,6 +57,10 @@ abstract class BaseAdmin {
             ><input type="checkbox" formControlName="activo" /> Activo</label
           ><button class="button button--primary" [disabled]="form.invalid">Guardar</button>
         </form>
+        <p class="admin-help">
+          Usa la razón social legal para facturación. El nombre comercial puede corresponder a una
+          marca directa o a un distribuidor multimarca.
+        </p>
       </section>
     }
     <div class="admin-table-wrap">
@@ -163,33 +167,81 @@ export class SuppliersAdmin extends BaseAdmin implements OnInit {
     @if (supplier(); as s) {
       <header class="admin-page-heading">
         <div>
-          <p class="eyebrow">Proveedor #{{ s['id_proveedor'] }}</p>
           <h1>{{ s['razon_social'] }}</h1>
           <p>{{ s['nombre_comercial'] || 'Sin nombre comercial' }}</p>
         </div>
       </header>
+      <section class="supplier-brand-summary" aria-labelledby="supplier-brands-title">
+        <div>
+          <h2 id="supplier-brands-title">Marcas distribuidas</h2>
+          <p>Se calculan a partir de los productos asociados a este proveedor.</p>
+        </div>
+        <div class="supplier-brand-list">
+          @for (brand of distributedBrands(); track brand) {
+            <span>{{ brand }}</span>
+          } @empty {
+            <span class="is-empty">Sin marcas asociadas</span>
+          }
+        </div>
+      </section>
       <section class="admin-panel">
         <h2>Productos asociados</h2>
+        <p class="admin-help">
+          Un distribuidor puede abastecer productos de varias marcas. Asocia cada producto que pueda
+          incluirse en una orden de compra.
+        </p>
         <form [formGroup]="form" (ngSubmit)="add()" class="admin-inline-form">
           <label class="field"
-            ><span>ID producto</span
-            ><input type="number" min="1" formControlName="id_producto" /></label
+            ><span>Producto y marca</span
+            ><select formControlName="id_producto">
+              <option value="">Seleccionar producto</option>
+              @for (product of availableProducts(); track product['id_producto']) {
+                <option [value]="product['id_producto']">
+                  {{ product['marca'] }} — {{ product['nombre'] }}
+                </option>
+              }
+            </select></label
           ><label class="field"
             ><span>Código del proveedor</span><input formControlName="codigo_proveedor" /></label
-          ><button class="button button--primary">Asociar</button>
+          ><button class="button button--primary" [disabled]="!canManage() || form.invalid">
+            Asociar producto
+          </button>
         </form>
+        @if (availableProducts().length === 0 && catalogProducts().length > 0) {
+          <p class="admin-complete-state">Todos los productos disponibles ya están asociados.</p>
+        }
         <div class="permission-list">
           @for (p of products(); track p['id_producto']) {
             <div>
               <span
                 ><strong>{{ p['producto'] }}</strong
-                ><small>{{ p['codigo_proveedor'] || 'Sin código externo' }}</small></span
-              ><button class="button button--quiet" (click)="remove(p['id_producto'])">
-                Quitar asociación
-              </button>
+                ><small
+                  >{{ productBrand(p['id_producto']) }} ·
+                  {{ p['codigo_proveedor'] || 'Sin código externo' }}</small
+                ></span
+              >
+              @if (canManage()) {
+                @if (confirmRemoveProductId() === p['id_producto']) {
+                  <span class="admin-row-actions">
+                    <button class="button button--danger" (click)="remove(p['id_producto'])">
+                      Confirmar
+                    </button>
+                    <button class="button button--quiet" (click)="confirmRemoveProductId.set(null)">
+                      Cancelar
+                    </button>
+                  </span>
+                } @else {
+                  <button
+                    class="button button--quiet button--danger-text"
+                    (click)="confirmRemoveProductId.set(p['id_producto'])"
+                  >
+                    Quitar asociación
+                  </button>
+                }
+              }
             </div>
           } @empty {
-            <p>No hay productos asociados.</p>
+            <p class="admin-empty">No hay productos asociados todavía.</p>
           }
         </div>
         <p class="admin-help">
@@ -204,9 +256,25 @@ export class SuppliersAdmin extends BaseAdmin implements OnInit {
 })
 export class SupplierDetail extends BaseAdmin implements OnInit {
   private route = inject(ActivatedRoute);
+  private perms = inject(PermissionService);
   id = Number(this.route.snapshot.paramMap.get('id'));
   supplier = signal<Entity | null>(null);
   products = signal<Entity[]>([]);
+  catalogProducts = signal<Entity[]>([]);
+  confirmRemoveProductId = signal<number | null>(null);
+  canManage = () => this.perms.has('proveedores.gestionar');
+  availableProducts = computed(() => {
+    const associated = new Set(this.products().map((product) => Number(product['id_producto'])));
+    return this.catalogProducts().filter(
+      (product) => product['activo'] && !associated.has(Number(product['id_producto'])),
+    );
+  });
+  distributedBrands = computed(() => {
+    const brands = this.products()
+      .map((product) => this.productBrand(product['id_producto']))
+      .filter((brand) => brand !== 'Marca sin identificar');
+    return [...new Set(brands)].sort((a, b) => a.localeCompare(b, 'es'));
+  });
   form = this.fb.group({
     id_producto: [null as number | null, Validators.required],
     codigo_proveedor: [''],
@@ -215,14 +283,21 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
     this.load();
   }
   load() {
-    this.api
-      .get(`suppliers/${this.id}`)
-      .subscribe({ next: (v) => this.supplier.set(v), error: (e) => this.fail(e) });
-    this.api
-      .list(`suppliers/${this.id}/products`)
-      .subscribe({ next: (v) => this.products.set(v), error: (e) => this.fail(e) });
+    forkJoin({
+      supplier: this.api.get(`suppliers/${this.id}`),
+      products: this.api.list(`suppliers/${this.id}/products`),
+      catalog: this.api.products({ page_size: 100 }),
+    }).subscribe({
+      next: (value) => {
+        this.supplier.set(value.supplier);
+        this.products.set(value.products);
+        this.catalogProducts.set(value.catalog.items);
+      },
+      error: (e) => this.fail(e),
+    });
   }
   add() {
+    if (!this.canManage() || this.form.invalid) return;
     const v = this.form.getRawValue();
     this.api
       .post(`suppliers/${this.id}/products/${v.id_producto}`, {
@@ -230,6 +305,7 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
       })
       .subscribe({
         next: () => {
+          this.form.reset({ id_producto: null, codigo_proveedor: '' });
           this.load();
           this.ok('Producto asociado.');
         },
@@ -237,13 +313,22 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
       });
   }
   remove(id: number) {
+    if (!this.canManage()) return;
     this.api.delete(`suppliers/${this.id}/products/${id}`).subscribe({
       next: () => {
+        this.confirmRemoveProductId.set(null);
         this.load();
         this.ok('Asociación eliminada.');
       },
       error: (e) => this.fail(e),
     });
+  }
+  productBrand(productId: number): string {
+    return String(
+      this.catalogProducts().find(
+        (product) => Number(product['id_producto']) === Number(productId),
+      )?.['marca'] || 'Marca sin identificar',
+    );
   }
 }
 
@@ -270,7 +355,7 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
         <form [formGroup]="form" (ngSubmit)="save()" class="admin-form-grid">
           <label class="field"
             ><span>Proveedor</span
-            ><select formControlName="id_proveedor">
+            ><select formControlName="id_proveedor" (change)="selectSupplier()">
               <option value="">Seleccionar proveedor</option>
               @for (supplier of suppliers(); track supplier['id_proveedor']) {
                 <option [value]="supplier['id_proveedor']">{{ supplier['razon_social'] }}</option>
@@ -290,14 +375,60 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
           ><label class="field field--wide"
             ><span>Observación</span><textarea formControlName="observacion"></textarea>
           </label>
+          @if (!form.value.id_proveedor) {
+            <p class="admin-complete-state field--wide">
+              Selecciona un proveedor para mostrar únicamente los productos que distribuye.
+            </p>
+          } @else if (loadingSupplierProducts()) {
+            <p class="admin-complete-state field--wide">Cargando productos del proveedor…</p>
+          } @else if (supplierProducts().length === 0) {
+            <p class="notice notice--error field--wide">
+              Este proveedor no tiene productos asociados. Configúralos primero desde Proveedores.
+            </p>
+          }
           <div formArrayName="detalles" class="admin-repeater field--wide">
             @for (row of details.controls; track $index) {
-              <div [formGroupName]="$index">
+              <div [formGroupName]="$index" class="purchase-line">
+                <header class="purchase-line__heading">
+                  <strong>Producto {{ $index + 1 }}</strong>
+                  <button
+                    type="button"
+                    class="button button--quiet button--danger-text"
+                    [disabled]="details.length === 1"
+                    (click)="removeRow($index)"
+                  >
+                    Quitar línea
+                  </button>
+                </header>
                 <label class="field"
+                  ><span>Marca</span
+                  ><select formControlName="marca" (change)="changeDetailFilter($index, 'marca')">
+                    <option value="">Seleccionar marca</option>
+                    @for (brand of brandsForRow($index); track brand) {
+                      <option [value]="brand">{{ brand }}</option>
+                    }
+                  </select></label
+                ><label class="field"
+                  ><span>Color</span
+                  ><select formControlName="color" (change)="changeDetailFilter($index, 'color')">
+                    <option value="">Seleccionar color</option>
+                    @for (color of colorsForRow($index); track color) {
+                      <option [value]="color">{{ color }}</option>
+                    }
+                  </select></label
+                ><label class="field"
+                  ><span>Talla</span
+                  ><select formControlName="talla" (change)="changeDetailFilter($index, 'talla')">
+                    <option value="">Seleccionar talla</option>
+                    @for (size of sizesForRow($index); track size) {
+                      <option [value]="size">{{ size }}</option>
+                    }
+                  </select></label
+                ><label class="field"
                   ><span>Producto y variante</span
                   ><select formControlName="id_variante">
                     <option value="">Seleccionar variante</option>
-                    @for (variant of variants(); track variant['id_variante']) {
+                    @for (variant of variantsForRow($index); track variant['id_variante']) {
                       <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
                     }
                   </select></label
@@ -310,21 +441,17 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
                     type="number"
                     min="0"
                     step=".01"
-                    formControlName="costo_unitario_estimado" /></label
-                ><button
-                  type="button"
-                  class="button button--quiet"
-                  (click)="details.removeAt($index)"
-                >
-                  Quitar
-                </button>
+                    formControlName="costo_unitario_estimado"
+                /></label>
               </div>
             }
           </div>
           <div class="admin-form-actions">
             <button type="button" class="button button--secondary" (click)="addRow()">
               Añadir línea</button
-            ><button class="button button--primary" [disabled]="form.invalid">Crear orden</button>
+            ><button class="button button--primary" [disabled]="form.invalid || savingOrder()">
+              {{ savingOrder() ? 'Creando orden…' : 'Crear orden' }}
+            </button>
           </div>
         </form>
       </section>
@@ -362,6 +489,10 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
   suppliers = signal<Entity[]>([]);
   branches = signal<Entity[]>([]);
   variants = signal<Entity[]>([]);
+  catalogProducts = signal<Entity[]>([]);
+  supplierProducts = signal<Entity[]>([]);
+  loadingSupplierProducts = signal(false);
+  savingOrder = signal(false);
   show = signal(false);
   form = this.fb.group({
     id_proveedor: [null as number | null, Validators.required],
@@ -383,18 +514,20 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
       suppliers: this.api.list('suppliers'),
       branches: this.api.list('branches'),
       variants: this.api.list('variants'),
+      catalog: this.api.products({ page_size: 100 }),
     }).subscribe({
       next: (v) => {
         this.orders.set(v.orders);
         this.suppliers.set(v.suppliers);
         this.branches.set(v.branches);
         this.variants.set(v.variants);
+        this.catalogProducts.set(v.catalog.items);
       },
       error: (e) => this.fail(e),
     });
   }
   variantLabel(variant: Entity) {
-    return `${variant['producto']} - ${variant['talla']} / ${variant['color']} (${variant['sku']})`;
+    return `${variant['producto']} — ${variant['sku']}`;
   }
   supplierName(id: number) {
     return (
@@ -410,20 +543,148 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
   addRow() {
     this.details.push(
       this.fb.group({
+        marca: ['', Validators.required],
+        color: ['', Validators.required],
+        talla: ['', Validators.required],
         id_variante: [null, Validators.required],
         cantidad: [1, [Validators.required, Validators.min(1)]],
         costo_unitario_estimado: [null],
       }),
     );
   }
+  removeRow(index: number) {
+    if (this.details.length > 1) this.details.removeAt(index);
+  }
+  selectSupplier() {
+    const supplierId = Number(this.form.value.id_proveedor);
+    this.supplierProducts.set([]);
+    this.details.controls.forEach((_, index) => this.resetDetailFilters(index));
+    if (!supplierId) return;
+    this.loadingSupplierProducts.set(true);
+    this.api.list(`suppliers/${supplierId}/products`).subscribe({
+      next: (products) => {
+        if (Number(this.form.value.id_proveedor) !== supplierId) return;
+        this.supplierProducts.set(products.filter((product) => product['activo']));
+        this.loadingSupplierProducts.set(false);
+      },
+      error: (e) => {
+        if (Number(this.form.value.id_proveedor) !== supplierId) return;
+        this.loadingSupplierProducts.set(false);
+        this.fail(e);
+      },
+    });
+  }
+  brandsForRow(index: number): string[] {
+    return this.uniqueSorted(
+      this.eligibleVariants(index).map((variant) => this.variantBrand(variant)),
+    );
+  }
+  colorsForRow(index: number): string[] {
+    const brand = this.detailValue(index, 'marca');
+    return this.uniqueSorted(
+      this.eligibleVariants(index)
+        .filter((variant) => this.variantBrand(variant) === brand)
+        .map((variant) => String(variant['color'])),
+    );
+  }
+  sizesForRow(index: number): string[] {
+    const brand = this.detailValue(index, 'marca');
+    const color = this.detailValue(index, 'color');
+    return this.uniqueSizes(
+      this.eligibleVariants(index)
+        .filter((variant) => this.variantBrand(variant) === brand && variant['color'] === color)
+        .map((variant) => String(variant['talla'])),
+    );
+  }
+  variantsForRow(index: number): Entity[] {
+    const brand = this.detailValue(index, 'marca');
+    const color = this.detailValue(index, 'color');
+    const size = this.detailValue(index, 'talla');
+    if (!brand || !color || !size) return [];
+    return this.eligibleVariants(index).filter(
+      (variant) =>
+        this.variantBrand(variant) === brand &&
+        variant['color'] === color &&
+        variant['talla'] === size,
+    );
+  }
+  changeDetailFilter(index: number, field: 'marca' | 'color' | 'talla') {
+    const row = this.details.at(index);
+    if (field === 'marca') row.patchValue({ color: '', talla: '', id_variante: null });
+    if (field === 'color') row.patchValue({ talla: '', id_variante: null });
+    if (field === 'talla') row.patchValue({ id_variante: null });
+  }
+  private resetDetailFilters(index: number) {
+    this.details.at(index).patchValue({
+      marca: '',
+      color: '',
+      talla: '',
+      id_variante: null,
+    });
+  }
+  private eligibleVariants(index: number): Entity[] {
+    const productIds = new Set(
+      this.supplierProducts().map((product) => Number(product['id_producto'])),
+    );
+    const selectedElsewhere = new Set(
+      this.details.controls
+        .filter((_, detailIndex) => detailIndex !== index)
+        .map((control) => Number(control.get('id_variante')?.value))
+        .filter(Boolean),
+    );
+    return this.variants().filter(
+      (variant) =>
+        productIds.has(Number(variant['id_producto'])) &&
+        !selectedElsewhere.has(Number(variant['id_variante'])),
+    );
+  }
+  private variantBrand(variant: Entity): string {
+    return String(
+      this.catalogProducts().find(
+        (product) => Number(product['id_producto']) === Number(variant['id_producto']),
+      )?.['marca'] || 'Marca sin identificar',
+    );
+  }
+  private detailValue(index: number, field: string): string {
+    return String(this.details.at(index).get(field)?.value || '');
+  }
+  private uniqueSorted(values: string[]): string[] {
+    return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'es'));
+  }
+  private uniqueSizes(values: string[]): string[] {
+    const order = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+    return [...new Set(values)].sort((a, b) => {
+      const aIndex = order.indexOf(a.toUpperCase());
+      const bIndex = order.indexOf(b.toUpperCase());
+      if (aIndex === -1 || bIndex === -1) return a.localeCompare(b, 'es', { numeric: true });
+      return aIndex - bIndex;
+    });
+  }
   save() {
-    this.api.post('purchase-orders', this.form.getRawValue()).subscribe({
+    if (!this.canManage() || this.form.invalid || this.savingOrder()) return;
+    const raw = this.form.getRawValue();
+    const payload = {
+      ...raw,
+      fecha_estimada: raw.fecha_estimada || null,
+      observacion: raw.observacion?.trim() || null,
+      detalles: (raw.detalles as Entity[]).map((detail) => ({
+        id_variante: detail['id_variante'],
+        cantidad: detail['cantidad'],
+        costo_unitario_estimado: detail['costo_unitario_estimado'],
+      })),
+    };
+    this.savingOrder.set(true);
+    this.api.post('purchase-orders', payload).subscribe({
       next: () => {
+        this.savingOrder.set(false);
         this.show.set(false);
         this.load();
         this.ok('Orden creada.');
       },
-      error: (e) => this.fail(e),
+      error: (e) => {
+        this.savingOrder.set(false);
+        this.fail(e);
+      },
     });
   }
   nextStates(s: string) {

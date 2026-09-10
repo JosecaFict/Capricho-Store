@@ -722,6 +722,50 @@ async def test_upload_rejects_unsupported_product_image() -> None:
     assert response.status_code == 400
 
 
+async def test_replace_product_image_in_cloudinary() -> None:
+    service = AsyncMock()
+    storage = AsyncMock()
+    service.get_image.return_value = SimpleNamespace(
+        id_producto=1, public_id="catalog/polera-anterior"
+    )
+    service.update_image.return_value = IMAGE
+    storage.upload_product_image.return_value = CloudinaryUpload(
+        public_id="capricho-store/productos/1/polera-nueva",
+        secure_url="https://res.cloudinary.com/demo/image/upload/polera-nueva.webp",
+        formato="webp",
+        ancho_px=900,
+        alto_px=1200,
+    )
+    response = await call_catalog(
+        "PUT",
+        "/api/v1/product-images/1/replace",
+        service=service,
+        storage=storage,
+        principal=make_principal("productos.editar"),
+        files={"file": ("polera-nueva.webp", b"new-image", "image/webp")},
+    )
+    assert response.status_code == 200
+    payload = service.update_image.await_args.args[1]
+    assert payload.public_id.endswith("polera-nueva")
+    storage.destroy.assert_awaited_once_with("catalog/polera-anterior")
+
+
+async def test_delete_product_image_from_catalog_and_cloudinary() -> None:
+    service = AsyncMock()
+    storage = AsyncMock()
+    service.delete_image.return_value = "catalog/polera-blanca"
+    response = await call_catalog(
+        "DELETE",
+        "/api/v1/product-images/4",
+        service=service,
+        storage=storage,
+        principal=make_principal("productos.editar"),
+    )
+    assert response.status_code == 204
+    service.delete_image.assert_awaited_once()
+    storage.destroy.assert_awaited_once_with("catalog/polera-blanca")
+
+
 async def test_only_one_principal_image_is_kept() -> None:
     session = AsyncMock()
     repository = AsyncMock()
@@ -809,6 +853,8 @@ def test_no_physical_delete_for_catalog_resources() -> None:
     allowed_relations = {
         "/api/v1/products/{product_id}/seasons/{season_id}",
         "/api/v1/products/{product_id}/collections/{collection_id}",
+        # Product images are external Cloudinary assets explicitly managed by the editor.
+        "/api/v1/product-images/{image_id}",
         "/api/v1/suppliers/{supplier_id}/products/{product_id}",
         "/api/v1/employees/{employee_id}/permissions/{permission_id}",
     }

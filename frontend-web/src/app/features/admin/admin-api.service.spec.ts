@@ -25,4 +25,14 @@ describe('AdminApiService', () => {
     expect(request.request.params.get('stock_bajo')).toBe('false');
     request.flush([]);
   });
+
+  it('sends multipart image replacements with PUT', () => {
+    const payload = new FormData();
+    payload.append('file', new Blob(['image'], { type: 'image/webp' }), 'producto.webp');
+    service.putForm('product-images/4/replace', payload).subscribe();
+    const request = http.expectOne(`${API_BASE_URL}/product-images/4/replace`);
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toBe(payload);
+    request.flush({});
+  });
 });

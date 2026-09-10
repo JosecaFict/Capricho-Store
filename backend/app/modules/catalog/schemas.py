@@ -476,6 +476,7 @@ class ProductImageCreate(BaseModel):
 
 class ProductImageUpdate(BaseModel):
     id_color: int | None = Field(default=None, gt=0)
+    public_id: str | None = Field(default=None, min_length=1, max_length=255)
     secure_url: HttpUrl | None = None
     tipo: ImageType | None = None
     orden: int | None = Field(default=None, gt=0)

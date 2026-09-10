@@ -479,6 +479,12 @@ class CatalogService:
         images = await self.repository.list_images(product_id)
         return [self._image_response(image) for image in images]
 
+    async def get_image(self, image_id: int) -> ProductImageResponse:
+        image = await self.repository.get_entity(ImagenProducto, image_id)
+        if image is None:
+            raise CatalogNotFoundError("Product image not found")
+        return self._image_response(image)
+
     async def create_image(
         self, product_id: int, payload: ProductImageCreate, audit_context: AuditContext
     ) -> ProductImageResponse:
@@ -540,6 +546,14 @@ class CatalogService:
             await self.session.rollback()
             raise
         return self._image_response(image)
+
+    async def delete_image(self, image_id: int, audit_context: AuditContext) -> str:
+        image = await self.repository.get_entity(ImagenProducto, image_id)
+        if image is None:
+            raise CatalogNotFoundError("Product image not found")
+        public_id = image.public_id
+        await self._mutate(audit_context, self.repository.remove(image))
+        return public_id
 
     async def list_product_seasons(self, product_id: int) -> list[Temporada]:
         await self._require_product(product_id)
