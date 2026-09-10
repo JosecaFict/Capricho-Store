@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
@@ -303,6 +303,8 @@ export class MasterDataAdmin implements OnInit {
             <th>Producto</th>
             <th>Categoría / público</th>
             <th>Precio</th>
+            <th>Tallas</th>
+            <th>Colores</th>
             <th>Variantes</th>
             <th>Estado</th>
             <th>Acción</th>
@@ -317,6 +319,18 @@ export class MasterDataAdmin implements OnInit {
               </td>
               <td>{{ p['categoria'] }} · {{ p['publico_objetivo'] }}</td>
               <td>{{ p['precio_actual'] == null ? 'Sin precio' : 'Bs ' + p['precio_actual'] }}</td>
+              <td>{{ uniqueCount(p['variantes'], 'id_talla') }}</td>
+              <td>
+                <span class="admin-color-summary">
+                  @for (color of uniqueColors(p['variantes']); track color['id_color']) {
+                    <i
+                      [style.background]="color['codigo_hex'] || '#d8dadd'"
+                      [title]="color['color']"
+                    ></i>
+                  }
+                  <small>{{ uniqueCount(p['variantes'], 'id_color') }}</small>
+                </span>
+              </td>
               <td>{{ p['variantes']?.length || 0 }}</td>
               <td>{{ p['activo'] ? 'ACTIVO' : 'INACTIVO' }}</td>
               <td class="admin-row-actions">
@@ -398,6 +412,15 @@ export class ProductsAdmin implements OnInit {
       error: (e) => this.message.set(this.errs.message(e)),
     });
   }
+  uniqueCount(items: Entity[] | undefined, key: string): number {
+    return new Set((items || []).map((item) => item[key])).size;
+  }
+  uniqueColors(items: Entity[] | undefined): Entity[] {
+    return (items || []).filter(
+      (item, index, all) =>
+        all.findIndex((other) => other['id_color'] === item['id_color']) === index,
+    );
+  }
 }
 
 @Component({
@@ -423,7 +446,7 @@ export class ProductsAdmin implements OnInit {
             <label class="field"
               ><span>Nuevo precio</span
               ><input type="number" min="0" step=".01" formControlName="precio" /></label
-            ><button class="button button--primary">Actualizar</button>
+            ><button class="button button--primary" [disabled]="!canEdit()">Actualizar</button>
           </form>
           <div class="admin-timeline">
             @for (x of prices(); track x['id_historial_precio']) {
@@ -437,40 +460,91 @@ export class ProductsAdmin implements OnInit {
             }
           </div>
         </section>
-        <section class="admin-panel">
-          <h2>Variantes</h2>
-          <form
-            [formGroup]="variantForm"
-            (ngSubmit)="addVariant()"
-            class="admin-form-grid admin-form-grid--two"
-          >
-            <label class="field"
-              ><span>Talla</span
-              ><select formControlName="id_talla">
+        <section class="admin-panel admin-panel--variants">
+          <h2>Variantes por color</h2>
+          <p class="admin-help">
+            Elige un color, marca las tallas disponibles y crea todas sus combinaciones. El stock se
+            registra después, por sucursal, mediante recepciones de compra.
+          </p>
+          <form [formGroup]="variantForm" (ngSubmit)="addVariants()" class="variant-builder">
+            <div class="variant-builder__controls">
+              <label class="field"
+                ><span>Color</span
+                ><select formControlName="id_color" (change)="prepareColor()">
+                  <option value="">Seleccionar color</option>
+                  @for (c of colors(); track c['id_color']) {
+                    <option [value]="c['id_color']">{{ c['nombre'] }}</option>
+                  }
+                </select></label
+              ><label class="field"
+                ><span>Prefijo SKU del color</span
+                ><input formControlName="sku_base" placeholder="RL-POLO-CF-AZM"
+              /></label>
+            </div>
+            @if (variantForm.value.id_color) {
+              <div class="variant-matrix" role="group" aria-label="Tallas para el color elegido">
                 @for (s of sizes(); track s['id_talla']) {
-                  <option [value]="s['id_talla']">{{ s['codigo'] }}</option>
+                  @if (variantFor(s['id_talla']); as existing) {
+                    <div class="variant-matrix__row is-existing">
+                      <span class="variant-size">{{ s['codigo'] }}</span>
+                      <span
+                        ><strong>{{ existing['sku'] }}</strong
+                        ><small>Variante existente</small></span
+                      >
+                      <span class="status-chip" [class.status-chip--muted]="!existing['activo']">
+                        {{ existing['activo'] ? 'Activa' : 'Inactiva' }}
+                      </span>
+                      @if (canEdit()) {
+                        <button
+                          type="button"
+                          class="button button--quiet"
+                          (click)="toggleVariant(existing)"
+                        >
+                          {{ existing['activo'] ? 'Desactivar' : 'Reactivar' }}
+                        </button>
+                      }
+                    </div>
+                  } @else {
+                    <label class="variant-matrix__row">
+                      <input
+                        type="checkbox"
+                        [checked]="isSizeSelected(s['id_talla'])"
+                        (change)="toggleSize(s['id_talla'])"
+                      />
+                      <span class="variant-size">{{ s['codigo'] }}</span>
+                      <span
+                        ><strong>{{ proposedSku(s['codigo']) }}</strong
+                        ><small>Nueva variante</small></span
+                      >
+                    </label>
+                  }
                 }
-              </select></label
-            ><label class="field"
-              ><span>Color</span
-              ><select formControlName="id_color">
-                @for (c of colors(); track c['id_color']) {
-                  <option [value]="c['id_color']">{{ c['nombre'] }}</option>
-                }
-              </select></label
-            ><label class="field"><span>SKU</span><input formControlName="sku" /></label
-            ><label class="field"
-              ><span>Código de barras</span><input formControlName="codigo_barras" /></label
-            ><button class="button button--secondary">Añadir variante</button>
-          </form>
-          <div class="permission-list">
-            @for (v of p['variantes']; track v['id_variante']) {
-              <div>
-                <span
-                  ><strong>{{ v['sku'] }}</strong
-                  ><small>{{ v['talla'] }} · {{ v['color'] }}</small></span
-                ><span>{{ v['activo'] ? 'ACTIVA' : 'INACTIVA' }}</span>
               </div>
+              <div class="variant-builder__footer">
+                <p>El código de barras es opcional y puede incorporarse cuando esté disponible.</p>
+                <button
+                  class="button button--secondary"
+                  [disabled]="
+                    !canCreate() ||
+                    variantForm.invalid ||
+                    selectedSizeIds().length === 0 ||
+                    savingVariants()
+                  "
+                >
+                  {{ savingVariants() ? 'Creando...' : 'Crear variantes seleccionadas' }}
+                </button>
+              </div>
+            }
+          </form>
+          <div class="product-color-tabs" aria-label="Colores configurados">
+            @for (color of productColors(); track color['id_color']) {
+              <button type="button" (click)="chooseColor(color['id_color'])">
+                <i [style.background]="color['codigo_hex'] || '#d8dadd'"></i>
+                {{ color['color'] }}
+                <small>{{ color['sizes'].length }} tallas</small>
+              </button>
+            } @empty {
+              <p class="admin-empty">Aún no hay colores configurados.</p>
             }
           </div>
         </section>
@@ -507,12 +581,22 @@ export class ProductsAdmin implements OnInit {
               <option>PROMOCIONAL</option>
             </select></label
           ><label class="field"
+            ><span>Color de la prenda</span
+            ><select formControlName="id_color">
+              <option value="">Seleccionar color</option>
+              @for (c of productColors(); track c['id_color']) {
+                @if (c['active']) {
+                  <option [value]="c['id_color']">{{ c['color'] }}</option>
+                }
+              }
+            </select></label
+          ><label class="field"
             ><span>Orden</span><input type="number" min="1" formControlName="orden" /></label
           ><label class="check-field"
             ><input type="checkbox" formControlName="es_principal" /> Principal</label
           ><button
             class="button button--secondary"
-            [disabled]="imageForm.invalid || !selectedImage() || uploadingImage()"
+            [disabled]="!canEdit() || imageForm.invalid || !selectedImage() || uploadingImage()"
           >
             {{ uploadingImage() ? 'Subiendo...' : 'Subir imagen' }}
           </button>
@@ -526,9 +610,12 @@ export class ProductsAdmin implements OnInit {
                 (error)="handleImageError($event)"
               />
               <a [href]="i['secure_url']" target="_blank" rel="noopener">{{ i['tipo'] }}</a>
-              <button class="button button--quiet" (click)="toggleImage(i)">
-                {{ i['es_principal'] ? 'Quitar principal' : 'Marcar principal' }}
-              </button></span
+              <small>{{ colorName(i['id_color']) }}</small>
+              @if (canEdit()) {
+                <button class="button button--quiet" (click)="toggleImage(i)">
+                  {{ i['es_principal'] ? 'Quitar principal' : 'Marcar principal' }}
+                </button>
+              }</span
             >
           }
         </div>
@@ -565,7 +652,9 @@ export class ProductsAdmin implements OnInit {
               ><span>Manga (cm)</span
               ><input type="number" step=".01" formControlName="largo_manga_cm"
             /></label>
-            <button class="button button--secondary">Guardar medidas</button>
+            <button class="button button--secondary" [disabled]="!canEdit()">
+              Guardar medidas
+            </button>
           </form>
           <div class="permission-list">
             @for (m of measurements(); track m['id_medida']) {
@@ -590,7 +679,12 @@ export class ProductsAdmin implements OnInit {
                   <option [value]="s['id_temporada']">{{ s['nombre'] }}</option>
                 }
               </select></label
-            ><button type="button" class="button button--secondary" (click)="addSeason()">
+            ><button
+              type="button"
+              class="button button--secondary"
+              [disabled]="!canEdit()"
+              (click)="addSeason()"
+            >
               Asociar
             </button>
           </form>
@@ -598,9 +692,11 @@ export class ProductsAdmin implements OnInit {
             @for (s of productSeasons(); track s['id_temporada']) {
               <span
                 >{{ s['nombre'] }}
-                <button (click)="removeSeason(s['id_temporada'])" aria-label="Quitar temporada">
-                  ×
-                </button></span
+                @if (canEdit()) {
+                  <button (click)="removeSeason(s['id_temporada'])" aria-label="Quitar temporada">
+                    ×
+                  </button>
+                }</span
               >
             }
           </div>
@@ -613,7 +709,12 @@ export class ProductsAdmin implements OnInit {
                   <option [value]="c['id_coleccion']">{{ c['nombre'] }}</option>
                 }
               </select></label
-            ><button type="button" class="button button--secondary" (click)="addCollection()">
+            ><button
+              type="button"
+              class="button button--secondary"
+              [disabled]="!canEdit()"
+              (click)="addCollection()"
+            >
               Asociar
             </button>
           </form>
@@ -621,9 +722,14 @@ export class ProductsAdmin implements OnInit {
             @for (c of productCollections(); track c['id_coleccion']) {
               <span
                 >{{ c['nombre'] }}
-                <button (click)="removeCollection(c['id_coleccion'])" aria-label="Quitar colección">
-                  ×
-                </button></span
+                @if (canEdit()) {
+                  <button
+                    (click)="removeCollection(c['id_coleccion'])"
+                    aria-label="Quitar colección"
+                  >
+                    ×
+                  </button>
+                }</span
               >
             }
           </div>
@@ -642,6 +748,7 @@ export class ProductAdminDetail implements OnInit {
   private route = inject(ActivatedRoute);
   private fb = inject(FormBuilder);
   private errs = inject(ApiErrorService);
+  private perms = inject(PermissionService);
   id = Number(this.route.snapshot.paramMap.get('id'));
   product = signal<Entity | null>(null);
   prices = signal<Entity[]>([]);
@@ -656,19 +763,21 @@ export class ProductAdminDetail implements OnInit {
   selectedImage = signal<File | null>(null);
   imagePreview = signal<string | null>(null);
   uploadingImage = signal(false);
+  savingVariants = signal(false);
+  selectedSizeIds = signal<number[]>([]);
   message = signal('');
   error = signal(false);
+  canCreate = () => this.perms.has('productos.crear');
+  canEdit = () => this.perms.has('productos.editar');
   priceForm = this.fb.group({
     precio: [null as number | null, [Validators.required, Validators.min(0)]],
   });
   variantForm = this.fb.group({
-    id_talla: [null as number | null, Validators.required],
     id_color: [null as number | null, Validators.required],
-    sku: ['', Validators.required],
-    codigo_barras: [''],
-    activo: [true],
+    sku_base: ['', Validators.required],
   });
   imageForm = this.fb.group({
+    id_color: [null as number | null, Validators.required],
     tipo: ['CATALOGO'],
     orden: [1, [Validators.required, Validators.min(1)]],
     es_principal: [false],
@@ -684,12 +793,34 @@ export class ProductAdminDetail implements OnInit {
     id_temporada: [null as number | null],
     id_coleccion: [null as number | null],
   });
+  productColors = computed(() => {
+    const variants = (this.product()?.['variantes'] || []) as Entity[];
+    const groups = new Map<number, Entity>();
+    for (const variant of variants) {
+      const id = Number(variant['id_color']);
+      const current = groups.get(id);
+      if (current) {
+        current['sizes'] = [...(current['sizes'] as string[]), variant['talla']];
+        current['active'] = Boolean(current['active'] || variant['activo']);
+      } else {
+        groups.set(id, {
+          id_color: id,
+          color: variant['color'],
+          codigo_hex: variant['codigo_hex'],
+          sizes: [variant['talla']],
+          active: Boolean(variant['activo']),
+        });
+      }
+    }
+    return [...groups.values()];
+  });
   ngOnInit() {
     this.load();
   }
   load() {
     forkJoin({
       product: this.api.get(`products/${this.id}`),
+      variants: this.api.list(`products/${this.id}/variants`),
       prices: this.api.list(`products/${this.id}/price-history`),
       images: this.api.list(`products/${this.id}/images`),
       sizes: this.api.list('sizes'),
@@ -701,7 +832,7 @@ export class ProductAdminDetail implements OnInit {
       productCollections: this.api.list(`products/${this.id}/collections`),
     }).subscribe({
       next: (v) => {
-        this.product.set(v.product);
+        this.product.set({ ...v.product, variantes: v.variants });
         this.prices.set(v.prices);
         this.images.set(v.images);
         this.sizes.set(v.sizes);
@@ -716,6 +847,7 @@ export class ProductAdminDetail implements OnInit {
     });
   }
   setPrice() {
+    if (!this.canEdit()) return;
     this.api.post(`products/${this.id}/price`, this.priceForm.getRawValue()).subscribe({
       next: () => {
         this.ok('Precio actualizado.');
@@ -724,20 +856,89 @@ export class ProductAdminDetail implements OnInit {
       error: (e) => this.fail(e),
     });
   }
-  addVariant() {
-    const values = this.variantForm.getRawValue();
-    const payload = {
-      ...values,
-      codigo_barras: values.codigo_barras?.trim() || null,
-    };
-    this.api.post(`products/${this.id}/variants`, payload).subscribe({
+  prepareColor() {
+    const colorId = Number(this.variantForm.value.id_color);
+    const missing = this.sizes()
+      .filter((size) => !this.variantFor(size['id_talla']))
+      .map((size) => Number(size['id_talla']));
+    this.selectedSizeIds.set(colorId ? missing : []);
+    const color = this.colors().find((item) => Number(item['id_color']) === colorId);
+    this.variantForm.controls.sku_base.setValue(this.skuBase(color?.['nombre'] || ''));
+  }
+  chooseColor(colorId: number) {
+    this.variantForm.controls.id_color.setValue(colorId);
+    this.prepareColor();
+  }
+  variantFor(sizeId: number): Entity | undefined {
+    const colorId = Number(this.variantForm.value.id_color);
+    return ((this.product()?.['variantes'] || []) as Entity[]).find(
+      (variant) =>
+        Number(variant['id_color']) === colorId && Number(variant['id_talla']) === Number(sizeId),
+    );
+  }
+  toggleSize(sizeId: number) {
+    this.selectedSizeIds.update((ids) =>
+      ids.includes(Number(sizeId))
+        ? ids.filter((id) => id !== Number(sizeId))
+        : [...ids, Number(sizeId)],
+    );
+  }
+  isSizeSelected(sizeId: number): boolean {
+    return this.selectedSizeIds().includes(Number(sizeId));
+  }
+  proposedSku(sizeCode: string): string {
+    const base = (this.variantForm.value.sku_base || '').trim().replace(/-+$/, '');
+    return base ? `${base}-${sizeCode}` : sizeCode;
+  }
+  addVariants() {
+    if (!this.canCreate()) return;
+    if (this.variantForm.invalid || this.selectedSizeIds().length === 0) return;
+    const colorId = Number(this.variantForm.value.id_color);
+    const sizeIds = this.selectedSizeIds();
+    this.savingVariants.set(true);
+    this.api
+      .post(`products/${this.id}/variants/batch`, {
+        id_color: colorId,
+        id_tallas: sizeIds,
+        sku_base: (this.variantForm.value.sku_base || '').trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.savingVariants.set(false);
+          this.ok(`${sizeIds.length} variante(s) creadas.`);
+          this.selectedSizeIds.set([]);
+          this.load();
+        },
+        error: (e) => {
+          this.savingVariants.set(false);
+          this.fail(e);
+          this.load();
+        },
+      });
+  }
+  toggleVariant(variant: Entity) {
+    if (!this.canEdit()) return;
+    this.api.patch(`variants/${variant['id_variante']}`, { activo: !variant['activo'] }).subscribe({
       next: () => {
-        this.ok('Variante creada.');
-        this.variantForm.reset({ activo: true });
+        this.ok(variant['activo'] ? 'Variante desactivada.' : 'Variante reactivada.');
         this.load();
       },
       error: (e) => this.fail(e),
     });
+  }
+  private skuBase(colorName: string): string {
+    const code = (value: string) =>
+      value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .split(/[^A-Z0-9]+/)
+        .filter(Boolean)
+        .map((part) => part.slice(0, 3))
+        .join('-');
+    return [code(String(this.product()?.['nombre'] || 'PROD')), code(colorName)]
+      .filter(Boolean)
+      .join('-');
   }
   selectImage(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0] ?? null;
@@ -754,12 +955,14 @@ export class ProductAdminDetail implements OnInit {
     }
   }
   addImage() {
+    if (!this.canEdit()) return;
     const file = this.selectedImage();
     if (!file || this.imageForm.invalid || this.uploadingImage()) return;
     const raw = this.imageForm.getRawValue();
     const payload = new FormData();
     payload.append('file', file);
     payload.append('tipo', raw.tipo || 'CATALOGO');
+    payload.append('id_color', String(raw.id_color));
     payload.append('orden', String(raw.orden || 1));
     payload.append('es_principal', String(Boolean(raw.es_principal)));
     this.uploadingImage.set(true);
@@ -770,7 +973,12 @@ export class ProductAdminDetail implements OnInit {
         if (preview) URL.revokeObjectURL(preview);
         this.selectedImage.set(null);
         this.imagePreview.set(null);
-        this.imageForm.reset({ tipo: 'CATALOGO', orden: 1, es_principal: false });
+        this.imageForm.reset({
+          id_color: raw.id_color,
+          tipo: 'CATALOGO',
+          orden: 1,
+          es_principal: false,
+        });
         this.ok('Imagen subida correctamente.');
         this.load();
       },
@@ -781,11 +989,20 @@ export class ProductAdminDetail implements OnInit {
     });
   }
   toggleImage(image: Entity) {
+    if (!this.canEdit()) return;
     this.api
       .patch(`product-images/${image['id_imagen']}`, { es_principal: !image['es_principal'] })
       .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
   }
+  colorName(colorId: number | null): string {
+    if (!colorId) return 'Imagen general';
+    return String(
+      this.colors().find((color) => Number(color['id_color']) === Number(colorId))?.['nombre'] ||
+        'Color',
+    );
+  }
   saveMeasurement() {
+    if (!this.canEdit()) return;
     const { id_talla, ...payload } = this.measurementForm.getRawValue();
     this.api.put(`products/${this.id}/measurements/${id_talla}`, payload).subscribe({
       next: () => {
@@ -796,6 +1013,7 @@ export class ProductAdminDetail implements OnInit {
     });
   }
   addSeason() {
+    if (!this.canEdit()) return;
     const id = this.relationForm.value.id_temporada;
     if (!id) return;
     this.api
@@ -803,11 +1021,13 @@ export class ProductAdminDetail implements OnInit {
       .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
   }
   removeSeason(id: number) {
+    if (!this.canEdit()) return;
     this.api
       .delete(`products/${this.id}/seasons/${id}`)
       .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
   }
   addCollection() {
+    if (!this.canEdit()) return;
     const id = this.relationForm.value.id_coleccion;
     if (!id) return;
     this.api
@@ -815,6 +1035,7 @@ export class ProductAdminDetail implements OnInit {
       .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });
   }
   removeCollection(id: number) {
+    if (!this.canEdit()) return;
     this.api
       .delete(`products/${this.id}/collections/${id}`)
       .subscribe({ next: () => this.load(), error: (e) => this.fail(e) });

@@ -59,6 +59,7 @@ from app.modules.catalog.schemas import (
     ProductUpdate,
     SeasonCreate,
     SeasonUpdate,
+    VariantBatchCreate,
     VariantCreate,
     VariantOption,
     VariantResponse,
@@ -346,6 +347,46 @@ class CatalogService:
         await self._mutate(audit_context, self.repository.add(variant))
         return await self._variant_by_id(variant.id_variante)
 
+    async def create_variants_batch(
+        self, product_id: int, payload: VariantBatchCreate, audit_context: AuditContext
+    ) -> list[VariantResponse]:
+        product = await self._require_product(product_id)
+        if not product.product.activo:
+            raise InvalidCatalogDataError("Product is inactive")
+        await self._require_active(Color, payload.id_color, "Color")
+        sizes: list[Talla] = []
+        sku_base = payload.sku_base.strip().upper().rstrip("-")
+        for size_id in payload.id_tallas:
+            size = await self._require_active(Talla, size_id, "Size")
+            sku = f"{sku_base}-{size.codigo}"
+            await self._ensure_variant_unique(product_id, size_id, payload.id_color, sku, None)
+            sizes.append(size)
+        variants = [
+            VarianteProducto(
+                id_producto=product_id,
+                id_talla=size.id_talla,
+                id_color=payload.id_color,
+                sku=f"{sku_base}-{size.codigo}",
+                codigo_barras=None,
+                activo=True,
+            )
+            for size in sizes
+        ]
+        try:
+            await apply_audit_context(self.session, audit_context)
+            self.session.add_all(variants)
+            await self.session.flush()
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise CatalogConflictError(
+                "One of the selected variants, SKUs or barcodes is already registered"
+            ) from exc
+        except Exception:
+            await self.session.rollback()
+            raise
+        return [await self._variant_by_id(variant.id_variante) for variant in variants]
+
     async def update_variant(
         self, variant_id: int, payload: VariantUpdate, audit_context: AuditContext
     ) -> VariantResponse:
@@ -355,8 +396,8 @@ class CatalogService:
         product = await self._require_product(variant.id_producto)
         if not product.product.activo:
             raise InvalidCatalogDataError("Product is inactive")
-        size_id = payload.id_talla or variant.id_talla
-        color_id = payload.id_color or variant.id_color
+        size_id = variant.id_talla
+        color_id = variant.id_color
         sku = payload.sku or variant.sku
         barcode = (
             payload.codigo_barras
@@ -442,13 +483,19 @@ class CatalogService:
         self, product_id: int, payload: ProductImageCreate, audit_context: AuditContext
     ) -> ProductImageResponse:
         await self._require_product(product_id)
+        if payload.id_color is not None:
+            await self._require_active(Color, payload.id_color, "Color")
+            if not await self.repository.product_has_color(product_id, payload.id_color):
+                raise InvalidCatalogDataError(
+                    "The selected color does not have an active variant for this product"
+                )
         values = payload.model_dump()
         values["secure_url"] = str(payload.secure_url)
         image = ImagenProducto(id_producto=product_id, **values)
         try:
             await apply_audit_context(self.session, audit_context)
             if image.es_principal:
-                await self.repository.clear_principal_image(product_id)
+                await self.repository.clear_principal_image(product_id, image.id_color)
             await self.repository.add(image)
             await self.session.commit()
         except IntegrityError as exc:
@@ -465,10 +512,23 @@ class CatalogService:
         image = await self.repository.get_entity(ImagenProducto, image_id)
         if image is None:
             raise CatalogNotFoundError("Product image not found")
+        target_color_id = (
+            payload.id_color if "id_color" in payload.model_fields_set else image.id_color
+        )
+        if target_color_id is not None:
+            await self._require_active(Color, target_color_id, "Color")
+            if not await self.repository.product_has_color(image.id_producto, target_color_id):
+                raise InvalidCatalogDataError(
+                    "The selected color does not have an active variant for this product"
+                )
         try:
             await apply_audit_context(self.session, audit_context)
-            if payload.es_principal:
-                await self.repository.clear_principal_image(image.id_producto, image.id_imagen)
+            if payload.es_principal or (
+                image.es_principal and "id_color" in payload.model_fields_set
+            ):
+                await self.repository.clear_principal_image(
+                    image.id_producto, target_color_id, image.id_imagen
+                )
             values = payload.model_dump(exclude_unset=True)
             if payload.secure_url is not None:
                 values["secure_url"] = str(payload.secure_url)
@@ -712,6 +772,7 @@ class CatalogService:
         return ProductImageResponse(
             id_imagen=image.id_imagen,
             id_producto=image.id_producto,
+            id_color=image.id_color,
             proveedor_storage=image.proveedor_storage,
             public_id=image.public_id,
             secure_url=image.secure_url,

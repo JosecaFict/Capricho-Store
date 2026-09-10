@@ -181,14 +181,15 @@ class ImagenProducto(Base):
     id_producto: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("capricho.producto.id_producto", ondelete="CASCADE")
     )
+    id_color: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("capricho.color.id_color", ondelete="RESTRICT")
+    )
     proveedor_storage: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default=text("'CLOUDINARY'")
     )
     public_id: Mapped[str] = mapped_column(String(255), nullable=False)
     secure_url: Mapped[str] = mapped_column(Text, nullable=False)
-    tipo: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default=text("'CATALOGO'")
-    )
+    tipo: Mapped[str] = mapped_column(String(30), nullable=False, server_default=text("'CATALOGO'"))
     orden: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("1"))
     es_principal: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")

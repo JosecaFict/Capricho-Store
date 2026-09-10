@@ -51,6 +51,7 @@ export interface Branch {
 export interface ProductImage {
   id_imagen: number;
   id_producto: number;
+  id_color: number | null;
   proveedor_storage: string;
   public_id: string;
   secure_url: string;

@@ -1092,6 +1092,62 @@ input[aria-invalid='true'] {
   max-width: 60ch;
   color: var(--ink-soft);
 }
+.product-options {
+  margin: 1.6rem 0 0;
+  padding: 0;
+  border: 0;
+}
+.product-options legend,
+.product-options > strong {
+  margin-bottom: 0.65rem;
+  font-weight: 700;
+}
+.product-options > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+.product-colors button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.product-colors button:hover,
+.product-colors button.active {
+  border-color: var(--ink);
+}
+.product-colors button:focus-visible {
+  outline: 3px solid rgb(6 79 232 / 22%);
+  outline-offset: 2px;
+}
+.product-colors i {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgb(18 20 24 / 18%);
+  border-radius: 50%;
+}
+.product-colors small {
+  display: block;
+  min-height: 1.2em;
+  margin-top: 0.45rem;
+  color: var(--ink-soft);
+}
+.product-sizes span {
+  display: grid;
+  min-width: 42px;
+  min-height: 42px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  font-weight: 700;
+}
 .product-specs {
   margin: 2rem 0;
 }

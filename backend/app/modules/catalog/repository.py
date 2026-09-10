@@ -392,14 +392,32 @@ class CatalogRepository:
             ).all()
         )
 
-    async def clear_principal_image(self, product_id: int, except_id: int | None = None) -> None:
+    async def clear_principal_image(
+        self, product_id: int, color_id: int | None, except_id: int | None = None
+    ) -> None:
         statement = update(ImagenProducto).where(
             ImagenProducto.id_producto == product_id,
             ImagenProducto.es_principal.is_(True),
         )
+        if color_id is None:
+            statement = statement.where(ImagenProducto.id_color.is_(None))
+        else:
+            statement = statement.where(ImagenProducto.id_color == color_id)
         if except_id is not None:
             statement = statement.where(ImagenProducto.id_imagen != except_id)
         await self.session.execute(statement.values(es_principal=False))
+
+    async def product_has_color(self, product_id: int, color_id: int) -> bool:
+        return (
+            await self.session.scalar(
+                select(VarianteProducto.id_variante).where(
+                    VarianteProducto.id_producto == product_id,
+                    VarianteProducto.id_color == color_id,
+                    VarianteProducto.activo.is_(True),
+                )
+            )
+            is not None
+        )
 
     async def get_current_price(self, product_id: int) -> HistorialPrecio | None:
         return await self.session.scalar(

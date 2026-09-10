@@ -25,6 +25,17 @@ void main() {
     expect(product.sizes, ['S', 'M']);
   });
 
+  test('ProductImage conserva el color y la marca de imagen principal', () {
+    final image = ProductImage.fromJson({
+      'secure_url': 'https://example.com/polo-azul.webp',
+      'id_color': 4,
+      'es_principal': true,
+    });
+
+    expect(image.colorId, 4);
+    expect(image.isPrimary, isTrue);
+  });
+
   test('CatalogQuery conserva nombres de parámetros del backend', () {
     const query = CatalogQuery(
       category: 'BLUSA',

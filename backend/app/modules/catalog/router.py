@@ -46,6 +46,7 @@ from app.modules.catalog.schemas import (
     SeasonResponse,
     SeasonUpdate,
     SizeResponse,
+    VariantBatchCreate,
     VariantCreate,
     VariantOption,
     VariantResponse,
@@ -380,6 +381,23 @@ async def create_variant(
     return await service.create_variant(product_id, payload, audit_context_for(request, principal))
 
 
+@router.post(
+    "/products/{product_id}/variants/batch",
+    response_model=list[VariantResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_variants_batch(
+    product_id: int,
+    payload: VariantBatchCreate,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("productos.crear"))],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+):
+    return await service.create_variants_batch(
+        product_id, payload, audit_context_for(request, principal)
+    )
+
+
 @router.patch("/variants/{variant_id}", response_model=VariantResponse)
 async def update_variant(
     variant_id: int,
@@ -485,6 +503,7 @@ async def upload_image(
     storage: Annotated[CloudinaryStorage, Depends(get_cloudinary_storage)],
     file: Annotated[UploadFile, File()],
     tipo: Annotated[Literal["CATALOGO", "MINIATURA", "PROMOCIONAL"], Form()] = "CATALOGO",
+    id_color: Annotated[int | None, Form(gt=0)] = None,
     orden: Annotated[int, Form(gt=0)] = 1,
     es_principal: Annotated[bool, Form()] = False,
 ):
@@ -506,6 +525,7 @@ async def upload_image(
     except CloudinaryError as exc:
         raise CatalogStorageError(str(exc)) from exc
     payload = ProductImageCreate(
+        id_color=id_color,
         public_id=uploaded.public_id,
         secure_url=uploaded.secure_url,
         tipo=tipo,

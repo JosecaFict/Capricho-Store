@@ -1,13 +1,23 @@
 class ProductImage {
-  const ProductImage(this.url);
-  factory ProductImage.fromJson(Map<String, dynamic> json) =>
-      ProductImage(json['secure_url'] as String);
+  const ProductImage({
+    required this.url,
+    this.colorId,
+    this.isPrimary = false,
+  });
+  factory ProductImage.fromJson(Map<String, dynamic> json) => ProductImage(
+    url: json['secure_url'] as String,
+    colorId: json['id_color'] as int?,
+    isPrimary: json['es_principal'] as bool? ?? false,
+  );
   final String url;
+  final int? colorId;
+  final bool isPrimary;
 }
 
 class ProductVariant {
   const ProductVariant({
     required this.id,
+    required this.colorId,
     required this.size,
     required this.color,
     required this.active,
@@ -19,6 +29,7 @@ class ProductVariant {
   });
   factory ProductVariant.fromJson(Map<String, dynamic> json) => ProductVariant(
     id: json['id_variante'] as int,
+    colorId: json['id_color'] as int,
     size: json['talla'] as String,
     color: json['color'] as String,
     hex: json['codigo_hex'] as String?,
@@ -29,6 +40,7 @@ class ProductVariant {
     stockStatus: json['estado_stock'] as String?,
   );
   final int id;
+  final int colorId;
   final String size;
   final String color;
   final String? hex;

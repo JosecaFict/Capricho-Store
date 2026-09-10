@@ -149,6 +149,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           final variants = data.variants;
           final measurements = data.measurements;
           final branches = data.branches;
+          final visibleImages = _imagesForSelectedColor(images, variants);
+          final visibleSizes = variants
+              .where(
+                (variant) =>
+                    variant.active &&
+                    (_selectedColor == null || variant.color == _selectedColor),
+              )
+              .map((variant) => variant.size)
+              .toSet()
+              .toList();
 
           final matchedVariant = _findMatchingVariant(variants);
 
@@ -157,7 +167,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             child: ListView(
               padding: const EdgeInsets.only(bottom: 40),
               children: [
-                _buildImageGallery(images),
+                _buildImageGallery(visibleImages),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                   child: Column(
@@ -272,8 +282,115 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Selector de Talla
-                      if (product.sizes.isNotEmpty) ...[
+                      // Primero se elige el color; la galería y las tallas se adaptan.
+                      if (product.colors.isNotEmpty) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Color',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            if (_selectedColor != null)
+                              TextButton(
+                                onPressed: () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() {
+                                    _selectedColor = null;
+                                    _selectedImageIndex = 0;
+                                  });
+                                },
+                                style: TextButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                child: const Text('Quitar selección'),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: product.colors.map((c) {
+                            final isSelected = _selectedColor == c;
+                            String? colorHex;
+                            for (final variant in variants) {
+                              if (variant.color == c && variant.hex != null) {
+                                colorHex = variant.hex;
+                                break;
+                              }
+                            }
+                            final dotColor = _colorFromHex(colorHex);
+                            return Tooltip(
+                              message: c,
+                              child: Semantics(
+                                button: true,
+                                selected: isSelected,
+                                label: 'Color $c',
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: () {
+                                    HapticFeedback.selectionClick();
+                                    setState(() {
+                                      _selectedColor = c;
+                                      if (_selectedSize != null &&
+                                          !variants.any(
+                                            (item) =>
+                                                item.active &&
+                                                item.color == c &&
+                                                item.size == _selectedSize,
+                                          )) {
+                                        _selectedSize = null;
+                                      }
+                                      _selectedImageIndex = 0;
+                                    });
+                                    if (_imagePageController.hasClients) {
+                                      _imagePageController.jumpToPage(0);
+                                    }
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 160),
+                                    width: 42,
+                                    height: 42,
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? AppColors.ink
+                                            : Colors.transparent,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: dotColor,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: AppColors.line),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        if (_selectedColor != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            _selectedColor!,
+                            style: const TextStyle(
+                              color: AppColors.inkSoft,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Solo se muestran las tallas existentes para el color elegido.
+                      if (visibleSizes.isNotEmpty) ...[
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -299,7 +416,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: product.sizes.map((s) {
+                          children: visibleSizes.map((s) {
                             final isSelected = _selectedSize == s;
                             return ChoiceChip(
                               label: Text(s),
@@ -308,74 +425,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 HapticFeedback.selectionClick();
                                 setState(() {
                                   _selectedSize = val ? s : null;
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-
-                      // Selector de Color
-                      if (product.colors.isNotEmpty) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Color',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            if (_selectedColor != null)
-                              TextButton(
-                                onPressed: () {
-                                  HapticFeedback.selectionClick();
-                                  setState(() => _selectedColor = null);
-                                },
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                child: const Text('Quitar selección'),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: product.colors.map((c) {
-                            final isSelected = _selectedColor == c;
-                            // Buscar hex si existe en las variantes
-                            String? hex;
-                            try {
-                              hex = variants
-                                  .firstWhere(
-                                    (v) => v.color == c && v.hex != null,
-                                  )
-                                  .hex;
-                            } catch (_) {}
-
-                            Color? dotColor;
-                            if (hex != null) {
-                              final hexClean = hex.replaceAll('#', '');
-                              if (hexClean.length == 6) {
-                                dotColor = Color(int.parse('0xFF$hexClean'));
-                              }
-                            }
-
-                            return ChoiceChip(
-                              avatar: dotColor != null
-                                  ? CircleAvatar(
-                                      backgroundColor: dotColor,
-                                      radius: 6,
-                                    )
-                                  : null,
-                              label: Text(c),
-                              selected: isSelected,
-                              onSelected: (val) {
-                                HapticFeedback.selectionClick();
-                                setState(() {
-                                  _selectedColor = val ? c : null;
                                 });
                               },
                             );
@@ -533,6 +582,33 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         ],
       ],
     );
+  }
+
+  List<ProductImage> _imagesForSelectedColor(
+    List<ProductImage> images,
+    List<ProductVariant> variants,
+  ) {
+    if (_selectedColor == null) return images;
+    int? colorId;
+    for (final variant in variants) {
+      if (variant.color == _selectedColor) {
+        colorId = variant.colorId;
+        break;
+      }
+    }
+    if (colorId == null) return images;
+    final matching = images.where((image) => image.colorId == colorId).toList();
+    if (matching.isNotEmpty) return matching;
+    return images.where((image) => image.colorId == null).toList();
+  }
+
+  Color _colorFromHex(String? value) {
+    final normalized = value?.replaceAll('#', '').trim();
+    if (normalized == null ||
+        !RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(normalized)) {
+      return AppColors.muted;
+    }
+    return Color(int.parse('FF$normalized', radix: 16));
   }
 
   Widget _buildStockAvailabilityCard(ProductVariant? variant) {

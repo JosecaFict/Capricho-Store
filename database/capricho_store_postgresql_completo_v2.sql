@@ -254,6 +254,7 @@ CREATE TABLE medida_talla_producto (
 CREATE TABLE imagen_producto (
   id_imagen BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   id_producto BIGINT NOT NULL REFERENCES producto(id_producto) ON DELETE CASCADE,
+  id_color BIGINT REFERENCES color(id_color) ON DELETE RESTRICT,
   proveedor_storage VARCHAR(30) NOT NULL DEFAULT 'CLOUDINARY',
   public_id VARCHAR(255) NOT NULL,
   secure_url TEXT NOT NULL,
@@ -264,7 +265,9 @@ CREATE TABLE imagen_producto (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(proveedor_storage,public_id)
 );
-CREATE UNIQUE INDEX uq_imagen_principal_producto ON imagen_producto(id_producto) WHERE es_principal=TRUE;
+CREATE UNIQUE INDEX uq_imagen_principal_producto_color ON imagen_producto(id_producto,id_color) WHERE es_principal=TRUE AND id_color IS NOT NULL;
+CREATE UNIQUE INDEX uq_imagen_principal_producto_generica ON imagen_producto(id_producto) WHERE es_principal=TRUE AND id_color IS NULL;
+CREATE INDEX idx_imagen_producto_color ON imagen_producto(id_producto,id_color,orden);
 
 CREATE TABLE historial_precio (
   id_historial_precio BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

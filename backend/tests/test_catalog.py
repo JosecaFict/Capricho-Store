@@ -14,7 +14,7 @@ from app.modules.auth.dependencies import CurrentPrincipal, get_current_principa
 from app.modules.auth.models import Usuario
 from app.modules.catalog.dependencies import get_catalog_service, get_cloudinary_storage
 from app.modules.catalog.exceptions import CatalogConflictError, CatalogNotFoundError
-from app.modules.catalog.models import HistorialPrecio, ImagenProducto, Producto
+from app.modules.catalog.models import Color, HistorialPrecio, ImagenProducto, Producto
 from app.modules.catalog.schemas import PriceCreate, ProductImageCreate
 from app.modules.catalog.service import CatalogService
 
@@ -495,6 +495,22 @@ async def test_create_valid_variant() -> None:
     assert service.create_variant.await_args.args[1].codigo_barras is None
 
 
+async def test_create_variant_matrix_in_one_request() -> None:
+    service = AsyncMock()
+    service.create_variants_batch.return_value = [VARIANT]
+    response = await call_catalog(
+        "POST",
+        "/api/v1/products/1/variants/batch",
+        service=service,
+        principal=make_principal("productos.crear"),
+        json={"id_color": 1, "id_tallas": [1, 2, 3, 4], "sku_base": "RL-POLO-AZM"},
+    )
+    assert response.status_code == 201
+    payload = service.create_variants_batch.await_args.args[1]
+    assert payload.id_tallas == [1, 2, 3, 4]
+    assert payload.sku_base == "RL-POLO-AZM"
+
+
 async def test_reject_duplicate_variant() -> None:
     service = AsyncMock()
     service.create_variant.side_effect = CatalogConflictError("Variant already registered")
@@ -519,6 +535,17 @@ async def test_update_variant() -> None:
         json={"activo": False},
     )
     assert response.status_code == 200
+
+
+async def test_reject_moving_existing_variant_to_another_size_or_color() -> None:
+    response = await call_catalog(
+        "PATCH",
+        "/api/v1/variants/1",
+        service=AsyncMock(),
+        principal=make_principal("productos.editar"),
+        json={"id_color": 2},
+    )
+    assert response.status_code == 422
 
 
 async def test_register_measurements() -> None:
@@ -667,13 +694,19 @@ async def test_upload_product_image_to_cloudinary() -> None:
         service=service,
         storage=storage,
         principal=make_principal("productos.editar"),
-        data={"tipo": "CATALOGO", "orden": "1", "es_principal": "true"},
+        data={
+            "tipo": "CATALOGO",
+            "id_color": "1",
+            "orden": "1",
+            "es_principal": "true",
+        },
         files={"file": ("polera.webp", b"image-bytes", "image/webp")},
     )
     assert response.status_code == 201
     storage.upload_product_image.assert_awaited_once()
     payload = service.create_image.await_args.args[1]
     assert payload.public_id.endswith("polera-negra")
+    assert payload.id_color == 1
     assert payload.es_principal is True
 
 
@@ -708,7 +741,35 @@ async def test_only_one_principal_image_is_kept() -> None:
     )
     result = await service.create_image(1, payload, AuditContext(usuario_id=99))
     assert isinstance(result, object)
-    repository.clear_principal_image.assert_awaited_once_with(1)
+    repository.clear_principal_image.assert_awaited_once_with(1, None)
+
+
+async def test_principal_image_is_scoped_to_product_color() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    repository.get_product.return_value = SimpleNamespace(product=Producto(id_producto=1))
+    repository.get_entity.return_value = Color(
+        id_color=2, nombre="Azul marino", codigo_hex="#17233B", activo=True
+    )
+    repository.product_has_color.return_value = True
+
+    async def persist_image(item: ImagenProducto) -> ImagenProducto:
+        item.id_imagen = 4
+        item.created_at = datetime(2026, 8, 30, tzinfo=UTC)
+        return item
+
+    repository.add.side_effect = persist_image
+    service = CatalogService(session, repository)
+    payload = ProductImageCreate(
+        id_color=2,
+        public_id="catalog/polo-azul",
+        secure_url="https://example.com/polo-azul.jpg",
+        es_principal=True,
+    )
+    result = await service.create_image(1, payload, AuditContext(usuario_id=99))
+    assert result.id_color == 2
+    repository.product_has_color.assert_awaited_once_with(1, 2)
+    repository.clear_principal_image.assert_awaited_once_with(1, 2)
 
 
 @pytest.mark.parametrize(

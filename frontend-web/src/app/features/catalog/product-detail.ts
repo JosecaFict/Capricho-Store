@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { Branch, Product, ProductImage, ProductMeasurement } from '../../core/models/catalog.model';
@@ -39,16 +39,21 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                 (error)="useFallback()"
               />
             </div>
-            @if (images().length > 1) {
+            @if (visibleImages().length > 1) {
               <div class="gallery__thumbs" aria-label="Galería de imágenes">
-                @for (image of images(); track image.id_imagen) {
+                @for (image of visibleImages(); track image.id_imagen) {
                   <button
                     type="button"
                     [class.active]="activeImage() === image.secure_url"
                     (click)="selectImage(image)"
                     [attr.aria-label]="'Mostrar imagen ' + ($index + 1)"
                   >
-                    <img [src]="image.secure_url" [alt]="'Vista alternativa de ' + item.nombre" />
+                    <!-- impeccable-disable-next-line broken-image: Cloudinary supplies this URL; failed thumbnails are hidden below. -->
+                    <img
+                      [src]="image.secure_url"
+                      [alt]="'Vista alternativa de ' + item.nombre"
+                      (error)="hideBrokenImage($event)"
+                    />
                   </button>
                 }
               </div>
@@ -64,6 +69,36 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
             <p class="product-info__description">
               {{ item.descripcion || 'Este producto todavía no tiene una descripción publicada.' }}
             </p>
+            @if (availableColors(item).length > 0) {
+              <fieldset class="product-options product-colors">
+                <legend>Color</legend>
+                <div>
+                  @for (color of availableColors(item); track color.id_color) {
+                    <button
+                      type="button"
+                      [class.active]="selectedColorId() === color.id_color"
+                      [attr.aria-pressed]="selectedColorId() === color.id_color"
+                      [attr.aria-label]="'Seleccionar color ' + color.color"
+                      [title]="color.color"
+                      (click)="selectColor(color.id_color)"
+                    >
+                      <i [style.background]="color.codigo_hex || '#d8dadd'"></i>
+                    </button>
+                  }
+                </div>
+                <small>{{ selectedColorName(item) }}</small>
+              </fieldset>
+            }
+            @if (availableSizes(item).length > 0) {
+              <div class="product-options product-sizes">
+                <strong>Tallas disponibles</strong>
+                <div>
+                  @for (size of availableSizes(item); track size) {
+                    <span>{{ size }}</span>
+                  }
+                </div>
+              </div>
+            }
             <label class="field" for="detail-branch">
               <span>Sucursal para consultar disponibilidad</span>
               <select id="detail-branch" (change)="selectBranch($event)">
@@ -80,7 +115,7 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
               </div>
               <div>
                 <dt>Tallas</dt>
-                <dd>{{ item.tallas_disponibles.join(', ') || 'Sin tallas publicadas' }}</dd>
+                <dd>{{ availableSizes(item).join(', ') || 'Sin tallas publicadas' }}</dd>
               </div>
               <div>
                 <dt>Colores</dt>
@@ -145,6 +180,7 @@ export class ProductDetail {
   private readonly route = inject(ActivatedRoute);
   readonly product = signal<Product | null>(null);
   readonly images = signal<ProductImage[]>([]);
+  readonly selectedColorId = signal<number | null>(null);
   readonly measurements = signal<ProductMeasurement[]>([]);
   readonly branches = signal<Branch[]>([]);
   readonly selectedBranchId = signal<number | null>(null);
@@ -152,6 +188,13 @@ export class ProductDetail {
   readonly activeImageIsFallback = signal(true);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
+  readonly visibleImages = computed(() => {
+    const selected = this.selectedColorId();
+    const all = this.images();
+    if (selected == null) return all;
+    const matching = all.filter((image) => image.id_color === selected);
+    return matching.length > 0 ? matching : all.filter((image) => image.id_color == null);
+  });
 
   constructor() {
     this.catalog.branches().subscribe({ next: (branches) => this.branches.set(branches) });
@@ -178,14 +221,9 @@ export class ProductDetail {
           this.product.set(product);
           this.images.set(images);
           this.measurements.set(measurements);
-          const first =
-            images.find((image) => image.es_principal)?.secure_url ??
-            images[0]?.secure_url ??
-            product.imagen_principal?.secure_url;
-          if (first) {
-            this.activeImage.set(first);
-            this.activeImageIsFallback.set(false);
-          }
+          const firstColor = product.variantes.find((variant) => variant.activo)?.id_color ?? null;
+          this.selectedColorId.set(firstColor);
+          this.syncActiveImage(product);
         },
         error: (error) =>
           this.errorMessage.set(this.errors.message(error, 'No pudimos cargar el producto.')),
@@ -202,9 +240,53 @@ export class ProductDetail {
     this.activeImage.set(image.secure_url);
     this.activeImageIsFallback.set(false);
   }
+  selectColor(colorId: number): void {
+    this.selectedColorId.set(colorId);
+    const item = this.product();
+    if (item) this.syncActiveImage(item);
+  }
+  availableColors(item: Product) {
+    return item.variantes.filter(
+      (variant, index, all) =>
+        variant.activo && all.findIndex((other) => other.id_color === variant.id_color) === index,
+    );
+  }
+  availableSizes(item: Product): string[] {
+    const selected = this.selectedColorId();
+    return item.variantes
+      .filter((variant) => variant.activo && (selected == null || variant.id_color === selected))
+      .map((variant) => variant.talla)
+      .filter((size, index, all) => all.indexOf(size) === index);
+  }
+  selectedColorName(item: Product): string {
+    return (
+      this.availableColors(item).find((color) => color.id_color === this.selectedColorId())
+        ?.color || ''
+    );
+  }
+  private syncActiveImage(item: Product): void {
+    const current = this.visibleImages();
+    if (this.selectedColorId() != null && current.length === 0) {
+      this.useFallback();
+      return;
+    }
+    const first =
+      current.find((image) => image.es_principal)?.secure_url ??
+      current[0]?.secure_url ??
+      item.imagen_principal?.secure_url;
+    if (first) {
+      this.activeImage.set(first);
+      this.activeImageIsFallback.set(false);
+    } else {
+      this.useFallback();
+    }
+  }
   useFallback(): void {
     this.activeImage.set('/images/catalogo-prendas-oficiales.jpg');
     this.activeImageIsFallback.set(true);
+  }
+  hideBrokenImage(event: Event): void {
+    (event.target as HTMLImageElement).hidden = true;
   }
 
   availability(item: Product): string {

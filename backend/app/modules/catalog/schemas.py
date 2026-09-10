@@ -362,9 +362,32 @@ class VariantCreate(BaseModel):
         return value
 
 
+class VariantBatchCreate(BaseModel):
+    id_color: int = Field(gt=0)
+    id_tallas: list[int] = Field(min_length=1, max_length=20)
+    sku_base: str = Field(min_length=1, max_length=70)
+
+    @field_validator("sku_base")
+    @classmethod
+    def normalize_sku_base(cls, value: str) -> str:
+        value = value.strip().upper().rstrip("-")
+        if not value:
+            raise ValueError("SKU base is required")
+        return value
+
+    @field_validator("id_tallas")
+    @classmethod
+    def unique_sizes(cls, value: list[int]) -> list[int]:
+        if any(item <= 0 for item in value):
+            raise ValueError("Size identifiers must be positive")
+        if len(value) != len(set(value)):
+            raise ValueError("Size identifiers must be unique")
+        return value
+
+
 class VariantUpdate(BaseModel):
-    id_talla: int | None = Field(default=None, gt=0)
-    id_color: int | None = Field(default=None, gt=0)
+    model_config = ConfigDict(extra="forbid")
+
     sku: str | None = Field(default=None, min_length=1, max_length=80)
     codigo_barras: str | None = Field(default=None, max_length=80)
     activo: bool | None = None
@@ -439,6 +462,7 @@ class PriceResponse(ORMResponse):
 
 
 class ProductImageCreate(BaseModel):
+    id_color: int | None = Field(default=None, gt=0)
     proveedor_storage: str = Field(default="CLOUDINARY", min_length=1, max_length=30)
     public_id: str = Field(min_length=1, max_length=255)
     secure_url: HttpUrl
@@ -451,6 +475,7 @@ class ProductImageCreate(BaseModel):
 
 
 class ProductImageUpdate(BaseModel):
+    id_color: int | None = Field(default=None, gt=0)
     secure_url: HttpUrl | None = None
     tipo: ImageType | None = None
     orden: int | None = Field(default=None, gt=0)
@@ -469,6 +494,7 @@ class ProductImageUpdate(BaseModel):
 class ProductImageResponse(ORMResponse):
     id_imagen: int
     id_producto: int
+    id_color: int | None = None
     proveedor_storage: str
     public_id: str
     secure_url: str
