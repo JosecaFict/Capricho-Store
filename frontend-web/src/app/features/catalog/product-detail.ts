@@ -79,6 +79,12 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                     <button
                       type="button"
                       [class.active]="selectedColorId() === color.id_color"
+                      [disabled]="
+                        selectedBranchId() !== null &&
+                        (availabilityLoading() ||
+                          !!availabilityError() ||
+                          colorStock(item, color.id_color) === 0)
+                      "
                       [attr.aria-pressed]="selectedColorId() === color.id_color"
                       [attr.aria-label]="'Seleccionar color ' + color.color"
                       [title]="color.color"
@@ -99,6 +105,12 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                     <button
                       type="button"
                       [class.active]="selectedSize() === size"
+                      [disabled]="
+                        selectedBranchId() !== null &&
+                        (availabilityLoading() ||
+                          !!availabilityError() ||
+                          sizeStock(item, size) === 0)
+                      "
                       [attr.aria-pressed]="selectedSize() === size"
                       (click)="selectedSize.set(size)"
                     >
@@ -110,13 +122,29 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
             }
             <label class="field" for="detail-branch">
               <span>Sucursal para consultar disponibilidad</span>
-              <select id="detail-branch" (change)="selectBranch($event)">
+              <select
+                id="detail-branch"
+                [value]="selectedBranchId() ?? ''"
+                [disabled]="availabilityLoading()"
+                aria-describedby="detail-branch-status"
+                (change)="selectBranch($event)"
+              >
                 <option value="">Selecciona una sucursal</option>
                 @for (branch of branches(); track branch.id_sucursal) {
                   <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
                 }
               </select>
             </label>
+            <p
+              id="detail-branch-status"
+              class="branch-stock-state"
+              [class.is-loading]="availabilityLoading()"
+              [class.is-empty]="selectedBranchId() !== null && totalStock(item) === 0"
+              role="status"
+              aria-live="polite"
+            >
+              {{ branchAvailability(item) }}
+            </p>
             <dl class="product-specs">
               <div>
                 <dt>Público</dt>
@@ -158,6 +186,9 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                   type="button"
                   [disabled]="
                     adding() ||
+                    availabilityLoading() ||
+                    !!availabilityError() ||
+                    selectedBranchId() === null ||
                     !selectedVariant(item) ||
                     selectedVariant(item)!.stock_disponible === 0
                   "
@@ -226,6 +257,8 @@ export class ProductDetail {
   readonly measurements = signal<ProductMeasurement[]>([]);
   readonly branches = signal<Branch[]>([]);
   readonly selectedBranchId = signal<number | null>(null);
+  readonly availabilityLoading = signal(false);
+  readonly availabilityError = signal('');
   readonly activeImage = signal('/images/catalogo-prendas-oficiales.jpg');
   readonly activeImageIsFallback = signal(true);
   readonly loading = signal(true);
@@ -278,8 +311,40 @@ export class ProductDetail {
 
   selectBranch(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    this.selectedBranchId.set(value ? Number(value) : null);
-    this.load();
+    const branchId = value ? Number(value) : null;
+    this.selectedBranchId.set(branchId);
+    this.availabilityError.set('');
+    this.actionMessage.set('');
+    this.loadBranchAvailability(branchId);
+  }
+
+  private loadBranchAvailability(branchId: number | null): void {
+    const productId = Number(this.route.snapshot.paramMap.get('id'));
+    if (!Number.isInteger(productId) || productId <= 0) return;
+    this.availabilityLoading.set(true);
+    this.catalog
+      .product(productId, branchId ?? undefined)
+      .pipe(
+        finalize(() => {
+          if (this.selectedBranchId() === branchId) this.availabilityLoading.set(false);
+        }),
+      )
+      .subscribe({
+        next: (product) => {
+          if (this.selectedBranchId() !== branchId) return;
+          this.product.set(product);
+          this.syncSelectionForAvailability(product);
+        },
+        error: (error) => {
+          if (this.selectedBranchId() !== branchId) return;
+          this.availabilityError.set(
+            this.errors.message(
+              error,
+              'No pudimos consultar el stock de esta sucursal. Intenta nuevamente.',
+            ),
+          );
+        },
+      });
   }
 
   selectImage(image: ProductImage): void {
@@ -345,6 +410,70 @@ export class ProductDetail {
     if (stocks.length === 0) return 'Consulta una sucursal para conocer el stock';
     const total = stocks.reduce((sum, stock) => sum + stock, 0);
     return total > 0 ? `${total} unidades registradas` : 'Agotado';
+  }
+
+  branchAvailability(item: Product): string {
+    if (this.availabilityLoading()) return 'Consultando disponibilidad…';
+    if (this.availabilityError()) return this.availabilityError();
+    const branchName = this.selectedBranchName();
+    if (!branchName) return 'Selecciona una sucursal para conocer su stock.';
+    const total = this.totalStock(item);
+    return total > 0
+      ? `${total} unidades disponibles en ${branchName}.`
+      : `Sin stock disponible en ${branchName}.`;
+  }
+
+  totalStock(item: Product): number {
+    return item.variantes.reduce(
+      (total, variant) => total + Math.max(0, Number(variant.stock_disponible ?? 0)),
+      0,
+    );
+  }
+
+  colorStock(item: Product, colorId: number): number {
+    return item.variantes
+      .filter((variant) => variant.activo && variant.id_color === colorId)
+      .reduce((total, variant) => total + Math.max(0, Number(variant.stock_disponible ?? 0)), 0);
+  }
+
+  sizeStock(item: Product, size: string): number {
+    return item.variantes
+      .filter(
+        (variant) =>
+          variant.activo && variant.id_color === this.selectedColorId() && variant.talla === size,
+      )
+      .reduce((total, variant) => total + Math.max(0, Number(variant.stock_disponible ?? 0)), 0);
+  }
+
+  private selectedBranchName(): string {
+    const selected = this.selectedBranchId();
+    return selected === null
+      ? ''
+      : (this.branches().find((branch) => branch.id_sucursal === selected)?.nombre ?? '');
+  }
+
+  private syncSelectionForAvailability(item: Product): void {
+    if (this.selectedBranchId() === null || this.totalStock(item) === 0) return;
+    const currentColor = this.selectedColorId();
+    const colorId =
+      currentColor !== null && this.colorStock(item, currentColor) > 0
+        ? currentColor
+        : (item.variantes.find(
+            (variant) => variant.activo && Number(variant.stock_disponible ?? 0) > 0,
+          )?.id_color ?? null);
+    this.selectedColorId.set(colorId);
+    const currentSize = this.selectedSize();
+    const size =
+      currentSize && this.sizeStock(item, currentSize) > 0
+        ? currentSize
+        : (item.variantes.find(
+            (variant) =>
+              variant.activo &&
+              variant.id_color === colorId &&
+              Number(variant.stock_disponible ?? 0) > 0,
+          )?.talla ?? null);
+    this.selectedSize.set(size);
+    this.syncActiveImage(item);
   }
 
   selectedVariant(item: Product) {

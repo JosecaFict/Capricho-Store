@@ -161,8 +161,12 @@ describe('ReceiptsAdmin', () => {
     component.show.set(true);
     component.form.patchValue({ id_orden_compra: 8, observacion: 'Una unidad con demora' });
     component.selectOrder();
+    fixture.detectChanges();
 
     expect(component.details.length).toBe(2);
+    expect(fixture.nativeElement.textContent).toContain('Control de cantidades');
+    expect(fixture.nativeElement.textContent).toContain('Recibido antes');
+    expect(fixture.nativeElement.textContent).toContain('Pendiente');
     expect(component.details.at(0).value).toMatchObject({
       cantidad_solicitada: 5,
       cantidad_recibida_anterior: 2,

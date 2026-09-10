@@ -1017,12 +1017,6 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
   availableOrders = () =>
     this.orders().filter((order) => !['RECIBIDA', 'CANCELADA'].includes(order['estado']));
   show = signal(false);
-  selectedOrder = computed(
-    () =>
-      this.orders().find(
-        (order) => Number(order['id_orden_compra']) === Number(this.form.value.id_orden_compra),
-      ) ?? null,
-  );
   form = this.fb.group({
     id_orden_compra: [null as number | null, Validators.required],
     observacion: [''],
@@ -1030,6 +1024,13 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
   });
   get details() {
     return this.form.controls.detalles as FormArray;
+  }
+  selectedOrder(): Entity | null {
+    return (
+      this.orders().find(
+        (order) => Number(order['id_orden_compra']) === Number(this.form.value.id_orden_compra),
+      ) ?? null
+    );
   }
   ngOnInit() {
     this.load();
