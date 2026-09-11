@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import Ciudad, Cliente, Empleado, Sucursal, Usuario
@@ -98,7 +98,12 @@ class CommerceRepository:
             ).all()
         )
 
-    async def variant_row(self, variant_id: int):
+    async def clear_cart_items(self, cart_id: int) -> None:
+        await self.session.execute(
+            delete(DetalleCarrito).where(DetalleCarrito.id_carrito == cart_id)
+        )
+
+    async def variant_row(self, variant_id: int, branch_id: int | None = None):
         price = (
             select(HistorialPrecio.precio)
             .where(
@@ -122,6 +127,10 @@ class CommerceRepository:
             .limit(1)
             .scalar_subquery()
         )
+        conditions = [InventarioSucursal.id_variante == VarianteProducto.id_variante]
+        if branch_id is not None:
+            conditions.append(InventarioSucursal.id_sucursal == branch_id)
+
         available = (
             select(
                 func.coalesce(
@@ -129,7 +138,7 @@ class CommerceRepository:
                     0,
                 )
             )
-            .where(InventarioSucursal.id_variante == VarianteProducto.id_variante)
+            .where(*conditions)
             .scalar_subquery()
         )
         statement = (
@@ -511,3 +520,17 @@ class CommerceRepository:
             .all()
         )
         return rows, total
+
+    async def stale_reservations(self) -> list[Reserva]:
+        now = datetime.now(UTC)
+        statement = (
+            select(Reserva)
+            .where(
+                Reserva.estado.in_(["PENDIENTE", "CONFIRMADA"]),
+                Reserva.fecha_expiracion.is_not(None),
+                Reserva.fecha_expiracion < now,
+            )
+            .with_for_update()
+        )
+        return list((await self.session.scalars(statement)).all())
+

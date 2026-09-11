@@ -54,7 +54,7 @@ class CommerceLineResponse(ORMResponse):
 
 
 class CartItemCreate(CommerceLineRequest):
-    pass
+    id_sucursal: int | None = Field(default=None, gt=0)
 
 
 class CartItemUpdate(BaseModel):
@@ -64,6 +64,8 @@ class CartItemUpdate(BaseModel):
 class CartResponse(ORMResponse):
     id_carrito: int
     estado: str
+    id_sucursal: int | None = None
+    sucursal: str | None = None
     items: list[CommerceLineResponse]
     total: Decimal
 

@@ -351,3 +351,26 @@ def test_checkout_contract_accepts_complete_delivery() -> None:
         id_cotizacion=4,
     )
     assert payload.id_cotizacion == 4
+
+
+async def test_cart_endpoints_support_branch_and_clear() -> None:
+    service = AsyncMock()
+    cart_data = {**CART, "id_sucursal": 2, "sucursal": "Banzer"}
+    service.clear_cart.return_value = {**CART, "id_sucursal": None, "sucursal": None, "items": [], "total": "0.00"}
+    service.add_cart_item.return_value = cart_data
+
+    clear_response = await call("POST", "/api/v1/cart/clear", service=service, actor=principal())
+    assert clear_response.status_code == 200
+    assert clear_response.json()["id_sucursal"] is None
+
+    add_response = await call(
+        "POST",
+        "/api/v1/cart/items",
+        service=service,
+        actor=principal(),
+        json={"id_variante": 7, "cantidad": 2, "id_sucursal": 2},
+    )
+    assert add_response.status_code == 201
+    assert add_response.json()["id_sucursal"] == 2
+    assert add_response.json()["sucursal"] == "Banzer"
+

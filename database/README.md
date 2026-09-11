@@ -47,6 +47,7 @@ El orden actual es:
 4. `changes/20260909_cargar_temporadas_colecciones.sql`
 5. `changes/20260909_normalizar_codigos_barras_vacios.sql`
 6. `changes/20260909_administrar_sucursales.sql`
+7. `changes/20260911_asociar_sucursal_carrito.sql`
 
 ## Política
 

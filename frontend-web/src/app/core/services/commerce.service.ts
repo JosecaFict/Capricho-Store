@@ -34,8 +34,15 @@ export class CommerceService {
   cart() {
     return this.http.get<Cart>(`${API_BASE_URL}/cart`);
   }
-  addCartItem(id_variante: number, cantidad = 1) {
-    return this.http.post<Cart>(`${API_BASE_URL}/cart/items`, { id_variante, cantidad });
+  addCartItem(id_variante: number, cantidad = 1, id_sucursal?: number | null) {
+    const payload: { id_variante: number; cantidad: number; id_sucursal?: number } = {
+      id_variante,
+      cantidad,
+    };
+    if (id_sucursal) {
+      payload.id_sucursal = id_sucursal;
+    }
+    return this.http.post<Cart>(`${API_BASE_URL}/cart/items`, payload);
   }
   updateCartItem(id: number, cantidad: number) {
     return this.http.patch<Cart>(`${API_BASE_URL}/cart/items/${id}`, { cantidad });

@@ -52,6 +52,9 @@ class Carrito(Base):
     id_cliente: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("capricho.cliente.id_cliente", ondelete="CASCADE"), nullable=False
     )
+    id_sucursal: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("capricho.sucursal.id_sucursal", ondelete="SET NULL"), nullable=True
+    )
     estado: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'ACTIVO'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

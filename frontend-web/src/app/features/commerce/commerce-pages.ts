@@ -62,6 +62,12 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
           <a class="button button--primary" routerLink="/catalogo">Ver catálogo</a>
         </div>
       } @else if (cart(); as current) {
+        @if (current.sucursal) {
+          <div class="notice notice--info" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>Prendas preparadas en: <strong>Capricho Store {{ current.sucursal }}</strong></span>
+            <button class="text-button" type="button" [disabled]="saving()" (click)="clear()">Vaciar carrito</button>
+          </div>
+        }
         <div class="commerce-layout">
           <div class="commerce-lines" aria-live="polite">
             @for (item of current.items; track item.id_detalle) {
@@ -247,17 +253,30 @@ export class CartPage {
                 ></label
               >
             </fieldset>
-            <label class="field"
-              ><span>Sucursal que prepara el pedido</span
-              ><select formControlName="id_sucursal" (change)="quote.set(null)">
-                <option value="">Selecciona una sucursal</option>
-                @for (branch of branches(); track branch.id_sucursal) {
-                  <option [value]="branch.id_sucursal">
-                    {{ branch.nombre }} / {{ branch.direccion }}
-                  </option>
-                }
-              </select></label
-            >
+            @if (cart()?.id_sucursal) {
+              <div class="field">
+                <span>Sucursal que prepara el pedido</span>
+                <input
+                  type="text"
+                  [value]="cart()?.sucursal ? ('Capricho Store ' + cart()?.sucursal) : ('Sucursal #' + cart()?.id_sucursal)"
+                  readonly
+                  disabled
+                />
+                <small>Fijada según los productos seleccionados en tu carrito.</small>
+              </div>
+            } @else {
+              <label class="field"
+                ><span>Sucursal que prepara el pedido</span
+                ><select formControlName="id_sucursal" (change)="quote.set(null)">
+                  <option value="">Selecciona una sucursal</option>
+                  @for (branch of branches(); track branch.id_sucursal) {
+                    <option [value]="branch.id_sucursal">
+                      {{ branch.nombre }} / {{ branch.direccion }}
+                    </option>
+                  }
+                </select></label
+              >
+            }
             @if (form.controls.modalidad_entrega.value === 'DELIVERY') {
               <label class="field"
                 ><span>Dirección de entrega</span
@@ -377,6 +396,9 @@ export class CheckoutPage {
           this.cart.set(cart);
           this.branches.set(branches);
           this.addresses.set(addresses);
+          if (cart.id_sucursal) {
+            this.form.controls.id_sucursal.setValue(String(cart.id_sucursal));
+          }
         },
         error: (error) => this.error.set(this.errors.message(error, 'Intenta nuevamente.')),
       });
@@ -525,15 +547,28 @@ export class CheckoutPage {
             <h2>Nueva reserva</h2>
             <p>{{ cart()!.items.length }} variantes serán apartadas sin pago.</p>
           </div>
-          <label class="field"
-            ><span>Sucursal</span
-            ><select formControlName="id_sucursal">
-              <option value="">Selecciona</option>
-              @for (branch of branches(); track branch.id_sucursal) {
-                <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
-              }
-            </select></label
-          >
+          @if (cart()?.id_sucursal) {
+            <div class="field">
+              <span>Sucursal</span>
+              <input
+                type="text"
+                [value]="cart()?.sucursal ? ('Capricho Store ' + cart()?.sucursal) : ('Sucursal #' + cart()?.id_sucursal)"
+                readonly
+                disabled
+              />
+              <small>Fijada según las prendas en tu carrito.</small>
+            </div>
+          } @else {
+            <label class="field"
+              ><span>Sucursal</span
+              ><select formControlName="id_sucursal">
+                <option value="">Selecciona</option>
+                @for (branch of branches(); track branch.id_sucursal) {
+                  <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
+                }
+              </select></label
+            >
+          }
           <label class="field"
             ><span>Fecha y hora de prueba</span
             ><input type="datetime-local" formControlName="fecha_cita"
@@ -638,6 +673,9 @@ export class ReservationsPage {
           this.cart.set(data.cart);
           this.branches.set(data.branches);
           this.reservations.set(data.reservations);
+          if (data.cart.id_sucursal) {
+            this.form.controls.id_sucursal.setValue(String(data.cart.id_sucursal));
+          }
         },
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos cargar tus reservas.')),
@@ -660,6 +698,8 @@ export class ReservationsPage {
       .subscribe({
         next: (item) => {
           this.reservations.update((items) => [item, ...items]);
+          this.cart.set(null);
+          this.form.reset();
         },
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos crear la reserva.')),

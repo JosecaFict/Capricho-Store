@@ -139,7 +139,7 @@ describe('ProductDetail', () => {
 
     expect(quantity.max).toBe('5');
     expect(fixture.componentInstance.quantity()).toBe(3);
-    expect(commerce.addCartItem).toHaveBeenCalledWith(11, 3);
+    expect(commerce.addCartItem).toHaveBeenCalledWith(11, 3, 1);
     expect(fixture.nativeElement.textContent).toContain('Se agregaron 3 unidades al carrito.');
   });
 

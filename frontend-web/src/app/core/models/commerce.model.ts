@@ -16,6 +16,8 @@ export interface CommerceLine {
 export interface Cart {
   id_carrito: number;
   estado: string;
+  id_sucursal?: number | null;
+  sucursal?: string | null;
   items: CommerceLine[];
   total: string;
 }

@@ -416,11 +416,13 @@ CREATE TABLE detalle_transferencia (
 CREATE TABLE carrito (
   id_carrito BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   id_cliente BIGINT NOT NULL REFERENCES cliente(id_cliente) ON DELETE CASCADE,
+  id_sucursal BIGINT REFERENCES sucursal(id_sucursal) ON DELETE SET NULL,
   estado VARCHAR(20) NOT NULL DEFAULT 'ACTIVO' CHECK(estado IN ('ACTIVO','CONVERTIDO','EXPIRADO','ABANDONADO')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX uq_carrito_activo_cliente ON carrito(id_cliente) WHERE estado='ACTIVO';
+CREATE INDEX IF NOT EXISTS idx_carrito_sucursal ON carrito(id_sucursal);
 
 CREATE TABLE detalle_carrito (
   id_detalle_carrito BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

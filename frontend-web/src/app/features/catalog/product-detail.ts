@@ -205,6 +205,17 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                 >
                   {{ actionMessage() }}
                 </p>
+                @if (branchConflictPrompt()) {
+                  <div style="margin-top: 0.5rem;">
+                    <button
+                      class="button button--secondary button--full"
+                      type="button"
+                      (click)="clearCartAndAdd(item)"
+                    >
+                      Vaciar carrito actual y comprar aquí
+                    </button>
+                  </div>
+                }
               }
               @if (auth.currentUser()) {
                 <label class="field product-quantity" for="detail-quantity">
@@ -291,6 +302,7 @@ export class ProductDetail {
   readonly actionMessage = signal('');
   readonly actionError = signal(false);
   readonly adding = signal(false);
+  readonly branchConflictPrompt = signal(false);
   readonly visibleImages = computed(() => {
     const selected = this.selectedColorId();
     const all = this.images();
@@ -539,14 +551,17 @@ export class ProductDetail {
     const variant = this.selectedVariant(item);
     if (!variant) return;
     const quantity = this.quantity();
+    const branchId = this.selectedBranchId();
     this.adding.set(true);
     this.actionMessage.set('');
+    this.branchConflictPrompt.set(false);
     this.commerce
-      .addCartItem(variant.id_variante, quantity)
+      .addCartItem(variant.id_variante, quantity, branchId)
       .pipe(finalize(() => this.adding.set(false)))
       .subscribe({
         next: () => {
           this.actionError.set(false);
+          this.branchConflictPrompt.set(false);
           this.actionMessage.set(
             quantity === 1
               ? 'La prenda se agregó al carrito.'
@@ -555,8 +570,30 @@ export class ProductDetail {
         },
         error: (error) => {
           this.actionError.set(true);
+          const rawMessage = this.errors.message(error, 'No pudimos agregar la prenda al carrito.');
+          this.actionMessage.set(rawMessage);
+          if (rawMessage.includes('otra sucursal') || rawMessage.includes('vaciar el carrito')) {
+            this.branchConflictPrompt.set(true);
+          }
+        },
+      });
+  }
+
+  clearCartAndAdd(item: Product): void {
+    this.adding.set(true);
+    this.actionMessage.set('');
+    this.commerce
+      .clearCart()
+      .pipe(finalize(() => this.adding.set(false)))
+      .subscribe({
+        next: () => {
+          this.branchConflictPrompt.set(false);
+          this.addToCart(item);
+        },
+        error: (error) => {
+          this.actionError.set(true);
           this.actionMessage.set(
-            this.errors.message(error, 'No pudimos agregar la prenda al carrito.'),
+            this.errors.message(error, 'No se pudo vaciar el carrito actual.'),
           );
         },
       });

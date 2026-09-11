@@ -189,3 +189,48 @@ async def test_expired_stripe_session_restores_stock_and_cart() -> None:
     service._restore_sale_stock.assert_awaited_once()
     service._restore_checkout_cart.assert_awaited_once_with(transaction)
     session.commit.assert_awaited_once()
+
+
+async def test_stripe_checkout_gateway_uses_to_dict(monkeypatch) -> None:
+    from app.integrations.stripe_checkout import StripeCheckoutGateway
+    import stripe
+
+    class FakeSession:
+        def __init__(self, data: dict):
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    fake_session = FakeSession({"id": "cs_test_123", "url": "https://stripe.com/test"})
+
+    async def fake_create_async(**kwargs):
+        return fake_session
+
+    async def fake_retrieve_async(sid, **kwargs):
+        return fake_session
+
+    async def fake_expire_async(sid, **kwargs):
+        return fake_session
+
+    def fake_construct_event(payload, sig, secret):
+        return fake_session
+
+    monkeypatch.setattr(stripe.checkout.Session, "create_async", fake_create_async)
+    monkeypatch.setattr(stripe.checkout.Session, "retrieve_async", fake_retrieve_async)
+    monkeypatch.setattr(stripe.checkout.Session, "expire_async", fake_expire_async)
+    monkeypatch.setattr(stripe.Webhook, "construct_event", fake_construct_event)
+
+    gateway = StripeCheckoutGateway(secret_key="sk_test_123", webhook_secret="whsec_123")
+    created = await gateway.create_session(customer="cus_123")
+    assert created == {"id": "cs_test_123", "url": "https://stripe.com/test"}
+
+    retrieved = await gateway.retrieve_session("cs_test_123")
+    assert retrieved == {"id": "cs_test_123", "url": "https://stripe.com/test"}
+
+    expired = await gateway.expire_session("cs_test_123")
+    assert expired == {"id": "cs_test_123", "url": "https://stripe.com/test"}
+
+    event = gateway.construct_event(b"{}", "sig")
+    assert event == {"id": "cs_test_123", "url": "https://stripe.com/test"}
+

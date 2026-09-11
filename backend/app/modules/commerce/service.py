@@ -132,8 +132,10 @@ class CommerceService:
             raise CommerceNotFoundError("No existe un carrito activo")
         return cart
 
-    async def _line(self, detail_id: int, variant_id: int, quantity: int) -> CommerceLineResponse:
-        row = await self.repository.variant_row(variant_id)
+    async def _line(
+        self, detail_id: int, variant_id: int, quantity: int, branch_id: int | None = None
+    ) -> CommerceLineResponse:
+        row = await self.repository.variant_row(variant_id, branch_id=branch_id)
         if row is None:
             raise CommerceNotFoundError("La variante no existe")
         price = Decimal(row["precio"] or 0)
@@ -153,13 +155,25 @@ class CommerceService:
         )
 
     async def _cart_response(self, cart: Carrito) -> CartResponse:
+        branch_name = None
+        if cart.id_sucursal:
+            branch = await self.repository.get(Sucursal, cart.id_sucursal)
+            if branch:
+                branch_name = branch.nombre
         items = [
-            await self._line(item.id_detalle_carrito, item.id_variante, item.cantidad)
+            await self._line(
+                item.id_detalle_carrito,
+                item.id_variante,
+                item.cantidad,
+                branch_id=cart.id_sucursal,
+            )
             for item in await self.repository.cart_details(cart.id_carrito)
         ]
         return CartResponse(
             id_carrito=cart.id_carrito,
             estado=cart.estado,
+            id_sucursal=cart.id_sucursal,
+            sucursal=branch_name,
             items=items,
             total=sum((item.subtotal for item in items), Decimal(0)),
         )
@@ -172,14 +186,40 @@ class CommerceService:
 
     async def add_cart_item(self, user_id: int, payload: CartItemCreate) -> CartResponse:
         customer = await self._customer(user_id)
-        row = await self.repository.variant_row(payload.id_variante)
+        cart = await self._active_cart(customer.id_cliente, lock=True)
+        cart_items = await self.repository.cart_details(cart.id_carrito)
+
+        # Regla 1 Carrito = 1 Sucursal: validar conflicto si ya hay prendas de otra sucursal
+        if (
+            cart_items
+            and cart.id_sucursal
+            and payload.id_sucursal
+            and cart.id_sucursal != payload.id_sucursal
+        ):
+            current_branch = await self.repository.get(Sucursal, cart.id_sucursal)
+            branch_label = current_branch.nombre if current_branch else f"Sucursal #{cart.id_sucursal}"
+            raise CommerceConflictError(
+                f"Tu carrito contiene prendas de {branch_label}. Para comprar en otra sucursal, debes vaciar el carrito actual."
+            )
+
+        target_branch_id = payload.id_sucursal or cart.id_sucursal
+        if not cart_items:
+            cart.id_sucursal = payload.id_sucursal
+            target_branch_id = payload.id_sucursal
+        elif not cart.id_sucursal and payload.id_sucursal:
+            cart.id_sucursal = payload.id_sucursal
+            target_branch_id = payload.id_sucursal
+
+        row = await self.repository.variant_row(payload.id_variante, branch_id=target_branch_id)
         if row is None or not row["activo"]:
             raise InvalidCommerceOperationError("La variante no está disponible")
-        cart = await self._active_cart(customer.id_cliente, lock=True)
+
         current = await self.repository.cart_item_by_variant(cart.id_carrito, payload.id_variante)
         new_quantity = payload.cantidad + (current.cantidad if current else 0)
-        if new_quantity > int(row["stock_disponible"] or 0):
-            raise CommerceConflictError("La cantidad solicitada supera el stock disponible")
+        stock_available = int(row["stock_disponible"] or 0)
+        if new_quantity > stock_available:
+            raise CommerceConflictError("La cantidad solicitada supera el stock disponible en la sucursal")
+
         if current:
             current.cantidad = new_quantity
         else:
@@ -201,7 +241,7 @@ class CommerceService:
         item = await self.repository.cart_item(cart.id_carrito, item_id)
         if item is None:
             raise CommerceNotFoundError("El artículo no pertenece al carrito")
-        row = await self.repository.variant_row(item.id_variante)
+        row = await self.repository.variant_row(item.id_variante, branch_id=cart.id_sucursal)
         if row is None or not row["activo"] or payload.cantidad > int(row["stock_disponible"] or 0):
             raise CommerceConflictError("La cantidad solicitada no está disponible")
         item.cantidad = payload.cantidad
@@ -215,14 +255,17 @@ class CommerceService:
         if item is None:
             raise CommerceNotFoundError("El artículo no pertenece al carrito")
         await self.repository.delete(item)
+        remaining = await self.repository.cart_details(cart.id_carrito)
+        if not remaining:
+            cart.id_sucursal = None
         await self.session.commit()
         return await self._cart_response(cart)
 
     async def clear_cart(self, user_id: int) -> CartResponse:
         customer = await self._customer(user_id)
         cart = await self._active_cart(customer.id_cliente, lock=True)
-        for item in await self.repository.cart_details(cart.id_carrito):
-            await self.repository.delete(item)
+        await self.repository.clear_cart_items(cart.id_carrito)
+        cart.id_sucursal = None
         await self.session.commit()
         return await self._cart_response(cart)
 
@@ -318,8 +361,9 @@ class CommerceService:
         branch = await self.repository.get(Sucursal, payload.id_sucursal)
         if branch is None or not branch.activo:
             raise CommerceNotFoundError("La sucursal no está disponible")
+        now = datetime.now(UTC)
+        expiration: datetime
         if payload.fecha_cita:
-            now = datetime.now(UTC)
             appointment = (
                 payload.fecha_cita
                 if payload.fecha_cita.tzinfo
@@ -339,17 +383,25 @@ class CommerceService:
                 raise InvalidCommerceOperationError(
                     "La cita debe estar dentro del horario de la sucursal"
                 )
+            expiration = appointment + timedelta(hours=2)
+        else:
+            expiration = now + timedelta(hours=48)
         try:
             reservation = await self.repository.add(
                 Reserva(
                     id_cliente=customer.id_cliente,
                     id_sucursal=payload.id_sucursal,
                     fecha_cita=payload.fecha_cita,
+                    fecha_expiracion=expiration,
                     observacion=payload.observacion,
                     estado="PENDIENTE",
                 )
             )
             await self._reserve_stock(payload.id_sucursal, reservation.id_reserva, payload.items)
+            active_cart = await self.repository.active_cart(customer.id_cliente, lock=True)
+            if active_cart:
+                await self.repository.clear_cart_items(active_cart.id_carrito)
+                active_cart.id_sucursal = None
             await self._notify(
                 user_id,
                 "RESERVA_CREADA",
@@ -453,6 +505,20 @@ class CommerceService:
             await self.session.rollback()
             raise
         return await self._reservation_response(reservation)
+
+    async def expire_stale_reservations(self) -> int:
+        stale = await self.repository.stale_reservations()
+        count = 0
+        for reservation in stale:
+            try:
+                await self._release_reservation(reservation)
+                reservation.estado = "EXPIRADA"
+                count += 1
+            except Exception:
+                continue
+        if count > 0:
+            await self.session.commit()
+        return count
 
     async def update_reservation_status(
         self,
@@ -647,6 +713,16 @@ class CommerceService:
         details = await self.repository.cart_details(cart.id_carrito)
         if not details:
             raise InvalidCommerceOperationError("El carrito está vacío")
+        if cart.id_sucursal and payload.id_sucursal != cart.id_sucursal:
+            current_branch = await self.repository.get(Sucursal, cart.id_sucursal)
+            branch_label = (
+                current_branch.nombre if current_branch else f"Sucursal #{cart.id_sucursal}"
+            )
+            raise InvalidCommerceOperationError(
+                f"La sucursal seleccionada no coincide con la sucursal asignada a los productos de tu carrito ({branch_label})"
+            )
+        if not cart.id_sucursal:
+            cart.id_sucursal = payload.id_sucursal
         address = None
         quote = None
         shipping_cost = Decimal(0)
