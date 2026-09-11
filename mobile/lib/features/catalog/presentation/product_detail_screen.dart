@@ -1,11 +1,15 @@
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/catalog/data/catalog_repository.dart';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
+import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
+import 'package:capricho_store/features/commerce/presentation/reservation_bottom_sheet.dart';
+import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_image.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
@@ -30,6 +34,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   String? _selectedSize;
   String? _selectedColor;
   int? _selectedBranchId;
+  int _quantity = 1;
+  bool _addingToCart = false;
 
   @override
   void initState() {
@@ -113,59 +119,79 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(locale: 'es_BO', symbol: 'Bs.');
+    final cartCount = ref.watch(cartItemCountProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detalle de prenda'),
-        shape: const Border(
-          bottom: BorderSide(color: AppColors.line, width: 1),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _refresh,
+    return FutureBuilder<_ProductDetailData>(
+      future: _future,
+      builder: (context, snapshot) {
+        final appBar = AppBar(
+          title: const Text('Detalle de prenda'),
+          shape: const Border(
+            bottom: BorderSide(color: AppColors.line, width: 1),
           ),
-        ],
-      ),
-      body: FutureBuilder<_ProductDetailData>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          actions: [
+            IconButton(
+              tooltip: 'Actualizar',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _refresh,
+            ),
+            IconButton(
+              tooltip: 'Ver Carrito',
+              icon: Badge(
+                isLabelVisible: cartCount > 0,
+                label: Text('$cartCount'),
+                backgroundColor: AppColors.cobalt,
+                child: const Icon(Icons.shopping_bag_outlined),
+              ),
+              onPressed: () => context.push('/carrito'),
+            ),
+            const SizedBox(width: 4),
+          ],
+        );
 
-          if (snapshot.hasError) {
-            return MessageState(
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            appBar: appBar,
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: appBar,
+            body: MessageState(
               title: 'No pudimos cargar la prenda',
               message: snapshot.error.toString(),
               onRetry: _refresh,
-            );
-          }
+            ),
+          );
+        }
 
-          final data = snapshot.data!;
-          final product = data.product;
-          final images = data.images;
-          final variants = data.variants;
-          final measurements = data.measurements;
-          final branches = data.branches;
-          final visibleImages = _imagesForSelectedColor(images, variants);
-          final visibleSizes = variants
-              .where(
-                (variant) =>
-                    variant.active &&
-                    (_selectedColor == null || variant.color == _selectedColor),
-              )
-              .map((variant) => variant.size)
-              .toSet()
-              .toList();
+        final data = snapshot.data!;
+        final product = data.product;
+        final images = data.images;
+        final variants = data.variants;
+        final measurements = data.measurements;
+        final branches = data.branches;
+        final visibleImages = _imagesForSelectedColor(images, variants);
+        final visibleSizes = variants
+            .where(
+              (variant) =>
+                  variant.active &&
+                  (_selectedColor == null || variant.color == _selectedColor),
+            )
+            .map((variant) => variant.size)
+            .toSet()
+            .toList();
 
-          final matchedVariant = _findMatchingVariant(variants);
+        final matchedVariant = _findMatchingVariant(variants);
 
-          return RefreshIndicator(
+        return Scaffold(
+          appBar: appBar,
+          body: RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
-              padding: const EdgeInsets.only(bottom: 40),
+              padding: const EdgeInsets.only(bottom: 120),
               children: [
                 _buildImageGallery(visibleImages),
                 Padding(
@@ -450,9 +476,14 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 ),
               ],
             ),
-          );
-        },
-      ),
+          ),
+          bottomNavigationBar: _buildBottomActions(
+            product,
+            matchedVariant,
+            branches,
+          ),
+        );
+      },
     );
   }
 
@@ -864,6 +895,254 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildBottomActions(
+    Product product,
+    ProductVariant? matchedVariant,
+    List<BranchItem> branches,
+  ) {
+    final branch = branches.cast<BranchItem?>().firstWhere(
+          (b) => b?.id == _selectedBranchId,
+          orElse: () => null,
+        );
+
+    final hasBranch = _selectedBranchId != null;
+    final hasVariant = matchedVariant != null;
+    final stock = matchedVariant?.stock ?? 0;
+    final hasStock = stock > 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: const Border(top: BorderSide(color: AppColors.line, width: 1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!hasBranch)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          size: 16, color: AppColors.warning),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Selecciona una sucursal arriba para ver stock, reservar o comprar.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.inkSoft,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Row(
+                children: [
+                  // Stepper de Cantidad
+                  Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.canvas,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.line),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 44),
+                          icon: const Icon(Icons.remove, size: 18),
+                          onPressed: _quantity > 1 && hasStock
+                              ? () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _quantity--);
+                                }
+                              : null,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            '$_quantity',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 44),
+                          icon: const Icon(Icons.add, size: 18),
+                          onPressed: _quantity < stock && hasStock
+                              ? () {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => _quantity++);
+                                }
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Botón Reservar
+                  OutlinedButton(
+                    onPressed: hasBranch && hasVariant && hasStock && !_addingToCart
+                        ? () async {
+                            HapticFeedback.lightImpact();
+                            await ReservationBottomSheet.show(
+                              context,
+                              product: product,
+                              variant: matchedVariant,
+                              branchId: _selectedBranchId!,
+                              branchName: branch?.name ?? 'Sucursal seleccionada',
+                            );
+                          }
+                        : null,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      side: BorderSide(
+                        color: hasBranch && hasVariant && hasStock
+                            ? AppColors.cobalt
+                            : AppColors.line,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.event_seat_outlined, size: 18),
+                        SizedBox(width: 4),
+                        Text('Reservar', style: TextStyle(fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Botón Agregar al carrito
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: hasBranch && hasVariant && hasStock && !_addingToCart
+                          ? () => _addToCart(matchedVariant, branch?.name ?? 'Sucursal')
+                          : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.cobalt,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: _addingToCart
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Agregar',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addToCart(ProductVariant variant, String branchName) async {
+    final currentCart = ref.read(cartProvider).value;
+
+    // Regla central: 1 Carrito = 1 Sucursal
+    if (currentCart != null &&
+        currentCart.idSucursal != null &&
+        currentCart.idSucursal != _selectedBranchId &&
+        currentCart.items.isNotEmpty) {
+      final confirm = await AdaptiveDialogs.showConfirmation(
+        context,
+        title: 'Cambio de sucursal',
+        message:
+            'Tu carrito actual tiene prendas de ${currentCart.sucursal ?? "otra sucursal"}.\n\nPara respetar la regla comercial "1 Carrito = 1 Sucursal", ¿deseas vaciar el carrito actual y comenzar a comprar en $branchName?',
+        confirmText: 'Vaciar e iniciar',
+        cancelText: 'Cancelar',
+        isDestructive: true,
+      );
+
+      if (confirm != true) return;
+
+      setState(() => _addingToCart = true);
+      try {
+        await ref.read(cartProvider.notifier).clear();
+      } catch (_) {}
+    }
+
+    setState(() => _addingToCart = true);
+    HapticFeedback.mediumImpact();
+
+    try {
+      await ref.read(cartProvider.notifier).addItem(
+            variantId: variant.id,
+            quantity: _quantity,
+            branchId: _selectedBranchId,
+          );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('¡Agregado al carrito ($branchName)!'),
+            backgroundColor: AppColors.cobalt,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Ver carrito',
+              textColor: Colors.white,
+              onPressed: () => context.push('/carrito'),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('ApiException: ', '')),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _addingToCart = false);
+      }
+    }
   }
 }
 

@@ -6,6 +6,7 @@ import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -371,6 +372,99 @@ class ProfileScreen extends ConsumerWidget {
                     : 'ID de Cliente',
                 value: '#${user.id}',
                 last: true,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Mis Compras y Reservas
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.line),
+          ),
+          child: Column(
+            children: [
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.cobaltLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.inventory_2_outlined,
+                      color: AppColors.cobalt, size: 20),
+                ),
+                title: const Text('Mis Pedidos y Seguimiento',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('Seguimiento de compras y recibos de pago'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  context.push('/pedidos');
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.cobaltLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.event_seat_outlined,
+                      color: AppColors.cobalt, size: 20),
+                ),
+                title: const Text('Mis Reservas de Prendas',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('Prendas apartadas para prueba o retiro'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  context.push('/reservas');
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.cobaltLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.location_on_outlined,
+                      color: AppColors.cobalt, size: 20),
+                ),
+                title: const Text('Mis Direcciones de Envío',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('Direcciones guardadas para delivery'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  context.push('/direcciones');
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.cobaltLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.notifications_outlined,
+                      color: AppColors.cobalt, size: 20),
+                ),
+                title: const Text('Notificaciones',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('Avisos de pedidos y reservas'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  context.push('/notificaciones');
+                },
               ),
             ],
           ),

@@ -12,6 +12,13 @@ import 'package:capricho_store/features/auth/presentation/profile_screen.dart';
 import 'package:capricho_store/features/auth/presentation/register_screen.dart';
 import 'package:capricho_store/features/catalog/presentation/catalog_screen.dart';
 import 'package:capricho_store/features/catalog/presentation/product_detail_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/addresses_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/cart_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/checkout_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/notifications_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/order_detail_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/orders_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/reservations_screen.dart';
 import 'package:capricho_store/features/home/presentation/home_screen.dart';
 import 'package:capricho_store/shared/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -51,6 +58,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/catalogo',
             builder: (context, state) => const CatalogScreen(),
+          ),
+          GoRoute(
+            path: '/carrito',
+            builder: (context, state) => const CartScreen(),
           ),
           GoRoute(
             path: '/cuenta',
@@ -100,6 +111,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/recuperar-password',
         builder: (context, state) => const PasswordRecoveryScreen(),
+      ),
+      GoRoute(
+        path: '/checkout',
+        builder: (context, state) => const CheckoutScreen(),
+      ),
+      GoRoute(
+        path: '/reservas',
+        builder: (context, state) => const ReservationsScreen(),
+      ),
+      GoRoute(
+        path: '/pedidos',
+        builder: (context, state) => const OrdersScreen(),
+      ),
+      GoRoute(
+        path: '/pedidos/:id',
+        builder: (context, state) => OrderDetailScreen(
+          orderId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/direcciones',
+        builder: (context, state) => const AddressesScreen(),
+      ),
+      GoRoute(
+        path: '/notificaciones',
+        builder: (context, state) => const NotificationsScreen(),
       ),
     ],
   );
