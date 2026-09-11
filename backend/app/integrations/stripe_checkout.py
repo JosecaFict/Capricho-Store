@@ -17,10 +17,16 @@ class StripeCheckoutGateway:
         )
         return session.to_dict()
 
-    async def retrieve_session(self, session_id: str) -> dict[str, Any]:
+    async def retrieve_session(
+        self, session_id: str, expand: list[str] | None = None
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {}
+        if expand:
+            kwargs["expand"] = expand
         session = await stripe.checkout.Session.retrieve_async(
             session_id,
             api_key=self.secret_key,
+            **kwargs,
         )
         return session.to_dict()
 

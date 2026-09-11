@@ -137,6 +137,48 @@ async def get_current_principal(
     )
 
 
+async def get_optional_principal(
+    request: Request,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> CurrentPrincipal | None:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        return None
+
+    try:
+        claims = decode_access_token(credentials.credentials)
+    except ValueError:
+        return None
+
+    repository = AuthRepository(session)
+    user = await repository.get_user_by_id(claims.user_id)
+    if user is None or user.estado != "ACTIVO":
+        return None
+
+    roles = await repository.get_role_names(user.id_usuario)
+    permissions = await repository.get_effective_permissions(user.id_usuario)
+    employee_branch = await repository.get_employee_branch(user.id_usuario)
+    await apply_audit_context(
+        session,
+        build_request_audit_context(
+            request,
+            user_id=user.id_usuario,
+            session_id=claims.session_id,
+        ),
+    )
+    return CurrentPrincipal(
+        user=user,
+        roles=frozenset(roles),
+        permissions=frozenset(permissions),
+        session_id=claims.session_id,
+        id_sucursal=employee_branch[0] if employee_branch else None,
+        sucursal=employee_branch[1] if employee_branch else None,
+    )
+
+
 PermissionDependency = Callable[
     [CurrentPrincipal],
     Coroutine[Any, Any, CurrentPrincipal],

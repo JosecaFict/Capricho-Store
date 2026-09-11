@@ -437,6 +437,18 @@ class CommerceRepository:
     async def order_by_sale(self, sale_id: int) -> Pedido | None:
         return await self.session.scalar(select(Pedido).where(Pedido.id_venta == sale_id))
 
+    async def payment_by_sale(self, sale_id: int) -> Pago | None:
+        return await self.session.scalar(
+            select(Pago).where(Pago.id_venta == sale_id).order_by(Pago.id_pago.desc())
+        )
+
+    async def gateway_transaction_by_payment(
+        self, payment_id: int
+    ) -> TransaccionPasarela | None:
+        return await self.session.scalar(
+            select(TransaccionPasarela).where(TransaccionPasarela.id_pago == payment_id)
+        )
+
     async def supplier_history(
         self,
         *,

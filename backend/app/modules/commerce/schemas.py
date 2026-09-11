@@ -161,6 +161,7 @@ class CheckoutCreate(BaseModel):
     modalidad_entrega: Literal["RETIRO_SUCURSAL", "DELIVERY"]
     id_direccion: int | None = Field(default=None, gt=0)
     id_cotizacion: int | None = Field(default=None, gt=0)
+    return_url: str | None = None
 
     @model_validator(mode="after")
     def delivery_requires_address(self) -> "CheckoutCreate":
@@ -209,6 +210,7 @@ class OrderResponse(ORMResponse):
     fecha_preparacion: datetime | None
     fecha_finalizacion: datetime | None
     items: list[CommerceLineResponse]
+    receipt_url: str | None = None
 
 
 class StripeCheckoutResponse(BaseModel):
@@ -221,6 +223,7 @@ class StripeCheckoutStatusResponse(BaseModel):
     status: Literal["PROCESANDO", "PAGADO", "CANCELADO", "RECHAZADO"]
     message: str
     order: OrderResponse | None = None
+    receipt_url: str | None = None
 
 
 class ShippingQuoteCreate(BaseModel):

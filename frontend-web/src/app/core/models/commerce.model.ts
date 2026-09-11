@@ -81,6 +81,7 @@ export interface Order {
   fecha_preparacion: string | null;
   fecha_finalizacion: string | null;
   items: CommerceLine[];
+  receipt_url?: string | null;
 }
 
 export interface StripeCheckoutSession {
@@ -93,6 +94,7 @@ export interface StripeCheckoutStatus {
   status: 'PROCESANDO' | 'PAGADO' | 'CANCELADO' | 'RECHAZADO';
   message: string;
   order: Order | null;
+  receipt_url?: string | null;
 }
 
 export interface ShippingQuote {

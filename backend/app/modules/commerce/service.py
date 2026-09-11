@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from math import asin, cos, radians, sin, sqrt
+from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -705,7 +706,17 @@ class CommerceService:
     def _stripe_amount(amount: Decimal) -> int:
         return int((amount * 100).quantize(Decimal("1")))
 
-    async def checkout(self, user_id: int, payload: CheckoutCreate) -> StripeCheckoutResponse:
+    def _resolve_client_origin(self, origin_candidate: str | None) -> str:
+        if not origin_candidate:
+            return self.public_web_url
+        parsed = urlparse(origin_candidate.strip())
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+        return self.public_web_url
+
+    async def checkout(
+        self, user_id: int, payload: CheckoutCreate, client_origin: str | None = None
+    ) -> StripeCheckoutResponse:
         if self.stripe_gateway is None:
             raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
         customer = await self._customer(user_id)
@@ -729,24 +740,24 @@ class CommerceService:
         if payload.modalidad_entrega == "DELIVERY":
             address = await self.repository.get(DireccionCliente, payload.id_direccion)
             if address is None or address.id_cliente != customer.id_cliente or not address.activo:
-                raise CommerceNotFoundError("La dirección de entrega no existe")
-            if payload.id_cotizacion:
-                quote = await self.repository.get(CotizacionEnvio, payload.id_cotizacion)
-                if (
-                    quote is None
-                    or quote.id_cliente != customer.id_cliente
-                    or quote.id_direccion != address.id_direccion
-                    or quote.id_sucursal != payload.id_sucursal
-                ):
-                    raise InvalidCommerceOperationError("La cotización no corresponde al checkout")
-                if quote.expira_en and quote.expira_en < datetime.now(UTC):
-                    raise InvalidCommerceOperationError("La cotización expiró")
-                shipping_cost = quote.costo_estimado
-        lines = [
-            CommerceLineRequest(id_variante=item.id_variante, cantidad=item.cantidad)
-            for item in details
-        ]
-        stripe_session: dict | None = None
+                raise InvalidCommerceOperationError("La dirección de entrega no es válida")
+            quote = await self.repository.get(CotizacionEnvio, payload.id_cotizacion)
+            if (
+                quote is None
+                or quote.id_direccion != address.id_direccion
+                or quote.id_sucursal != payload.id_sucursal
+            ):
+                raise InvalidCommerceOperationError("La cotización de envío no corresponde al pedido")
+            if quote.expira_en and quote.expira_en < datetime.now(UTC):
+                raise InvalidCommerceOperationError("La cotización de envío ha expirado")
+            shipping_cost = quote.costo_estimado
+
+        base_web_url = self._resolve_client_origin(payload.return_url or client_origin)
+        customer_user = await self.repository.get(Usuario, customer.id_usuario)
+        customer_email = customer_user.correo if customer_user else None
+
+        lines = [CommerceLineRequest(id_variante=i.id_variante, cantidad=i.cantidad) for i in details]
+        stripe_session = None
         try:
             sale = await self._create_sale(
                 customer_id=customer.id_cliente,
@@ -820,29 +831,33 @@ class CommerceService:
                 minutes=self.checkout_expire_minutes,
                 seconds=60,
             )
+            payment_intent_data: dict = {
+                "metadata": {
+                    "payment_id": str(payment.id_pago),
+                    "sale_id": str(sale.id_venta),
+                    "order_id": str(order.id_pedido),
+                }
+            }
+            if customer_email:
+                payment_intent_data["receipt_email"] = customer_email
+
             try:
                 stripe_session = await self.stripe_gateway.create_session(
                     mode="payment",
                     payment_method_types=["card"],
                     line_items=line_items,
-                    customer_email=(await self.repository.get(Usuario, customer.id_usuario)).correo,
+                    customer_email=customer_email,
                     client_reference_id=str(order.id_pedido),
                     metadata={
                         "payment_id": str(payment.id_pago),
                         "sale_id": str(sale.id_venta),
                         "order_id": str(order.id_pedido),
                     },
-                    payment_intent_data={
-                        "metadata": {
-                            "payment_id": str(payment.id_pago),
-                            "sale_id": str(sale.id_venta),
-                            "order_id": str(order.id_pedido),
-                        }
-                    },
+                    payment_intent_data=payment_intent_data,
                     success_url=(
-                        f"{self.public_web_url}/checkout?session_id={{CHECKOUT_SESSION_ID}}"
+                        f"{base_web_url}/checkout?session_id={{CHECKOUT_SESSION_ID}}"
                     ),
-                    cancel_url=f"{self.public_web_url}/checkout?pago_cancelado=1",
+                    cancel_url=f"{base_web_url}/checkout?pago_cancelado=1",
                     expires_at=int(expires_at.timestamp()),
                     locale="es",
                     idempotency_key=f"capricho-checkout-{payment.id_pago}",
@@ -900,19 +915,39 @@ class CommerceService:
             raise InvalidCommerceOperationError("Stripe todavía no confirmó el pago")
         if amount_total != self._stripe_amount(payment.monto) or currency != payment.moneda:
             raise CommerceConflictError("El monto confirmado por Stripe no coincide con la venta")
+        payment_intent = stripe_session.get("payment_intent")
+        pi_id = (
+            payment_intent.get("id")
+            if isinstance(payment_intent, dict)
+            else (str(payment_intent or "") or None)
+        )
+        latest_charge = (
+            payment_intent.get("latest_charge")
+            if isinstance(payment_intent, dict) and isinstance(payment_intent.get("latest_charge"), dict)
+            else {}
+        )
+        receipt_url = latest_charge.get("receipt_url") if isinstance(latest_charge, dict) else None
         now = datetime.now(UTC)
         payment.estado = "PAGADO"
         payment.fecha_confirmacion = now
         sale.estado = "PAGADA"
         transaction.estado = "PAGADO"
-        transaction.external_payment_id = str(stripe_session.get("payment_intent") or "") or None
+        transaction.external_payment_id = pi_id
         transaction.external_customer_id = str(stripe_session.get("customer") or "") or None
         transaction.fecha_confirmacion = now
         transaction.respuesta_resumen = {
             **(transaction.respuesta_resumen or {}),
             "payment_status": stripe_session.get("payment_status"),
             "status": stripe_session.get("status"),
+            **({"receipt_url": receipt_url} if receipt_url else {}),
         }
+        cart_id = (transaction.respuesta_resumen or {}).get("cart_id")
+        if cart_id:
+            cart = await self.repository.get(Carrito, int(cart_id))
+            if cart:
+                cart.estado = "CONVERTIDO"
+                cart.id_sucursal = None
+                await self.repository.clear_cart_items(cart.id_carrito)
         customer = await self.repository.get(Cliente, sale.id_cliente)
         await self._notify(
             customer.id_usuario,
@@ -982,16 +1017,19 @@ class CommerceService:
             await self._cancel_stripe_checkout(str(stripe_session.get("id") or ""))
 
     async def stripe_checkout_status(
-        self, user_id: int, session_id: str
+        self, session_id: str, user_id: int | None = None
     ) -> StripeCheckoutStatusResponse:
         if self.stripe_gateway is None:
             raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
-        customer = await self._customer(user_id)
         transaction, payment, sale, order = await self._stripe_transaction(session_id)
-        if sale.id_cliente != customer.id_cliente:
-            raise CommerceNotFoundError("La sesión de pago no existe")
+        if user_id is not None:
+            customer = await self._customer(user_id)
+            if sale.id_cliente != customer.id_cliente:
+                raise CommerceNotFoundError("La sesión de pago no existe")
         try:
-            remote = await self.stripe_gateway.retrieve_session(session_id)
+            remote = await self.stripe_gateway.retrieve_session(
+                session_id, expand=["payment_intent.latest_charge"]
+            )
         except Exception as exc:
             raise PaymentGatewayError("No pudimos consultar el estado del pago en Stripe") from exc
         if remote.get("payment_status") == "paid":
@@ -999,20 +1037,24 @@ class CommerceService:
         elif remote.get("status") == "expired":
             await self._cancel_stripe_checkout(session_id)
         transaction, payment, sale, order = await self._stripe_transaction(session_id)
+        receipt_url = (transaction.respuesta_resumen or {}).get("receipt_url")
         if payment.estado == "PAGADO":
             return StripeCheckoutStatusResponse(
                 status="PAGADO",
                 message="Stripe confirmó el pago y la compra quedó registrada.",
                 order=await self._order_response(order),
+                receipt_url=receipt_url,
             )
         if payment.estado in {"CANCELADO", "RECHAZADO"}:
             return StripeCheckoutStatusResponse(
                 status=payment.estado,
                 message="El pago no se completó y las prendas volvieron a tu carrito.",
+                receipt_url=receipt_url,
             )
         return StripeCheckoutStatusResponse(
             status="PROCESANDO",
             message="Stripe está terminando de confirmar el pago.",
+            receipt_url=receipt_url,
         )
 
     async def cancel_stripe_checkout(self, user_id: int, session_id: str) -> None:
@@ -1134,6 +1176,12 @@ class CommerceService:
             else None
         )
         sale_response = await self._sale_response(sale)
+        payment = await self.repository.payment_by_sale(order.id_venta)
+        receipt_url = None
+        if payment:
+            tx = await self.repository.gateway_transaction_by_payment(payment.id_pago)
+            if tx and tx.respuesta_resumen:
+                receipt_url = tx.respuesta_resumen.get("receipt_url")
         return OrderResponse(
             id_pedido=order.id_pedido,
             id_venta=order.id_venta,
@@ -1149,6 +1197,7 @@ class CommerceService:
             fecha_preparacion=order.fecha_preparacion,
             fecha_finalizacion=order.fecha_finalizacion,
             items=sale_response.items,
+            receipt_url=receipt_url,
         )
 
     async def list_orders(

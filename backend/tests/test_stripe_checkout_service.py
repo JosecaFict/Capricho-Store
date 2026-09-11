@@ -102,12 +102,20 @@ async def test_checkout_creates_stripe_session_from_server_prices() -> None:
 
     result = await service.checkout(
         9,
-        CheckoutCreate(id_sucursal=1, modalidad_entrega="RETIRO_SUCURSAL"),
+        CheckoutCreate(
+            id_sucursal=1,
+            modalidad_entrega="RETIRO_SUCURSAL",
+            return_url="https://tienda.capricho.com",
+        ),
     )
 
     assert result.session_id == "cs_test_capricho"
     assert cart.estado == "CONVERTIDO"
     params = gateway.create_session.await_args.kwargs
+    assert params["customer_email"] == "ana@example.com"
+    assert params["payment_intent_data"]["receipt_email"] == "ana@example.com"
+    assert params["success_url"] == "https://tienda.capricho.com/checkout?session_id={CHECKOUT_SESSION_ID}"
+    assert params["cancel_url"] == "https://tienda.capricho.com/checkout?pago_cancelado=1"
     assert params["line_items"][0]["price_data"]["unit_amount"] == 12000
     assert params["line_items"][0]["quantity"] == 2
     assert params["metadata"] == {"payment_id": "12", "sale_id": "6", "order_id": "8"}
@@ -119,10 +127,19 @@ async def test_successful_stripe_session_marks_purchase_paid_once() -> None:
     repository = AsyncMock()
     transaction, payment, sale, order = checkout_records()
     customer = Cliente(id_cliente=4, id_usuario=9, estado="ACTIVO")
+    cart = Carrito(id_carrito=3, id_cliente=4, id_sucursal=1, estado="CONVERTIDO")
     repository.gateway_transaction_by_session.return_value = transaction
     repository.payment.return_value = payment
     repository.order_by_sale.return_value = order
-    repository.get.side_effect = lambda model, _identity: sale if model is Venta else customer
+
+    def get_side_effect(model, _identity):
+        if model is Venta:
+            return sale
+        if model is Carrito:
+            return cart
+        return customer
+
+    repository.get.side_effect = get_side_effect
     service = CommerceService(session, repository, stripe_gateway=AsyncMock())
     service._notify = AsyncMock()
     stripe_session = {
@@ -131,7 +148,12 @@ async def test_successful_stripe_session_marks_purchase_paid_once() -> None:
         "status": "complete",
         "amount_total": 24000,
         "currency": "bob",
-        "payment_intent": "pi_capricho",
+        "payment_intent": {
+            "id": "pi_capricho",
+            "latest_charge": {
+                "receipt_url": "https://pay.stripe.com/receipts/acct_123/ch_123/rcpt_123"
+            },
+        },
         "customer": "cus_capricho",
     }
 
@@ -141,6 +163,9 @@ async def test_successful_stripe_session_marks_purchase_paid_once() -> None:
     assert payment.estado == "PAGADO"
     assert sale.estado == "PAGADA"
     assert transaction.external_payment_id == "pi_capricho"
+    assert transaction.respuesta_resumen["receipt_url"] == "https://pay.stripe.com/receipts/acct_123/ch_123/rcpt_123"
+    assert cart.id_sucursal is None
+    repository.clear_cart_items.assert_awaited_once_with(3)
     session.commit.assert_awaited_once()
     service._notify.assert_awaited_once()
 
@@ -233,4 +258,69 @@ async def test_stripe_checkout_gateway_uses_to_dict(monkeypatch) -> None:
 
     event = gateway.construct_event(b"{}", "sig")
     assert event == {"id": "cs_test_123", "url": "https://stripe.com/test"}
+
+
+async def test_stripe_checkout_status_completes_paid_and_returns_receipt_url() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    gateway = AsyncMock()
+    transaction, payment, sale, order = checkout_records()
+    customer = Cliente(id_cliente=4, id_usuario=9, estado="ACTIVO")
+    cart = Carrito(id_carrito=3, id_cliente=4, id_sucursal=1, estado="CONVERTIDO")
+    repository.gateway_transaction_by_session.return_value = transaction
+    repository.payment.return_value = payment
+    repository.order_by_sale.return_value = order
+
+    def get_side_effect(model, _identity):
+        if model is Venta:
+            return sale
+        if model is Carrito:
+            return cart
+        return customer
+
+    repository.get.side_effect = get_side_effect
+    gateway.retrieve_session.return_value = {
+        "id": "cs_test_capricho",
+        "payment_status": "paid",
+        "status": "complete",
+        "amount_total": 24000,
+        "currency": "bob",
+        "payment_intent": {
+            "id": "pi_capricho",
+            "latest_charge": {
+                "receipt_url": "https://pay.stripe.com/receipts/acct_test/ch_test/rcpt_test"
+            },
+        },
+    }
+    from app.modules.commerce.schemas import OrderResponse
+    from datetime import datetime, UTC
+
+    mock_order = OrderResponse(
+        id_pedido=8,
+        id_venta=6,
+        estado="PENDIENTE",
+        modalidad_entrega="RETIRO_SUCURSAL",
+        id_sucursal=1,
+        sucursal="Central",
+        direccion_sucursal="Av. Principal 123",
+        id_direccion=None,
+        direccion_entrega=None,
+        total=Decimal("240.00"),
+        fecha_creacion=datetime.now(UTC),
+        fecha_preparacion=None,
+        fecha_finalizacion=None,
+        items=[],
+        receipt_url="https://pay.stripe.com/receipts/acct_test/ch_test/rcpt_test",
+    )
+    service = CommerceService(session, repository, stripe_gateway=gateway)
+    service._order_response = AsyncMock(return_value=mock_order)
+    service._notify = AsyncMock()
+
+    status_response = await service.stripe_checkout_status("cs_test_capricho", user_id=None)
+
+    assert status_response.status == "PAGADO"
+    assert status_response.receipt_url == "https://pay.stripe.com/receipts/acct_test/ch_test/rcpt_test"
+    assert payment.estado == "PAGADO"
+    assert sale.estado == "PAGADA"
+    assert cart.id_sucursal is None
 

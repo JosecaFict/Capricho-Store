@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     get_current_principal,
+    get_optional_principal,
     require_permission,
 )
 from app.modules.auth.exceptions import PermissionDeniedError
@@ -40,6 +41,7 @@ from app.modules.commerce.service import CommerceService
 
 router = APIRouter(tags=["cycle ii commerce"])
 Authenticated = Annotated[CurrentPrincipal, Depends(get_current_principal)]
+OptionalPrincipal = Annotated[CurrentPrincipal | None, Depends(get_optional_principal)]
 Service = Annotated[CommerceService, Depends(get_commerce_service)]
 
 
@@ -181,13 +183,21 @@ async def customer_reservation_history(principal: Authenticated, service: Servic
 @router.post(
     "/checkout", response_model=StripeCheckoutResponse, status_code=status.HTTP_201_CREATED
 )
-async def checkout(payload: CheckoutCreate, principal: Authenticated, service: Service):
-    return await service.checkout(principal.user.id_usuario, payload)
+async def checkout(
+    payload: CheckoutCreate, principal: Authenticated, service: Service, request: Request
+):
+    client_origin = request.headers.get("origin") or request.headers.get("referer")
+    return await service.checkout(
+        principal.user.id_usuario, payload, client_origin=client_origin
+    )
 
 
 @router.get("/checkout/{session_id}/status", response_model=StripeCheckoutStatusResponse)
-async def stripe_checkout_status(session_id: str, principal: Authenticated, service: Service):
-    return await service.stripe_checkout_status(principal.user.id_usuario, session_id)
+async def stripe_checkout_status(
+    session_id: str, principal: OptionalPrincipal, service: Service
+):
+    user_id = principal.user.id_usuario if principal else None
+    return await service.stripe_checkout_status(session_id, user_id=user_id)
 
 
 @router.post("/checkout/{session_id}/cancel", status_code=status.HTTP_204_NO_CONTENT)

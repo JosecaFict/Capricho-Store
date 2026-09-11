@@ -207,11 +207,21 @@ export class CartPage {
           [message]="
             'Stripe aprobó el pago. Tu número de pedido es #' +
             order.id_pedido +
-            '. Puedes seguir su estado desde tu cuenta.'
+            '. Enviamos el comprobante oficial de Stripe directamente a tu correo electrónico y puedes seguir el pedido desde tu cuenta.'
           "
         />
-        <div class="commerce-empty-action">
-          <a class="button button--primary" routerLink="/pedidos">Ver pedido</a>
+        <div class="commerce-empty-action" style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+          @if (order.receipt_url) {
+            <a
+              class="button button--secondary"
+              [href]="order.receipt_url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ver comprobante de Stripe ↗
+            </a>
+          }
+          <a class="button button--primary" routerLink="/pedidos">Ver mis pedidos</a>
         </div>
       } @else if (paymentStatus(); as result) {
         <app-status-panel title="Pago en verificación" [message]="result.message" />
@@ -443,6 +453,7 @@ export class CheckoutPage {
         modalidad_entrega: value.modalidad_entrega,
         id_direccion: value.modalidad_entrega === 'DELIVERY' ? Number(value.id_direccion) : null,
         id_cotizacion: this.quote()?.id_cotizacion ?? null,
+        return_url: window.location.origin,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
@@ -466,7 +477,11 @@ export class CheckoutPage {
       .subscribe({
         next: (result) => {
           if (result.status === 'PAGADO' && result.order) {
-            this.completed.set(result.order);
+            const order: Order = {
+              ...result.order,
+              receipt_url: result.receipt_url || result.order.receipt_url,
+            };
+            this.completed.set(order);
             this.paymentStatus.set(null);
             this.forgetSession();
           } else {
@@ -777,6 +792,18 @@ export class ReservationsPage {
                 <dd>{{ order.total | bolivianos }}</dd>
               </div>
             </dl>
+            @if (order.receipt_url) {
+              <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line-subtle, #f0ede8);">
+                <a
+                  class="button button--quiet button--small"
+                  [href]="order.receipt_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Comprobante Stripe ↗
+                </a>
+              </div>
+            }
           </article>
         }
       </div>
