@@ -72,7 +72,15 @@ class Settings(BaseSettings):
         ge=30,
         le=1440,
     )
+    openrouteservice_api_key: str | None = Field(
+        default=None, alias="OPENROUTESERVICE_API_KEY"
+    )
+    ors_api_key: str | None = Field(default=None, alias="ORS_API_KEY")
     database_schema: Literal["capricho"] = "capricho"
+
+    @property
+    def route_service_api_key(self) -> str | None:
+        return self.openrouteservice_api_key or self.ors_api_key
 
     @field_validator("database_url")
     @classmethod

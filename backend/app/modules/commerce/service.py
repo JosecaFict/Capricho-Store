@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.integrations.openrouteservice import OpenRouteServiceClient
 from app.integrations.stripe_checkout import StripeCheckoutGateway
 from app.modules.auth.models import Cliente, Sucursal, Usuario
 from app.modules.catalog.models import InventarioSucursal
@@ -87,12 +88,14 @@ class CommerceService:
         repository: CommerceRepository,
         *,
         stripe_gateway: StripeCheckoutGateway | None = None,
+        route_client: OpenRouteServiceClient | None = None,
         public_web_url: str = "http://localhost:4200",
         checkout_expire_minutes: int = 30,
     ) -> None:
         self.session = session
         self.repository = repository
         self.stripe_gateway = stripe_gateway
+        self.route_client = route_client
         self.public_web_url = public_web_url.rstrip("/")
         self.checkout_expire_minutes = checkout_expire_minutes
 
@@ -1322,7 +1325,31 @@ class CommerceService:
             raise CommerceNotFoundError("No se pudo encontrar la sucursal o dirección")
         if rate is None:
             raise InvalidCommerceOperationError("No existe una tarifa de envío activa")
-        distance = self._distance_km(branch, address)
+
+        route_estimate = None
+        if (
+            self.route_client
+            and branch.latitud is not None
+            and branch.longitud is not None
+            and address.latitud is not None
+            and address.longitud is not None
+        ):
+            route_estimate = await self.route_client.calculate_route(
+                start_lat=float(branch.latitud),
+                start_lng=float(branch.longitud),
+                end_lat=float(address.latitud),
+                end_lng=float(address.longitud),
+            )
+
+        if route_estimate:
+            distance = route_estimate.distance_km
+            duration = route_estimate.duration_min
+            provider = route_estimate.provider
+        else:
+            distance = self._distance_km(branch, address)
+            duration = None
+            provider = "HAVERSINE"
+
         cost = (
             rate.tarifa_base
             if distance <= rate.distancia_base_km
@@ -1335,9 +1362,9 @@ class CommerceService:
                 id_direccion=address.id_direccion,
                 id_tarifa=rate.id_tarifa,
                 distancia_km=distance,
-                duracion_estimada_min=None,
+                duracion_estimada_min=duration,
                 costo_estimado=cost.quantize(Decimal("0.01")),
-                proveedor_rutas="HAVERSINE",
+                proveedor_rutas=provider,
                 expira_en=datetime.now(UTC) + timedelta(minutes=30),
             )
         )
