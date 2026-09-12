@@ -21,6 +21,8 @@ import 'package:capricho_store/features/commerce/presentation/orders_screen.dart
 import 'package:capricho_store/features/commerce/presentation/reservations_screen.dart';
 import 'package:capricho_store/features/home/presentation/home_screen.dart';
 import 'package:capricho_store/shared/widgets/app_shell.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -28,6 +30,27 @@ import 'package:go_router/go_router.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'storeShell');
 final _adminShellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'adminShell');
+
+/// Construye páginas nativas adaptativas:
+/// - En iOS: CupertinoPage, activando el gesto físico de deslizamiento para volver atrás (Swipe-to-back) y animaciones nativas de iOS.
+/// - En Android: MaterialPage con transiciones Material 3.
+Page<dynamic> _adaptivePage({
+  required LocalKey key,
+  required Widget child,
+  String? title,
+}) {
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return CupertinoPage(
+      key: key,
+      title: title,
+      child: child,
+    );
+  }
+  return MaterialPage(
+    key: key,
+    child: child,
+  );
+}
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier();
@@ -101,49 +124,85 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/admin/403',
-        builder: (context, state) => const OperationalAccessScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const OperationalAccessScreen(),
+        ),
       ),
       GoRoute(
         path: '/productos/:id',
-        builder: (context, state) => ProductDetailScreen(
-          productId: int.parse(state.pathParameters['id']!),
-          branchId: int.tryParse(state.uri.queryParameters['sucursal'] ?? ''),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: ProductDetailScreen(
+            productId: int.parse(state.pathParameters['id']!),
+            branchId: int.tryParse(state.uri.queryParameters['sucursal'] ?? ''),
+          ),
         ),
       ),
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const LoginScreen(),
+        ),
+      ),
       GoRoute(
         path: '/registro',
-        builder: (context, state) => const RegisterScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const RegisterScreen(),
+        ),
       ),
       GoRoute(
         path: '/recuperar-password',
-        builder: (context, state) => const PasswordRecoveryScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const PasswordRecoveryScreen(),
+        ),
       ),
       GoRoute(
         path: '/checkout',
-        builder: (context, state) => const CheckoutScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const CheckoutScreen(),
+        ),
       ),
       GoRoute(
         path: '/reservas',
-        builder: (context, state) => const ReservationsScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const ReservationsScreen(),
+        ),
       ),
       GoRoute(
         path: '/pedidos',
-        builder: (context, state) => const OrdersScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const OrdersScreen(),
+        ),
       ),
       GoRoute(
         path: '/pedidos/:id',
-        builder: (context, state) => OrderDetailScreen(
-          orderId: int.parse(state.pathParameters['id']!),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: OrderDetailScreen(
+            orderId: int.parse(state.pathParameters['id']!),
+          ),
         ),
       ),
       GoRoute(
         path: '/direcciones',
-        builder: (context, state) => const AddressesScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const AddressesScreen(),
+        ),
       ),
       GoRoute(
         path: '/notificaciones',
-        builder: (context, state) => const NotificationsScreen(),
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: const NotificationsScreen(),
+        ),
       ),
     ],
   );
