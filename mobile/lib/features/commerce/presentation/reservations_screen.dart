@@ -338,7 +338,7 @@ class ReservationsScreen extends ConsumerWidget {
     Reservation reservation,
   ) async {
     final confirm = await AdaptiveDialogs.showConfirmation(
-      context,
+      context: context,
       title: 'Cancelar reserva',
       message:
           '¿Deseas cancelar la reserva #${reservation.idReserva}? Las prendas se liberarán para otros clientes.',

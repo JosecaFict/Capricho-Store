@@ -1087,7 +1087,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         currentCart.idSucursal != _selectedBranchId &&
         currentCart.items.isNotEmpty) {
       final confirm = await AdaptiveDialogs.showConfirmation(
-        context,
+        context: context,
         title: 'Cambio de sucursal',
         message:
             'Tu carrito actual tiene prendas de ${currentCart.sucursal ?? "otra sucursal"}.\n\nPara respetar la regla comercial "1 Carrito = 1 Sucursal", ¿deseas vaciar el carrito actual y comenzar a comprar en $branchName?',

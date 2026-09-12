@@ -393,7 +393,7 @@ class CartScreen extends ConsumerWidget {
 
   Future<void> _confirmClearCart(BuildContext context, WidgetRef ref) async {
     final confirm = await AdaptiveDialogs.showConfirmation(
-      context,
+      context: context,
       title: 'Vaciar carrito',
       message: '¿Estás seguro de que deseas eliminar todas las prendas del carrito?',
       confirmText: 'Sí, vaciar',
