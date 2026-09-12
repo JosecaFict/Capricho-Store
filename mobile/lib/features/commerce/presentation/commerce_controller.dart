@@ -16,7 +16,7 @@ class CartController extends AsyncNotifier<Cart?> {
     try {
       return await _api.getCart();
     } on ApiException catch (e) {
-      if (e.statusCode == 401) {
+      if (e.statusCode == 401 || e.statusCode == 404) {
         return null;
       }
       rethrow;
@@ -27,7 +27,16 @@ class CartController extends AsyncNotifier<Cart?> {
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _api.getCart());
+    state = await AsyncValue.guard(() async {
+      try {
+        return await _api.getCart();
+      } on ApiException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 404) {
+          return null;
+        }
+        rethrow;
+      }
+    });
   }
 
   Future<void> addItem({

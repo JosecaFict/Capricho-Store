@@ -143,7 +143,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 backgroundColor: AppColors.cobalt,
                 child: const Icon(Icons.shopping_bag_outlined),
               ),
-              onPressed: () => context.push('/carrito'),
+              onPressed: () => context.go('/carrito'),
             ),
             const SizedBox(width: 4),
           ],
@@ -1123,7 +1123,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             action: SnackBarAction(
               label: 'Ver carrito',
               textColor: Colors.white,
-              onPressed: () => context.push('/carrito'),
+              onPressed: () => context.go('/carrito'),
             ),
           ),
         );

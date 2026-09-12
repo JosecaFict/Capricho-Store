@@ -25,12 +25,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'storeShell');
+final _adminShellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'adminShell');
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier();
   ref.listen(authControllerProvider, (_, _) => refresh.notify());
   ref.onDispose(refresh.dispose);
 
   return GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: '/inicio',
     refreshListenable: refresh,
     redirect: (context, state) {
@@ -48,6 +53,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       ShellRoute(
+        navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) =>
             AppShell(location: state.uri.path, child: child),
         routes: [
@@ -71,6 +77,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/admin', builder: (_, _) => const SizedBox.shrink()),
       ShellRoute(
+        navigatorKey: _adminShellNavigatorKey,
         builder: (context, state, child) =>
             AdminShell(location: state.uri.path, child: child),
         routes: [
