@@ -5,6 +5,36 @@ final _currencyFormatter = NumberFormat.currency(
   decimalDigits: 2,
 );
 
+double _asDouble(dynamic value, [double defaultValue = 0.0]) {
+  if (value == null) return defaultValue;
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? defaultValue;
+  return defaultValue;
+}
+
+double? _asNullableDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
+}
+
+int _asInt(dynamic value, [int defaultValue = 0]) {
+  if (value == null) return defaultValue;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? defaultValue;
+  return defaultValue;
+}
+
+int? _asNullableInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
 class CommerceLineItem {
   final int idDetalle;
   final int idVariante;
@@ -36,16 +66,16 @@ class CommerceLineItem {
 
   factory CommerceLineItem.fromJson(Map<String, dynamic> json) {
     return CommerceLineItem(
-      idDetalle: json['id_detalle'] as int? ?? 0,
-      idVariante: json['id_variante'] as int? ?? 0,
+      idDetalle: _asInt(json['id_detalle']),
+      idVariante: _asInt(json['id_variante']),
       sku: json['sku'] as String? ?? '',
       producto: json['producto'] as String? ?? '',
       talla: json['talla'] as String? ?? '',
       color: json['color'] as String? ?? '',
-      cantidad: json['cantidad'] as int? ?? 0,
-      precioUnitario: (json['precio_unitario'] as num?)?.toDouble() ?? 0.0,
-      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
-      stockDisponible: json['stock_disponible'] as int? ?? 0,
+      cantidad: _asInt(json['cantidad']),
+      precioUnitario: _asDouble(json['precio_unitario']),
+      subtotal: _asDouble(json['subtotal']),
+      stockDisponible: _asInt(json['stock_disponible']),
       activo: json['activo'] as bool? ?? true,
       imagenUrl: json['imagen_url'] as String?,
     );
@@ -74,15 +104,15 @@ class Cart {
 
   factory Cart.fromJson(Map<String, dynamic> json) {
     return Cart(
-      idCarrito: json['id_carrito'] as int? ?? 0,
+      idCarrito: _asInt(json['id_carrito']),
       estado: json['estado'] as String? ?? 'ACTIVO',
-      idSucursal: json['id_sucursal'] as int?,
+      idSucursal: _asNullableInt(json['id_sucursal']),
       sucursal: json['sucursal'] as String?,
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => CommerceLineItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      total: (json['total'] as num?)?.toDouble() ?? 0.0,
+      total: _asDouble(json['total']),
     );
   }
 
@@ -118,8 +148,8 @@ class Reservation {
 
   factory Reservation.fromJson(Map<String, dynamic> json) {
     return Reservation(
-      idReserva: json['id_reserva'] as int? ?? 0,
-      idSucursal: json['id_sucursal'] as int? ?? 0,
+      idReserva: _asInt(json['id_reserva']),
+      idSucursal: _asInt(json['id_sucursal']),
       sucursal: json['sucursal'] as String? ?? '',
       direccionSucursal: json['direccion_sucursal'] as String? ?? '',
       fechaReserva: json['fecha_reserva'] != null
@@ -186,15 +216,15 @@ class Address {
 
   factory Address.fromJson(Map<String, dynamic> json) {
     return Address(
-      idDireccion: json['id_direccion'] as int? ?? 0,
-      idCiudad: json['id_ciudad'] as int? ?? 0,
+      idDireccion: _asInt(json['id_direccion']),
+      idCiudad: _asInt(json['id_ciudad']),
       ciudad: json['ciudad'] as String? ?? '',
       alias: json['alias'] as String?,
       zona: json['zona'] as String?,
       direccion: json['direccion'] as String? ?? '',
       referencia: json['referencia'] as String?,
-      latitud: (json['latitud'] as num?)?.toDouble(),
-      longitud: (json['longitud'] as num?)?.toDouble(),
+      latitud: _asNullableDouble(json['latitud']),
+      longitud: _asNullableDouble(json['longitud']),
       esPrincipal: json['es_principal'] as bool? ?? false,
       activo: json['activo'] as bool? ?? true,
     );
@@ -229,12 +259,12 @@ class ShippingQuote {
 
   factory ShippingQuote.fromJson(Map<String, dynamic> json) {
     return ShippingQuote(
-      idCotizacion: json['id_cotizacion'] as int? ?? 0,
-      idSucursal: json['id_sucursal'] as int? ?? 0,
-      idDireccion: json['id_direccion'] as int? ?? 0,
-      distanciaKm: (json['distancia_km'] as num?)?.toDouble() ?? 0.0,
-      duracionEstimadaMin: json['duracion_estimada_min'] as int?,
-      costoEstimado: (json['costo_estimado'] as num?)?.toDouble() ?? 0.0,
+      idCotizacion: _asInt(json['id_cotizacion']),
+      idSucursal: _asInt(json['id_sucursal']),
+      idDireccion: _asInt(json['id_direccion']),
+      distanciaKm: _asDouble(json['distancia_km']),
+      duracionEstimadaMin: _asNullableInt(json['duracion_estimada_min']),
+      costoEstimado: _asDouble(json['costo_estimado']),
       proveedorRutas: json['proveedor_rutas'] as String? ?? 'OPEN_ROUTE_SERVICE',
       fechaCotizacion: json['fecha_cotizacion'] != null
           ? DateTime.parse(json['fecha_cotizacion'] as String)
@@ -333,16 +363,16 @@ class Order {
 
   factory Order.fromJson(Map<String, dynamic> json) {
     return Order(
-      idPedido: json['id_pedido'] as int? ?? 0,
-      idVenta: json['id_venta'] as int? ?? 0,
+      idPedido: _asInt(json['id_pedido']),
+      idVenta: _asInt(json['id_venta']),
       estado: json['estado'] as String? ?? 'PENDIENTE',
       modalidadEntrega: json['modalidad_entrega'] as String? ?? 'RETIRO_SUCURSAL',
-      idSucursal: json['id_sucursal'] as int? ?? 0,
+      idSucursal: _asInt(json['id_sucursal']),
       sucursal: json['sucursal'] as String? ?? '',
       direccionSucursal: json['direccion_sucursal'] as String? ?? '',
-      idDireccion: json['id_direccion'] as int?,
+      idDireccion: _asNullableInt(json['id_direccion']),
       direccionEntrega: json['direccion_entrega'] as String?,
-      total: (json['total'] as num?)?.toDouble() ?? 0.0,
+      total: _asDouble(json['total']),
       fechaCreacion: json['fecha_creacion'] != null
           ? DateTime.parse(json['fecha_creacion'] as String)
           : DateTime.now(),
@@ -430,7 +460,7 @@ class CustomerNotification {
 
   factory CustomerNotification.fromJson(Map<String, dynamic> json) {
     return CustomerNotification(
-      idNotificacion: json['id_notificacion'] as int? ?? 0,
+      idNotificacion: _asInt(json['id_notificacion']),
       tipo: json['tipo'] as String? ?? 'SISTEMA',
       titulo: json['titulo'] as String?,
       contenido: json['contenido'] as String? ?? '',

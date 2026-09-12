@@ -46,12 +46,12 @@ class InventoryStockItem {
         size: json['talla'] as String? ?? '-',
         color: json['color'] as String? ?? '-',
         category: json['categoria'] as String? ?? '',
-        physicalStock: (json['stock_fisico'] as num?)?.toInt() ?? 0,
-        reservedStock: (json['stock_reservado'] as num?)?.toInt() ?? 0,
-        minStock: (json['stock_minimo'] as num?)?.toInt() ?? 0,
-        availableStock: (json['stock_disponible'] as num?)?.toInt() ?? 0,
+        physicalStock: int.tryParse(json['stock_fisico']?.toString() ?? '') ?? 0,
+        reservedStock: int.tryParse(json['stock_reservado']?.toString() ?? '') ?? 0,
+        minStock: int.tryParse(json['stock_minimo']?.toString() ?? '') ?? 0,
+        availableStock: int.tryParse(json['stock_disponible']?.toString() ?? '') ?? 0,
         stockStatus: json['estado_stock'] as String? ?? 'DISPONIBLE',
-        weightedCost: (json['costo_promedio_ponderado'] as num?)?.toDouble(),
+        weightedCost: double.tryParse(json['costo_promedio_ponderado']?.toString() ?? ''),
       );
 
   final int id;

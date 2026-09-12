@@ -486,33 +486,35 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           initialValue: query.sort,
                           decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.swap_vert_rounded, size: 20),
+                            prefixIcon: Icon(Icons.swap_vert_rounded, size: 18),
+                            prefixIconConstraints: BoxConstraints(minWidth: 30),
                             contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10,
+                              horizontal: 6,
                             ),
                           ),
                           items: const [
                             DropdownMenuItem(
                               value: 'nombre',
-                              child: Text('Nombre A-Z'),
+                              child: Text('Nombre A-Z', overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: '-nombre',
-                              child: Text('Nombre Z-A'),
+                              child: Text('Nombre Z-A', overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: 'precio',
-                              child: Text('Menor precio'),
+                              child: Text('Menor precio', overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: '-precio',
-                              child: Text('Mayor precio'),
+                              child: Text('Mayor precio', overflow: TextOverflow.ellipsis),
                             ),
                             DropdownMenuItem(
                               value: '-created_at',
-                              child: Text('Novedades'),
+                              child: Text('Novedades', overflow: TextOverflow.ellipsis),
                             ),
                           ],
                           onChanged: (val) {
