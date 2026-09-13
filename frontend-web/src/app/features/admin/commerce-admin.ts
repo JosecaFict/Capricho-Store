@@ -2525,92 +2525,150 @@ export class OrdersAdmin {
       </div>
 
       @if (loading()) {
-        <div class="admin-skeleton-grid"><span></span><span></span></div>
+        <div class="admin-skeleton-table"><span></span><span></span></div>
       } @else if (!filteredItems().length) {
         <app-status-panel
           title="Sin devoluciones encontradas"
           message="No existen registros de devolución para los criterios seleccionados."
         />
       } @else {
-        <div class="returns-card-grid">
-          @for (item of filteredItems(); track item.id_devolucion) {
-            <article class="return-card">
-              <header class="return-card__header">
-                <div>
-                  <h2 class="return-card__title">Devolución #{{ item.id_devolucion }}</h2>
-                  <p class="return-card__subtitle">
-                    Venta <strong>#{{ item.id_venta }}</strong> · Solicitado {{ item.fecha_solicitud | date: 'short' }}
-                  </p>
-                </div>
-                <span class="status-chip" [class]="badgeClass(item.estado)">{{ item.estado }}</span>
-              </header>
-
-              <div class="return-card__customer">
-                <span>👤</span>
-                <span>{{ item.cliente_nombre || 'Consumidor Final (Mostrador)' }}</span>
-              </div>
-
-              <blockquote class="return-card__reason">
-                "{{ item.motivo }}"
-              </blockquote>
-
-              <div class="return-card__items">
-                <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--ink-soft);">
-                  Prendas Devueltas ({{ item.items.length }})
-                </span>
-                @for (line of item.items; track line.id_detalle_devolucion) {
-                  <div class="return-card__item-row">
-                    <div>
-                      <strong>{{ line.producto }}</strong>
-                      <span style="color: var(--ink-soft); font-size: 0.78rem;"> ({{ line.color }} / {{ line.talla }})</span>
+        <div class="admin-table-wrap returns-table-wrap">
+          <table class="returns-table">
+            <thead>
+              <tr>
+                <th style="width: 130px;">N° Devolución</th>
+                <th style="width: 180px;">Solicitante</th>
+                <th style="min-width: 220px;">Motivo</th>
+                <th style="min-width: 280px;">Prendas Devueltas</th>
+                <th style="width: 210px;">Acción</th>
+                <th style="width: 170px;">Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of filteredItems(); track item.id_devolucion) {
+                <tr>
+                  <!-- 1. N° Devolución -->
+                  <td>
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                      <strong style="font-size: 1.05rem; color: var(--ink);">#{{ item.id_devolucion }}</strong>
+                      <span style="font-size: 0.76rem; color: var(--ink-soft); font-weight: 600;">Venta #{{ item.id_venta }}</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <strong>{{ line.cantidad }} u.</strong>
+                  </td>
+
+                  <!-- 2. Solicitante -->
+                  <td>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                      <strong style="font-size: 0.88rem; color: var(--ink);">
+                        {{ item.cliente_nombre || 'Consumidor Final' }}
+                      </strong>
                       <span
-                        class="condition-badge"
-                        [class.condition-badge--apta]="line.estado_prenda === 'APTA_REINGRESO'"
-                        [class.condition-badge--no-apta]="line.estado_prenda === 'NO_APTA'"
+                        class="status-chip"
+                        style="width: fit-content; font-size: 0.7rem; padding: 2px 7px;"
+                        [style.background]="item.cliente_nombre ? '#eff6ff' : '#f1f5f9'"
+                        [style.color]="item.cliente_nombre ? '#1d4ed8' : '#64748b'"
+                        [style.border]="item.cliente_nombre ? '1px solid #bfdbfe' : '1px solid #e2e8f0'"
                       >
-                        {{ line.estado_prenda === 'APTA_REINGRESO' ? '✓ Apta' : '⚠️ No Apta' }}
+                        {{ item.cliente_nombre ? '👤 Registrado' : '🏪 Mostrador' }}
                       </span>
                     </div>
-                  </div>
-                }
-              </div>
+                  </td>
 
-              @if (item.fecha_resolucion) {
-                <div style="font-size: 0.78rem; color: var(--ink-soft);">
-                  Resolución: {{ item.fecha_resolucion | date: 'short' }}
-                </div>
-              }
+                  <!-- 3. Motivo -->
+                  <td>
+                    <div style="font-size: 0.85rem; color: var(--ink); line-height: 1.4; font-style: italic;">
+                      "{{ item.motivo }}"
+                    </div>
+                  </td>
 
-              @if (nextStates(item.estado).length > 0) {
-                <div class="return-card__actions">
-                  @for (state of nextStates(item.estado); track state) {
-                    <button
-                      class="button"
-                      [class.button--primary]="state === 'COMPLETADA'"
-                      [class.button--secondary]="state === 'APROBADA'"
-                      [class.button--danger]="state === 'RECHAZADA'"
-                      type="button"
-                      [disabled]="saving()"
-                      (click)="update(item.id_devolucion, state)"
-                    >
-                      @if (state === 'COMPLETADA') {
-                        ✓ Completar y Reintegrar Stock
-                      } @else if (state === 'APROBADA') {
-                        📋 Aprobar Solicitud
-                      } @else if (state === 'RECHAZADA') {
-                        ✕ Rechazar
-                      } @else {
-                        {{ state }}
+                  <!-- 4. Prendas Devueltas -->
+                  <td>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      @for (line of item.items; track line.id_detalle_devolucion) {
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.82rem; background: var(--surface-muted); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line);">
+                          <div>
+                            <strong>{{ line.producto }}</strong>
+                            <span style="color: var(--ink-soft); font-size: 0.76rem;"> ({{ line.color }} / {{ line.talla }})</span>
+                          </div>
+                          <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                            <strong style="font-variant-numeric: tabular-nums;">{{ line.cantidad }} u.</strong>
+                            <span
+                              class="condition-badge"
+                              [class.condition-badge--apta]="line.estado_prenda === 'APTA_REINGRESO'"
+                              [class.condition-badge--no-apta]="line.estado_prenda === 'NO_APTA'"
+                            >
+                              {{ line.estado_prenda === 'APTA_REINGRESO' ? '✓ Apta' : '⚠️ No Apta' }}
+                            </span>
+                          </div>
+                        </div>
                       }
-                    </button>
-                  }
-                </div>
+                    </div>
+                  </td>
+
+                  <!-- 5. Acción (si fue aprobado o no + botones de transición) -->
+                  <td>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <div>
+                        <span class="status-chip" [class]="badgeClass(item.estado)">
+                          @if (item.estado === 'COMPLETADA') {
+                            ✓ Aprobada / Completada
+                          } @else if (item.estado === 'APROBADA') {
+                            📋 Aprobada
+                          } @else if (item.estado === 'RECHAZADA') {
+                            ✕ No Aprobada (Rechazada)
+                          } @else {
+                            ⏳ Pendiente
+                          }
+                        </span>
+                      </div>
+
+                      @if (nextStates(item.estado).length > 0) {
+                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                          @for (state of nextStates(item.estado); track state) {
+                            <button
+                              class="button"
+                              [class.button--primary]="state === 'COMPLETADA'"
+                              [class.button--secondary]="state === 'APROBADA'"
+                              [class.button--danger]="state === 'RECHAZADA'"
+                              type="button"
+                              [disabled]="saving()"
+                              (click)="update(item.id_devolucion, state)"
+                              style="font-size: 0.75rem; padding: 4px 8px;"
+                            >
+                              @if (state === 'COMPLETADA') {
+                                ✓ Completar
+                              } @else if (state === 'APROBADA') {
+                                📋 Aprobar
+                              } @else if (state === 'RECHAZADA') {
+                                ✕ Rechazar
+                              } @else {
+                                {{ state }}
+                              }
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </td>
+
+                  <!-- 6. Fecha (cuándo fue) -->
+                  <td>
+                    <div style="display: flex; flex-direction: column; gap: 3px; font-size: 0.8rem;">
+                      <div>
+                        <span style="color: var(--ink-soft); font-size: 0.7rem; text-transform: uppercase; font-weight: 700;">Solicitado:</span>
+                        <div style="font-weight: 600;">{{ item.fecha_solicitud | date: 'short' }}</div>
+                      </div>
+                      @if (item.fecha_resolucion) {
+                        <div style="margin-top: 4px; border-top: 1px dashed var(--line); padding-top: 3px;">
+                          <span style="color: var(--ink-soft); font-size: 0.7rem; text-transform: uppercase; font-weight: 700;">Resuelto:</span>
+                          <div style="color: #059669; font-weight: 700;">{{ item.fecha_resolucion | date: 'short' }}</div>
+                        </div>
+                      }
+                    </div>
+                  </td>
+                </tr>
               }
-            </article>
-          }
+            </tbody>
+          </table>
         </div>
       }
 
