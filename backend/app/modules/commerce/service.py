@@ -866,7 +866,7 @@ class CommerceService:
                     idempotency_key=f"capricho-checkout-{payment.id_pago}",
                 )
             except Exception as exc:
-                raise PaymentGatewayError("No pudimos iniciar el pago seguro con Stripe") from exc
+                raise PaymentGatewayError(f"No pudimos iniciar el pago seguro con Stripe: {exc}") from exc
             session_id = str(stripe_session["id"])
             checkout_url = str(stripe_session["url"])
             transaction.external_session_id = session_id

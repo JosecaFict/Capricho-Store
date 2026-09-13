@@ -200,6 +200,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         deliveryMode: _deliveryMode,
         addressId: _deliveryMode == 'DELIVERY' ? _selectedAddress!.idDireccion : null,
         quoteId: _deliveryMode == 'DELIVERY' ? _shippingQuote!.idCotizacion : null,
+        returnUrl: 'https://capricho-store.vercel.app',
       );
 
       final uri = Uri.parse(checkoutData.checkoutUrl);
