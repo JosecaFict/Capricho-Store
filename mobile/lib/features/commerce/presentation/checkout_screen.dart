@@ -591,12 +591,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               const Icon(Icons.check_circle_rounded,
                   color: AppColors.success, size: 20),
               const SizedBox(width: 8),
-              Text(
-                'Retiro en Sucursal ${cart.sucursal ?? ""}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14.5,
-                  color: AppColors.ink,
+              Expanded(
+                child: Text(
+                  'Retiro en Sucursal ${cart.sucursal ?? ""}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                    color: AppColors.ink,
+                  ),
                 ),
               ),
             ],
@@ -708,7 +710,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   SizedBox(width: 10),
-                  Text('Cotizando ruta vial con OpenRouteService...'),
+                  Expanded(
+                    child: Text('Cotizando ruta vial con OpenRouteService...'),
+                  ),
                 ],
               ),
             )
