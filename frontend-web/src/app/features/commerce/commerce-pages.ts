@@ -534,7 +534,7 @@ export class CartPage {
                       class="button button--primary"
                       [disabled]="savingAddress() || newAddressForm.invalid"
                     >
-                      {{ savingAddress() ? 'Guardando dirección…' : 'Guardar y usar para este pedido' }}
+                      {{ savingAddress() ? 'Guardando…' : 'Guardar dirección' }}
                     </button>
                   </div>
                 </form>
@@ -717,7 +717,6 @@ export class CheckoutPage {
   }
 
   closeAddressModal(): void {
-    if (this.savingAddress()) return;
     this.showAddressModal.set(false);
   }
 
@@ -762,7 +761,7 @@ export class CheckoutPage {
         next: (savedAddress) => {
           this.addresses.update((items) => [savedAddress, ...items]);
           this.form.controls.id_direccion.setValue(String(savedAddress.id_direccion));
-          this.closeAddressModal();
+          this.showAddressModal.set(false);
           if (this.canQuote()) {
             this.requestQuote();
           }
@@ -1293,6 +1292,12 @@ export class OrdersPage {
     @if (error()) {
       <p class="notice notice--error">{{ error() }}</p>
     }
+    @if (editingId()) {
+      <div class="notice notice--info" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+        <span>✏️ <strong>Modificando dirección:</strong> Puedes actualizar los datos o arrastrar el PIN 📍 a una nueva ubicación.</span>
+        <button class="button button--ghost button--small" type="button" (click)="cancelEdit()">Cancelar edición</button>
+      </div>
+    }
     <form class="address-form" [formGroup]="form" (ngSubmit)="save()">
       <label class="field"
         ><span>Nombre / Alias</span><input formControlName="alias" placeholder="Casa" /></label
@@ -1350,9 +1355,20 @@ export class OrdersPage {
                   <span class="status-chip">Principal</span>
                 }
               </header>
-              <button class="button button--ghost" type="button" (click)="edit(address)">
-                Editar
-              </button>
+              <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+                <button class="button button--ghost button--small" type="button" (click)="edit(address)">
+                  Editar
+                </button>
+                <button
+                  class="button button--quiet button--small"
+                  type="button"
+                  style="color: var(--danger, #dc2626);"
+                  (click)="delete(address)"
+                  title="Eliminar esta dirección"
+                >
+                  Eliminar
+                </button>
+              </div>
             </article>
           }
         </div>
@@ -1456,7 +1472,33 @@ export class AddressesPage {
       longitud: address.longitud ?? '',
       es_principal: address.es_principal,
     });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  delete(address: Address): void {
+    if (!confirm(`¿Estás seguro de que deseas eliminar la dirección "${address.alias || address.direccion}"?`)) {
+      return;
+    }
+    this.saving.set(true);
+    this.error.set('');
+    this.commerce
+      .deleteAddress(address.id_direccion)
+      .pipe(finalize(() => this.saving.set(false)))
+      .subscribe({
+        next: () => {
+          this.addresses.update((items) =>
+            items.filter((item) => item.id_direccion !== address.id_direccion),
+          );
+          if (this.editingId() === address.id_direccion) {
+            this.cancelEdit();
+          }
+        },
+        error: (err) => {
+          this.error.set(this.errors.message(err, 'No pudimos eliminar la dirección.'));
+        },
+      });
+  }
+
   cancelEdit(): void {
     this.editingId.set(null);
     const defaultCity = this.cities()[0]?.id_ciudad;

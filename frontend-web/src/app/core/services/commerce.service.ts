@@ -65,6 +65,9 @@ export class CommerceService {
   updateAddress(id: number, payload: object) {
     return this.http.patch<Address>(`${API_BASE_URL}/addresses/${id}`, payload);
   }
+  deleteAddress(id: number) {
+    return this.updateAddress(id, { activo: false });
+  }
   reservations() {
     return this.http.get<Reservation[]>(`${API_BASE_URL}/reservations`);
   }

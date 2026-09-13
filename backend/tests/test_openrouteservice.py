@@ -105,3 +105,38 @@ async def test_quote_shipping_uses_openrouteservice_when_available() -> None:
     # cost = 15.00 + (8.00 - 5.00) * 2.50 = 15 + 7.50 = 22.50
     assert quote.costo_estimado == Decimal("22.50")
     session.commit.assert_awaited_once()
+
+
+async def test_quote_shipping_rounds_additional_km_upward() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    route_client = AsyncMock()
+
+    customer = Cliente(id_cliente=1, id_usuario=1, estado="ACTIVO")
+    branch = Sucursal(id_sucursal=1, nombre="Central", activo=True, latitud=Decimal("-17.76"), longitud=Decimal("-63.18"))
+    address = DireccionCliente(id_direccion=1, id_cliente=1, activo=True, latitud=Decimal("-17.78"), longitud=Decimal("-63.19"))
+    # Base: 5.00 Bs (1 km), 2.50 Bs per additional km
+    rate = TarifaEnvio(id_tarifa=1, tarifa_base=Decimal("5.00"), distancia_base_km=Decimal("1.00"), costo_km_adicional=Decimal("2.50"), activo=True)
+
+    repository.customer_by_user.return_value = customer
+    repository.get.side_effect = lambda model, identity: branch if model is Sucursal else address
+    repository.active_rate.return_value = rate
+    repository.add.side_effect = lambda entity: entity
+
+    service = CommerceService(session, repository, route_client=route_client)
+
+    # Test 1: 3.55 km -> 1 km base (5.00) + ceil(2.55 km = 3 km) * 2.50 = 5.00 + 7.50 = 12.50 Bs
+    route_client.calculate_route.return_value = RouteEstimate(distance_km=Decimal("3.55"), duration_min=10, provider="OPEN_ROUTE_SERVICE")
+    quote1 = await service.quote_shipping(1, ShippingQuoteCreate(id_sucursal=1, id_direccion=1))
+    assert quote1.costo_estimado == Decimal("12.50")
+
+    # Test 2: 1.10 km -> 1 km base (5.00) + ceil(0.10 km = 1 km) * 2.50 = 5.00 + 2.50 = 7.50 Bs
+    route_client.calculate_route.return_value = RouteEstimate(distance_km=Decimal("1.10"), duration_min=5, provider="OPEN_ROUTE_SERVICE")
+    quote2 = await service.quote_shipping(1, ShippingQuoteCreate(id_sucursal=1, id_direccion=1))
+    assert quote2.costo_estimado == Decimal("7.50")
+
+    # Test 3: 0.80 km (within base) -> 5.00 Bs
+    route_client.calculate_route.return_value = RouteEstimate(distance_km=Decimal("0.80"), duration_min=3, provider="OPEN_ROUTE_SERVICE")
+    quote3 = await service.quote_shipping(1, ShippingQuoteCreate(id_sucursal=1, id_direccion=1))
+    assert quote3.costo_estimado == Decimal("5.00")
+

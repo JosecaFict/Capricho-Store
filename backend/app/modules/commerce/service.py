@@ -1,7 +1,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from math import asin, cos, radians, sin, sqrt
+from math import asin, ceil, cos, radians, sin, sqrt
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -1432,11 +1432,11 @@ class CommerceService:
             duration = None
             provider = "HAVERSINE"
 
-        cost = (
-            rate.tarifa_base
-            if distance <= rate.distancia_base_km
-            else rate.tarifa_base + (distance - rate.distancia_base_km) * rate.costo_km_adicional
-        )
+        if distance <= rate.distancia_base_km:
+            cost = rate.tarifa_base
+        else:
+            km_adicionales = Decimal(str(ceil(float(distance - rate.distancia_base_km))))
+            cost = rate.tarifa_base + km_adicionales * rate.costo_km_adicional
         quote = await self.repository.add(
             CotizacionEnvio(
                 id_cliente=customer.id_cliente,
