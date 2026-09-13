@@ -467,10 +467,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
                       // Disponibilidad Real en Stock
                       _buildStockAvailabilityCard(matchedVariant),
-                      const SizedBox(height: 24),
-
-                      // Tabla de medidas de la prenda
-                      _buildMeasurementsSection(measurements),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -714,13 +711,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
     final stock = variant.stock!;
     final hasStock = stock > 0;
-    final skuText = (variant.sku != null && variant.sku!.isNotEmpty)
-        ? variant.sku!
-        : 'SKU-${variant.id}';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
@@ -729,50 +723,26 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           width: hasStock ? 1.5 : 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                hasStock ? Icons.check_circle_rounded : Icons.cancel_outlined,
-                color: hasStock ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  hasStock
-                      ? 'Disponible en inventario: $stock unidades'
-                      : 'Agotado actualmente',
-                  style: TextStyle(
-                    color: hasStock ? AppColors.ink : const Color(0xFFEF4444),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13.5,
-                  ),
-                ),
-              ),
-            ],
+          Icon(
+            hasStock ? Icons.check_circle_rounded : Icons.cancel_outlined,
+            color: hasStock ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+            size: 20,
           ),
-          const SizedBox(height: 6),
-          Text(
-            'SKU: $skuText · Talla: ${variant.size} · Color: ${variant.color}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.inkSoft,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              hasStock
+                  ? 'Disponible: $stock unidades'
+                  : 'Agotado actualmente',
+              style: TextStyle(
+                color: hasStock ? AppColors.ink : const Color(0xFFEF4444),
+                fontWeight: FontWeight.w800,
+                fontSize: 13.5,
+              ),
             ),
           ),
-          if (variant.stockStatus != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Estado: ${variant.stockStatus}',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.inkSoft,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -802,100 +772,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  Widget _buildMeasurementsSection(List<ProductMeasurement> measurements) {
-    if (measurements.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.straighten_rounded, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Guía de medidas (cm)',
-                  style: Theme.of(context).textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columnSpacing: 18,
-                horizontalMargin: 8,
-                columns: const [
-                  DataColumn(
-                    label: Text(
-                      'Talla',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Hombros',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Pecho',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Largo',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Manga',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-                rows: measurements.map((m) {
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        Text(
-                          m.size,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataCell(
-                        Text(m.shouldersCm != null ? '${m.shouldersCm}' : '-'),
-                      ),
-                      DataCell(Text(m.chestCm != null ? '${m.chestCm}' : '-')),
-                      DataCell(
-                        Text(m.lengthCm != null ? '${m.lengthCm}' : '-'),
-                      ),
-                      DataCell(
-                        Text(m.sleeveCm != null ? '${m.sleeveCm}' : '-'),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildBottomActions(
     Product product,

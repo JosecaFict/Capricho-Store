@@ -1,6 +1,7 @@
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
+import 'package:capricho_store/shared/widgets/location_map_preview.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -310,6 +311,23 @@ class AddressesScreen extends ConsumerWidget {
                     labelText: 'Referencia',
                     hintText: 'Ej. Portón blanco, frente al parque',
                   ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Mapa de ubicación (arrastra para ajustar el pin):',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.inkSoft),
+                ),
+                const SizedBox(height: 8),
+                LocationMapPreview(
+                  latitude: double.tryParse(latController.text.trim()) ?? -17.7833,
+                  longitude: double.tryParse(lngController.text.trim()) ?? -63.1821,
+                  zone: selectedZone ?? zoneController.text,
+                  onLocationChanged: (coords) {
+                    setModalState(() {
+                      latController.text = coords.lat.toStringAsFixed(4);
+                      lngController.text = coords.lng.toStringAsFixed(4);
+                    });
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
