@@ -95,6 +95,82 @@ describe('PurchasesAdmin', () => {
       }),
     );
   });
+
+  it('filters purchase orders by tabs (Todas, Pendientes, Recibidas, Canceladas) and search query', () => {
+    const orders = [
+      { id_orden_compra: 1, id_proveedor: 10, id_sucursal: 2, estado: 'RECIBIDA', detalles: [] },
+      { id_orden_compra: 2, id_proveedor: 11, id_sucursal: 2, estado: 'SOLICITADA', detalles: [] },
+      { id_orden_compra: 3, id_proveedor: 10, id_sucursal: 3, estado: 'CANCELADA', detalles: [] },
+      { id_orden_compra: 4, id_proveedor: 12, id_sucursal: 2, estado: 'EN_TRANSITO', detalles: [] },
+    ];
+    const api = {
+      list: vi.fn((path: string) => {
+        if (path === 'purchase-orders') return of(orders);
+        if (path === 'suppliers')
+          return of([
+            { id_proveedor: 10, razon_social: 'Textiles Andinos' },
+            { id_proveedor: 11, razon_social: 'Moda Jeans' },
+            { id_proveedor: 12, razon_social: 'Calzados Bolivia' },
+          ]);
+        if (path === 'branches')
+          return of([
+            { id_sucursal: 2, nombre: 'Sucursal Central' },
+            { id_sucursal: 3, nombre: 'Sucursal Norte' },
+          ]);
+        return of([]);
+      }),
+      products: vi.fn(() => of({ items: [], total: 0 })),
+      post: vi.fn(() => of({})),
+      patch: vi.fn(() => of({})),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [PurchasesAdmin],
+      providers: [
+        { provide: AdminApiService, useValue: api },
+        { provide: PermissionService, useValue: { has: () => true } },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PurchasesAdmin);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // Counts check
+    expect(component.counts()).toEqual({
+      todas: 4,
+      pendientes: 2, // SOLICITADA + EN_TRANSITO
+      recibidas: 1,  // RECIBIDA
+      canceladas: 1, // CANCELADA
+    });
+
+    // Default tab: TODAS
+    expect(component.filteredOrders()).toHaveLength(4);
+
+    // Tab PENDIENTES
+    component.activeTab.set('PENDIENTES');
+    expect(component.filteredOrders().map((o) => o['id_orden_compra'])).toEqual([2, 4]);
+
+    // Tab RECIBIDAS
+    component.activeTab.set('RECIBIDAS');
+    expect(component.filteredOrders().map((o) => o['id_orden_compra'])).toEqual([1]);
+
+    // Tab CANCELADAS
+    component.activeTab.set('CANCELADAS');
+    expect(component.filteredOrders().map((o) => o['id_orden_compra'])).toEqual([3]);
+
+    // Search query within TODAS
+    component.activeTab.set('TODAS');
+    component.searchQuery.set('Jeans');
+    expect(component.filteredOrders().map((o) => o['id_orden_compra'])).toEqual([2]);
+
+    component.searchQuery.set('Norte');
+    expect(component.filteredOrders().map((o) => o['id_orden_compra'])).toEqual([3]);
+
+    component.searchQuery.set('4');
+    expect(component.filteredOrders().map((o) => o['id_orden_compra'])).toEqual([4]);
+  });
 });
 
 describe('ReceiptsAdmin', () => {

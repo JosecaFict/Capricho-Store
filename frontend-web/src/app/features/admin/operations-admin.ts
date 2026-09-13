@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { PermissionService } from '../../core/permissions/permission.service';
+import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
 import { AdminApiService, Entity } from './admin-api.service';
 
 abstract class BaseAdmin {
@@ -334,7 +335,7 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
 
 @Component({
   selector: 'app-purchases-admin',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, BolivianosPipe],
   template: `<div class="admin-page">
     <header class="admin-page-heading">
       <div>
@@ -456,7 +457,7 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
                             <tr>
                               <th scope="row">{{ color }}</th>
                               @for (size of productSizes(productIndex); track size) {
-                                <td>
+                                	<td>
                                   @if (variantForCell(productIndex, color, size); as variant) {
                                     <input
                                       type="number"
@@ -502,22 +503,116 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
         </form>
       </section>
     }
-    <div class="admin-card-list">
-      @for (o of orders(); track o['id_orden_compra']) {
-        <article>
-          <header>
-            <div>
-              <span class="eyebrow">Orden #{{ o['id_orden_compra'] }}</span>
-              <h2>{{ o['estado'] }}</h2>
+
+    <!-- Filtros por Estado (Pestañas) y Buscador -->
+    <div class="purchase-orders-filterbar">
+      <div class="purchase-tabs" role="tablist">
+        <button
+          type="button"
+          class="purchase-tab"
+          [class.purchase-tab--active]="activeTab() === 'TODAS'"
+          (click)="activeTab.set('TODAS')"
+        >
+          Todas <span class="purchase-tab-count">{{ counts().todas }}</span>
+        </button>
+        <button
+          type="button"
+          class="purchase-tab"
+          [class.purchase-tab--active]="activeTab() === 'PENDIENTES'"
+          (click)="activeTab.set('PENDIENTES')"
+        >
+          Pendientes <span class="purchase-tab-count">{{ counts().pendientes }}</span>
+        </button>
+        <button
+          type="button"
+          class="purchase-tab"
+          [class.purchase-tab--active]="activeTab() === 'RECIBIDAS'"
+          (click)="activeTab.set('RECIBIDAS')"
+        >
+          Recibidas <span class="purchase-tab-count">{{ counts().recibidas }}</span>
+        </button>
+        <button
+          type="button"
+          class="purchase-tab"
+          [class.purchase-tab--active]="activeTab() === 'CANCELADAS'"
+          (click)="activeTab.set('CANCELADAS')"
+        >
+          Canceladas <span class="purchase-tab-count">{{ counts().canceladas }}</span>
+        </button>
+      </div>
+
+      <div class="purchase-search-wrap">
+        <span class="purchase-search-icon">🔍</span>
+        <input
+          type="text"
+          placeholder="Buscar proveedor, sucursal, orden #…"
+          [value]="searchQuery()"
+          (input)="searchQuery.set($any($event.target).value)"
+        />
+        @if (searchQuery()) {
+          <button type="button" class="purchase-search-clear" (click)="searchQuery.set('')">✕</button>
+        }
+      </div>
+    </div>
+
+    @if (filteredOrders().length === 0) {
+      <div class="admin-panel purchase-empty-state">
+        <div class="purchase-empty-icon">📦</div>
+        <p>No se encontraron órdenes de compra en esta pestaña o búsqueda.</p>
+        @if (searchQuery()) {
+          <button type="button" class="button button--quiet" (click)="searchQuery.set('')">
+            Limpiar búsqueda
+          </button>
+        }
+      </div>
+    }
+
+    <div class="purchase-card-grid">
+      @for (o of filteredOrders(); track o['id_orden_compra']) {
+        <article class="purchase-card">
+          <header class="purchase-card-header">
+            <div class="purchase-card-identity">
+              <span class="purchase-card-number">Orden #{{ o['id_orden_compra'] }}</span>
+              <span
+                class="purchase-status-badge"
+                [class.purchase-status-badge--received]="o['estado'] === 'RECIBIDA'"
+                [class.purchase-status-badge--pending]="isPending(o['estado'])"
+                [class.purchase-status-badge--cancelled]="o['estado'] === 'CANCELADA'"
+              >
+                @if (o['estado'] === 'RECIBIDA') {
+                  ● Recibida
+                } @else if (isPending(o['estado'])) {
+                  ⏳ {{ formatState(o['estado']) }}
+                } @else {
+                  ✕ Cancelada
+                }
+              </span>
             </div>
-            <span>{{ o['fecha_orden'] | date: 'mediumDate' }}</span>
+            <span class="purchase-card-date">{{ o['fecha_orden'] | date: 'mediumDate' }}</span>
           </header>
-          <p>
-            {{ supplierName(o['id_proveedor']) }} · {{ branchName(o['id_sucursal']) }} ·
-            {{ orderUnitCount(o) }} unidades en {{ o['detalles']?.length }} variantes
-          </p>
+
+          <div class="purchase-card-body">
+            <div class="purchase-card-row">
+              <span class="purchase-card-label">🏢 Proveedor:</span>
+              <strong class="purchase-card-value">{{ supplierName(o['id_proveedor']) }}</strong>
+            </div>
+            <div class="purchase-card-row">
+              <span class="purchase-card-label">📍 Destino:</span>
+              <span class="purchase-branch-pill">{{ branchName(o['id_sucursal']) }}</span>
+            </div>
+            <div class="purchase-card-row">
+              <span class="purchase-card-label">👕 Volumen:</span>
+              <span class="purchase-volume-text">
+                <strong>{{ orderUnitCount(o) }} prendas</strong> solicitadas en
+                {{ o['detalles']?.length }} variante(s)
+              </span>
+            </div>
+          </div>
+
           <details class="purchase-order-detail">
-            <summary>Revisar cantidades solicitadas</summary>
+            <summary class="purchase-summary-btn">
+              <span>▼ Revisar cantidades solicitadas ({{ o['detalles']?.length }})</span>
+            </summary>
             <div class="purchase-order-detail__scroll">
               <table>
                 <thead>
@@ -542,7 +637,7 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
                         {{
                           detail['costo_unitario_estimado'] === null
                             ? 'Sin estimación'
-                            : (detail['costo_unitario_estimado'] | number: '1.2-2')
+                            : (detail['costo_unitario_estimado'] | bolivianos)
                         }}
                       </td>
                     </tr>
@@ -551,12 +646,15 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
               </table>
             </div>
           </details>
-          @if (canManage()) {
-            <div class="admin-row-actions">
-              @for (state of nextStates(o['estado']); track state) {
-                <button (click)="setState(o, state)">{{ state }}</button>
-              }
-            </div>
+
+          @if (canManage() && nextStates(o['estado']).length) {
+            <footer class="purchase-card-footer">
+              <div class="admin-row-actions">
+                @for (state of nextStates(o['estado']); track state) {
+                  <button (click)="setState(o, state)">{{ state }}</button>
+                }
+              </div>
+            </footer>
           }
         </article>
       }
@@ -575,6 +673,64 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
   loadingSupplierProducts = signal(false);
   savingOrder = signal(false);
   show = signal(false);
+
+  readonly activeTab = signal<'TODAS' | 'PENDIENTES' | 'RECIBIDAS' | 'CANCELADAS'>('TODAS');
+  readonly searchQuery = signal('');
+
+  readonly counts = computed(() => {
+    const list = this.orders();
+    const pendingStates = new Set(['SOLICITADA', 'CONFIRMADA', 'EN_TRANSITO', 'PARCIAL']);
+    return {
+      todas: list.length,
+      pendientes: list.filter((o) => pendingStates.has(String(o['estado']))).length,
+      recibidas: list.filter((o) => o['estado'] === 'RECIBIDA').length,
+      canceladas: list.filter((o) => o['estado'] === 'CANCELADA').length,
+    };
+  });
+
+  readonly filteredOrders = computed(() => {
+    const tab = this.activeTab();
+    const query = this.searchQuery().trim().toLowerCase();
+    const pendingStates = new Set(['SOLICITADA', 'CONFIRMADA', 'EN_TRANSITO', 'PARCIAL']);
+
+    return this.orders().filter((o) => {
+      if (tab === 'PENDIENTES' && !pendingStates.has(String(o['estado']))) return false;
+      if (tab === 'RECIBIDAS' && o['estado'] !== 'RECIBIDA') return false;
+      if (tab === 'CANCELADAS' && o['estado'] !== 'CANCELADA') return false;
+
+      if (query) {
+        const orderId = String(o['id_orden_compra']);
+        const supplier = this.supplierName(o['id_proveedor']).toLowerCase();
+        const branch = this.branchName(o['id_sucursal']).toLowerCase();
+        const state = String(o['estado']).toLowerCase();
+        const match =
+          orderId.includes(query) ||
+          supplier.includes(query) ||
+          branch.includes(query) ||
+          state.includes(query);
+        if (!match) return false;
+      }
+
+      return true;
+    });
+  });
+
+  isPending(state: string): boolean {
+    return ['SOLICITADA', 'CONFIRMADA', 'EN_TRANSITO', 'PARCIAL'].includes(state);
+  }
+
+  formatState(state: string): string {
+    const map: Record<string, string> = {
+      SOLICITADA: 'Solicitada',
+      CONFIRMADA: 'Confirmada',
+      EN_TRANSITO: 'En tránsito',
+      PARCIAL: 'Entrega parcial',
+      RECIBIDA: 'Recibida',
+      CANCELADA: 'Cancelada',
+    };
+    return map[state] || state;
+  }
+
   form = this.fb.group({
     id_proveedor: [null as number | null, Validators.required],
     id_sucursal: [null as number | null, Validators.required],
