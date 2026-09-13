@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/shared/services/geocoding_service.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,6 +13,7 @@ class LocationMapPreview extends StatefulWidget {
   final double longitude;
   final String? zone;
   final ValueChanged<({double lat, double lng})>? onLocationChanged;
+  final ValueChanged<GeocodedAddress>? onAddressDetected;
   final double height;
 
   const LocationMapPreview({
@@ -19,6 +22,7 @@ class LocationMapPreview extends StatefulWidget {
     required this.longitude,
     this.zone,
     this.onLocationChanged,
+    this.onAddressDetected,
     this.height = 180,
   });
 
@@ -33,12 +37,16 @@ class _LocationMapPreviewState extends State<LocationMapPreview> {
   double _panOffsetX = 0;
   double _panOffsetY = 0;
   bool _isDragging = false;
+  Timer? _debounceTimer;
+  String? _detectedRoad;
+  bool _isGeocoding = false;
 
   @override
   void initState() {
     super.initState();
     _currentLat = widget.latitude;
     _currentLng = widget.longitude;
+    _triggerGeocoding();
   }
 
   @override
@@ -51,7 +59,33 @@ class _LocationMapPreviewState extends State<LocationMapPreview> {
       _currentLng = widget.longitude;
       _panOffsetX = 0;
       _panOffsetY = 0;
+      _triggerGeocoding();
     }
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  void _triggerGeocoding() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+      if (!mounted) return;
+      setState(() => _isGeocoding = true);
+      final result = await GeocodingService.reverseGeocode(_currentLat, _currentLng);
+      if (!mounted) return;
+      setState(() {
+        _isGeocoding = false;
+        if (result != null) {
+          _detectedRoad = result.road ?? result.zone;
+        }
+      });
+      if (result != null) {
+        widget.onAddressDetected?.call(result);
+      }
+    });
   }
 
   // Conversiones estándar de teselas OSM
@@ -101,6 +135,7 @@ class _LocationMapPreviewState extends State<LocationMapPreview> {
     });
 
     widget.onLocationChanged?.call((lat: _currentLat, lng: _currentLng));
+    _triggerGeocoding();
   }
 
   Future<void> _openExternalMap() async {
@@ -284,11 +319,19 @@ class _LocationMapPreviewState extends State<LocationMapPreview> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.explore_rounded, color: AppColors.cobalt, size: 16),
+                    Icon(
+                      _detectedRoad != null ? Icons.location_on_rounded : Icons.explore_rounded,
+                      color: AppColors.cobalt,
+                      size: 16,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        '${widget.zone ?? "Ubicación"}: ${_currentLat.toStringAsFixed(4)}, ${_currentLng.toStringAsFixed(4)}',
+                        _isGeocoding
+                            ? 'Detectando calle...'
+                            : (_detectedRoad != null
+                                ? '$_detectedRoad'
+                                : '${widget.zone ?? "Ubicación"}: ${_currentLat.toStringAsFixed(4)}, ${_currentLng.toStringAsFixed(4)}'),
                         style: const TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
@@ -297,14 +340,21 @@ class _LocationMapPreviewState extends State<LocationMapPreview> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Text(
-                      'Arrastra para mover',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.inkSoft,
+                    if (_isGeocoding)
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.cobalt),
+                      )
+                    else
+                      const Text(
+                        'Arrastra para mover',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.inkSoft,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

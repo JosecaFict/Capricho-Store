@@ -221,6 +221,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         selectedLng = coords.lng;
                       });
                     },
+                    onAddressDetected: (geo) {
+                      setModalState(() {
+                        if (geo.road != null && geo.road!.isNotEmpty) {
+                          streetController.text = geo.road!;
+                        }
+                        if (geo.zone != null && geo.zone!.isNotEmpty) {
+                          zoneController.text = geo.zone!;
+                          selectedZone = geo.zone;
+                        }
+                      });
+                    },
                   ),
                 ],
               ),

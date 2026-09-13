@@ -344,6 +344,17 @@ class AddressesScreen extends ConsumerWidget {
                         selectedLng = coords.lng;
                       });
                     },
+                    onAddressDetected: (geo) {
+                      setModalState(() {
+                        if (geo.road != null && geo.road!.isNotEmpty) {
+                          streetController.text = geo.road!;
+                        }
+                        if (geo.zone != null && geo.zone!.isNotEmpty) {
+                          zoneController.text = geo.zone!;
+                          selectedZone = geo.zone;
+                        }
+                      });
+                    },
                   ),
                   const SizedBox(height: 12),
                   Row(
