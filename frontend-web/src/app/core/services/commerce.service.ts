@@ -13,6 +13,9 @@ import {
   StripeCheckoutSession,
   StripeCheckoutStatus,
   SupplierPurchaseHistoryPage,
+  CustomerAdminDetail,
+  CustomerAdminSummary,
+  CustomerAdminUpdateRequest,
 } from '../models/commerce.model';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
@@ -139,5 +142,16 @@ export class CommerceService {
     return this.http.get<SupplierPurchaseHistoryPage>(`${API_BASE_URL}/supplier-purchase-history`, {
       params: this.params(params),
     });
+  }
+  adminCustomers(params?: Params) {
+    return this.http.get<CustomerAdminSummary[]>(`${API_BASE_URL}/customers`, {
+      params: this.params(params),
+    });
+  }
+  adminCustomer(id: number) {
+    return this.http.get<CustomerAdminDetail>(`${API_BASE_URL}/customers/${id}`);
+  }
+  updateAdminCustomer(id: number, payload: CustomerAdminUpdateRequest) {
+    return this.http.patch<CustomerAdminDetail>(`${API_BASE_URL}/customers/${id}`, payload);
   }
 }

@@ -198,6 +198,12 @@ export const routes: Routes = [
           import('./features/admin/commerce-admin').then((m) => m.ReservationsAdmin),
       },
       {
+        path: 'clientes',
+        canActivate: [requireAnyPermission('ventas.ver')],
+        loadComponent: () =>
+          import('./features/admin/customers-admin').then((m) => m.CustomersAdmin),
+      },
+      {
         path: 'devoluciones',
         canActivate: [requireAnyPermission('ventas.ver')],
         loadComponent: () => import('./features/admin/commerce-admin').then((m) => m.ReturnsAdmin),

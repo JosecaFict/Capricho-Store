@@ -9,7 +9,13 @@ describe('admin navigation permissions', () => {
       'pagos.registrar',
     ]).map((item) => item.label);
 
-    expect(labels).toEqual(['Productos', 'Venta presencial', 'Pedidos', 'Devoluciones']);
+    expect(labels).toEqual([
+      'Productos',
+      'Venta presencial',
+      'Pedidos',
+      'Clientes',
+      'Devoluciones',
+    ]);
   });
 
   it('hides cash sales when payment permission is revoked', () => {

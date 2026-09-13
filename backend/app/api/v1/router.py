@@ -12,6 +12,7 @@ from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.commerce.router import router as commerce_router
+from app.modules.customers.router import router as customers_router
 from app.modules.employees.router import router as employee_router
 from app.modules.inventory.router import router as inventory_router
 
@@ -19,6 +20,7 @@ router = APIRouter()
 system_router = APIRouter(tags=["system"])
 router.include_router(auth_router)
 router.include_router(employee_router)
+router.include_router(customers_router)
 router.include_router(catalog_router)
 router.include_router(commerce_router)
 router.include_router(inventory_router)

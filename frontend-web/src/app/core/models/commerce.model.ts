@@ -143,3 +143,49 @@ export interface SupplierPurchaseHistoryPage {
   page: number;
   page_size: number;
 }
+
+export interface CustomerAddressItem {
+  id_direccion: number;
+  id_ciudad: number;
+  ciudad: string;
+  departamento: string;
+  alias: string | null;
+  zona: string | null;
+  direccion: string;
+  referencia: string | null;
+  es_principal: boolean;
+  activo: boolean;
+}
+
+export interface CustomerAdminSummary {
+  id_cliente: number;
+  id_usuario: number;
+  nombres: string;
+  apellidos: string;
+  nombre_completo: string;
+  correo: string;
+  ci: string | null;
+  telefono: string | null;
+  fecha_nacimiento: string | null;
+  estado: string;
+  total_pedidos: number;
+  total_reservas: number;
+  total_ventas: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerAdminDetail extends CustomerAdminSummary {
+  direcciones: CustomerAddressItem[];
+}
+
+export interface CustomerAdminUpdateRequest {
+  nombres?: string;
+  apellidos?: string;
+  correo?: string;
+  telefono?: string | null;
+  ci?: string | null;
+  fecha_nacimiento?: string | null;
+  estado?: 'ACTIVO' | 'INACTIVO';
+  nuevo_password?: string;
+}
