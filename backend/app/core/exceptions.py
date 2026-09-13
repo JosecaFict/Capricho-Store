@@ -25,6 +25,22 @@ async def database_unavailable_handler(
     )
 
 
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    logger.exception(
+        "Unhandled error on %s: %s",
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DatabaseUnavailableError, database_unavailable_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
