@@ -261,10 +261,6 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
               </small>
             }
           </label>
-          <label class="field">
-            <span>Google Place ID opcional</span>
-            <input formControlName="place_id" maxlength="255" placeholder="Opcional (solo si usas Google)" />
-          </label>
           <label class="check-field">
             <input type="checkbox" formControlName="activo" /> Sucursal activa
           </label>
