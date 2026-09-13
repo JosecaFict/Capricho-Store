@@ -3,7 +3,10 @@ import { inject, Injectable } from '@angular/core';
 import { API_BASE_URL } from '../config/api.config';
 import {
   Address,
+  AdminNotificationPage,
+  AdminOperationalNotification,
   Cart,
+  ManualNotificationPayload,
   OperationalNotification,
   Order,
   Reservation,
@@ -118,6 +121,23 @@ export class CommerceService {
   }
   notifications() {
     return this.http.get<OperationalNotification[]>(`${API_BASE_URL}/notifications`);
+  }
+  adminNotifications(params?: Params) {
+    return this.http.get<AdminNotificationPage>(`${API_BASE_URL}/admin/notifications`, {
+      params: this.params(params),
+    });
+  }
+  sendManualNotification(payload: ManualNotificationPayload) {
+    return this.http.post<AdminOperationalNotification>(
+      `${API_BASE_URL}/admin/notifications`,
+      payload,
+    );
+  }
+  resendNotification(id: number) {
+    return this.http.post<AdminOperationalNotification>(
+      `${API_BASE_URL}/admin/notifications/${id}/resend`,
+      {},
+    );
   }
   adminReservations(params?: Params) {
     return this.http.get<Reservation[]>(`${API_BASE_URL}/admin/reservations`, {

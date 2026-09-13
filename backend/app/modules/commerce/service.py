@@ -49,6 +49,8 @@ from app.modules.commerce.schemas import (
     AddressCreate,
     AddressResponse,
     AddressUpdate,
+    AdminNotificationPage,
+    AdminNotificationResponse,
     AdminReturnCreate,
     CartItemCreate,
     CartItemUpdate,
@@ -56,6 +58,8 @@ from app.modules.commerce.schemas import (
     CheckoutCreate,
     CommerceLineRequest,
     CommerceLineResponse,
+    ManualNotificationCreate,
+    NotificationKpis,
     OrderResponse,
     OrderStatusUpdate,
     ReservationCreate,
@@ -2150,6 +2154,181 @@ class CommerceService:
 
     async def list_notifications(self, user_id: int):
         return await self.repository.notifications(user_id)
+
+    async def admin_list_notifications(
+        self,
+        *,
+        estado: str | None = None,
+        canal: str | None = None,
+        tipo: str | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> AdminNotificationPage:
+        rows, total, kpi_dict = await self.repository.admin_notifications(
+            estado=estado,
+            canal=canal,
+            tipo=tipo,
+            search=search,
+            page=page,
+            page_size=page_size,
+        )
+        items = []
+        for notif, nombres, apellidos, correo in rows:
+            dest_nombre = f"{nombres} {apellidos}".strip() if (nombres or apellidos) else None
+            items.append(
+                AdminNotificationResponse(
+                    id_notificacion=notif.id_notificacion,
+                    id_usuario=notif.id_usuario,
+                    destinatario_nombre=dest_nombre,
+                    destinatario_email=correo or notif.destinatario,
+                    tipo=notif.tipo,
+                    canal=notif.canal,
+                    proveedor=notif.proveedor,
+                    destinatario=notif.destinatario or correo,
+                    titulo=notif.titulo,
+                    contenido=notif.contenido,
+                    estado=notif.estado,
+                    external_message_id=notif.external_message_id,
+                    fecha_creacion=notif.fecha_creacion,
+                    fecha_envio=notif.fecha_envio,
+                    fecha_entrega=notif.fecha_entrega,
+                    error_mensaje=notif.error_mensaje,
+                )
+            )
+        return AdminNotificationPage(
+            items=items,
+            total=total,
+            kpis=NotificationKpis(**kpi_dict),
+            page=page,
+            page_size=page_size,
+        )
+
+    async def send_manual_notification(
+        self, payload: ManualNotificationCreate
+    ) -> AdminNotificationResponse:
+        user = await self.repository.get(Usuario, payload.id_usuario)
+        if not user:
+            raise CommerceNotFoundError("El usuario destinatario no existe")
+
+        dest_name = f"{user.nombres} {user.apellidos}".strip()
+        dest_email = user.correo
+        canal = (payload.canal or "SISTEMA").upper()
+        now = datetime.now(UTC)
+
+        estado = "PENDIENTE"
+        fecha_envio = None
+        fecha_entrega = None
+        error_msg = None
+
+        if canal == "EMAIL":
+            sent = await self.mailer.send_operational_email(
+                recipient_email=dest_email,
+                recipient_name=dest_name,
+                title=payload.titulo,
+                content=payload.contenido,
+            )
+            if sent:
+                estado = "ENVIADO"
+                fecha_envio = now
+                fecha_entrega = now
+            else:
+                estado = "PENDIENTE"
+        else:
+            estado = "ENVIADO"
+            fecha_envio = now
+            fecha_entrega = now
+
+        notif = Notificacion(
+            id_usuario=user.id_usuario,
+            id_campania=None,
+            tipo=payload.tipo.upper() if payload.tipo else "AVISO_OPERATIVO",
+            canal=canal,
+            proveedor="BREVO" if canal == "EMAIL" else "SISTEMA",
+            destinatario=dest_email,
+            titulo=payload.titulo,
+            contenido=payload.contenido,
+            estado=estado,
+            fecha_creacion=now,
+            fecha_envio=fecha_envio,
+            fecha_entrega=fecha_entrega,
+            error_mensaje=error_msg,
+        )
+        await self.repository.add(notif)
+        await self.session.commit()
+
+        return AdminNotificationResponse(
+            id_notificacion=notif.id_notificacion,
+            id_usuario=notif.id_usuario,
+            destinatario_nombre=dest_name,
+            destinatario_email=dest_email,
+            tipo=notif.tipo,
+            canal=notif.canal,
+            proveedor=notif.proveedor,
+            destinatario=notif.destinatario,
+            titulo=notif.titulo,
+            contenido=notif.contenido,
+            estado=notif.estado,
+            external_message_id=notif.external_message_id,
+            fecha_creacion=notif.fecha_creacion,
+            fecha_envio=notif.fecha_envio,
+            fecha_entrega=notif.fecha_entrega,
+            error_mensaje=notif.error_mensaje,
+        )
+
+    async def resend_notification(
+        self, notification_id: int
+    ) -> AdminNotificationResponse:
+        row = await self.repository.notification_detail(notification_id)
+        if not row:
+            raise CommerceNotFoundError("La notificación no existe")
+
+        notif, nombres, apellidos, correo = row
+        dest_name = f"{nombres} {apellidos}".strip() if (nombres or apellidos) else "Cliente"
+        dest_email = correo or notif.destinatario
+        now = datetime.now(UTC)
+
+        if notif.canal == "EMAIL" and dest_email:
+            sent = await self.mailer.send_operational_email(
+                recipient_email=dest_email,
+                recipient_name=dest_name,
+                title=notif.titulo or "Aviso de Capricho Store",
+                content=notif.contenido,
+            )
+            if sent:
+                notif.estado = "ENVIADO"
+                notif.fecha_envio = now
+                notif.fecha_entrega = now
+                notif.error_mensaje = None
+            else:
+                notif.estado = "FALLIDO"
+                notif.error_mensaje = "No se pudo conectar con el proveedor de correo Brevo"
+        else:
+            notif.estado = "ENVIADO"
+            notif.fecha_envio = now
+            notif.fecha_entrega = now
+            notif.error_mensaje = None
+
+        await self.session.commit()
+
+        return AdminNotificationResponse(
+            id_notificacion=notif.id_notificacion,
+            id_usuario=notif.id_usuario,
+            destinatario_nombre=dest_name,
+            destinatario_email=dest_email,
+            tipo=notif.tipo,
+            canal=notif.canal,
+            proveedor=notif.proveedor,
+            destinatario=notif.destinatario or dest_email,
+            titulo=notif.titulo,
+            contenido=notif.contenido,
+            estado=notif.estado,
+            external_message_id=notif.external_message_id,
+            fecha_creacion=notif.fecha_creacion,
+            fecha_envio=notif.fecha_envio,
+            fecha_entrega=notif.fecha_entrega,
+            error_mensaje=notif.error_mensaje,
+        )
 
     async def supplier_purchase_history(
         self, user_id: int, *, all_branches: bool = False, **filters

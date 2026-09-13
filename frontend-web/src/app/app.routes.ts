@@ -215,6 +215,13 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/commerce-admin').then((m) => m.ReturnsAdmin),
       },
       {
+        path: 'notificaciones',
+        title: 'Notificaciones Operativas | Capricho Store',
+        canActivate: [requireAnyPermission('ventas.ver')],
+        loadComponent: () =>
+          import('./features/admin/notifications-admin').then((m) => m.NotificationsAdmin),
+      },
+      {
         path: 'inventario',
         canActivate: [requireAnyPermission('inventario.ver')],
         loadComponent: () =>

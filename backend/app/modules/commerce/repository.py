@@ -480,6 +480,96 @@ class CommerceRepository:
             ).all()
         )
 
+    async def admin_notifications(
+        self,
+        *,
+        estado: str | None = None,
+        canal: str | None = None,
+        tipo: str | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> tuple[list[tuple[Notificacion, str | None, str | None, str | None]], int, dict[str, int]]:
+        kpi_statement = select(
+            func.count(Notificacion.id_notificacion).label("total"),
+            func.count(Notificacion.id_notificacion)
+            .filter(Notificacion.estado == "ENVIADO")
+            .label("enviadas"),
+            func.count(Notificacion.id_notificacion)
+            .filter(Notificacion.estado == "PENDIENTE")
+            .label("pendientes"),
+            func.count(Notificacion.id_notificacion)
+            .filter(Notificacion.estado == "FALLIDO")
+            .label("fallidas"),
+        ).where(Notificacion.id_campania.is_(None))
+        kpi_row = (await self.session.execute(kpi_statement)).one()
+        kpis = {
+            "total": int(kpi_row.total or 0),
+            "enviadas": int(kpi_row.enviadas or 0),
+            "pendientes": int(kpi_row.pendientes or 0),
+            "fallidas": int(kpi_row.fallidas or 0),
+        }
+
+        conditions = [Notificacion.id_campania.is_(None)]
+        if estado:
+            conditions.append(Notificacion.estado == estado.upper())
+        if canal:
+            conditions.append(Notificacion.canal == canal.upper())
+        if tipo:
+            tipo_upper = tipo.upper()
+            if tipo_upper == "PEDIDOS":
+                conditions.append(Notificacion.tipo.like("PEDIDO%"))
+            elif tipo_upper == "RESERVAS":
+                conditions.append(Notificacion.tipo.like("RESERVA%"))
+            elif tipo_upper == "DEVOLUCIONES":
+                conditions.append(Notificacion.tipo.like("DEVOLUCION%"))
+            elif tipo_upper == "AVISOS":
+                conditions.append(Notificacion.tipo.like("AVISO%"))
+            else:
+                conditions.append(Notificacion.tipo == tipo_upper)
+
+        if search:
+            search_pattern = f"%{search.strip()}%"
+            conditions.append(
+                or_(
+                    Notificacion.titulo.ilike(search_pattern),
+                    Notificacion.contenido.ilike(search_pattern),
+                    Notificacion.destinatario.ilike(search_pattern),
+                    Usuario.nombres.ilike(search_pattern),
+                    Usuario.apellidos.ilike(search_pattern),
+                    Usuario.correo.ilike(search_pattern),
+                )
+            )
+
+        count_stmt = (
+            select(func.count(Notificacion.id_notificacion))
+            .select_from(Notificacion)
+            .outerjoin(Usuario, Notificacion.id_usuario == Usuario.id_usuario)
+            .where(*conditions)
+        )
+        total_filtered = int((await self.session.scalar(count_stmt)) or 0)
+
+        query = (
+            select(Notificacion, Usuario.nombres, Usuario.apellidos, Usuario.correo)
+            .outerjoin(Usuario, Notificacion.id_usuario == Usuario.id_usuario)
+            .where(*conditions)
+            .order_by(Notificacion.fecha_creacion.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        rows = list((await self.session.execute(query)).all())
+        return rows, total_filtered, kpis
+
+    async def notification_detail(
+        self, notification_id: int
+    ) -> tuple[Notificacion, str | None, str | None, str | None] | None:
+        query = (
+            select(Notificacion, Usuario.nombres, Usuario.apellidos, Usuario.correo)
+            .outerjoin(Usuario, Notificacion.id_usuario == Usuario.id_usuario)
+            .where(Notificacion.id_notificacion == notification_id)
+        )
+        return (await self.session.execute(query)).first()
+
     async def payment_method(self, code: str) -> MetodoPago | None:
         return await self.session.scalar(
             select(MetodoPago).where(MetodoPago.codigo == code, MetodoPago.activo.is_(True))

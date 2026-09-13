@@ -197,6 +197,48 @@ export interface OperationalNotification {
   fecha_creacion: string;
 }
 
+export interface AdminOperationalNotification {
+  id_notificacion: number;
+  id_usuario: number | null;
+  destinatario_nombre: string | null;
+  destinatario_email: string | null;
+  tipo: string;
+  canal: string;
+  proveedor: string;
+  destinatario: string | null;
+  titulo: string | null;
+  contenido: string;
+  estado: 'PENDIENTE' | 'ENVIADO' | 'FALLIDO';
+  external_message_id: string | null;
+  fecha_creacion: string;
+  fecha_envio: string | null;
+  fecha_entrega: string | null;
+  error_mensaje: string | null;
+}
+
+export interface NotificationKpis {
+  total: number;
+  enviadas: number;
+  pendientes: number;
+  fallidas: number;
+}
+
+export interface AdminNotificationPage {
+  items: AdminOperationalNotification[];
+  total: number;
+  kpis: NotificationKpis;
+  page: number;
+  page_size: number;
+}
+
+export interface ManualNotificationPayload {
+  id_usuario: number;
+  titulo: string;
+  contenido: string;
+  canal?: 'SISTEMA' | 'EMAIL';
+  tipo?: string;
+}
+
 export interface SupplierPurchaseHistoryPage {
   items: Array<Record<string, string | number | null>>;
   total: number;

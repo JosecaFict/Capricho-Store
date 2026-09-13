@@ -16,11 +16,14 @@ from app.modules.commerce.schemas import (
     AddressCreate,
     AddressResponse,
     AddressUpdate,
+    AdminNotificationPage,
+    AdminNotificationResponse,
     AdminReturnCreate,
     CartItemCreate,
     CartItemUpdate,
     CartResponse,
     CheckoutCreate,
+    ManualNotificationCreate,
     NotificationResponse,
     OrderResponse,
     OrderStatusUpdate,
@@ -388,6 +391,52 @@ async def update_return_status(
 @router.get("/notifications", response_model=list[NotificationResponse])
 async def list_notifications(principal: Authenticated, service: Service):
     return await service.list_notifications(principal.user.id_usuario)
+
+
+@router.get("/admin/notifications", response_model=AdminNotificationPage)
+async def admin_list_notifications(
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
+    service: Service,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
+    estado: str | None = None,
+    canal: str | None = None,
+    tipo: str | None = None,
+    search: str | None = None,
+):
+    return await service.admin_list_notifications(
+        estado=estado,
+        canal=canal,
+        tipo=tipo,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post(
+    "/admin/notifications",
+    response_model=AdminNotificationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_manual_notification(
+    payload: ManualNotificationCreate,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
+    service: Service,
+):
+    return await service.send_manual_notification(payload)
+
+
+@router.post(
+    "/admin/notifications/{notification_id}/resend",
+    response_model=AdminNotificationResponse,
+)
+async def resend_notification(
+    notification_id: int,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
+    service: Service,
+):
+    return await service.resend_notification(notification_id)
 
 
 @router.get("/supplier-purchase-history", response_model=SupplierPurchaseHistoryPage)

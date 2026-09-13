@@ -347,6 +347,48 @@ class NotificationResponse(ORMResponse):
     fecha_creacion: datetime
 
 
+class AdminNotificationResponse(BaseModel):
+    id_notificacion: int
+    id_usuario: int | None
+    destinatario_nombre: str | None = None
+    destinatario_email: str | None = None
+    tipo: str
+    canal: str
+    proveedor: str
+    destinatario: str | None = None
+    titulo: str | None = None
+    contenido: str
+    estado: str
+    external_message_id: str | None = None
+    fecha_creacion: datetime
+    fecha_envio: datetime | None = None
+    fecha_entrega: datetime | None = None
+    error_mensaje: str | None = None
+
+
+class NotificationKpis(BaseModel):
+    total: int
+    enviadas: int
+    pendientes: int
+    fallidas: int
+
+
+class AdminNotificationPage(BaseModel):
+    items: list[AdminNotificationResponse]
+    total: int
+    kpis: NotificationKpis
+    page: int
+    page_size: int
+
+
+class ManualNotificationCreate(BaseModel):
+    id_usuario: int
+    titulo: str
+    contenido: str
+    canal: str = "SISTEMA"
+    tipo: str = "AVISO_OPERATIVO"
+
+
 class SupplierPurchaseHistoryItem(BaseModel):
     fecha_recepcion: datetime
     proveedor: str

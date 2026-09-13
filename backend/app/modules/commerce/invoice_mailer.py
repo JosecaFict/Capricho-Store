@@ -114,3 +114,65 @@ class InvoiceMailer:
         except Exception as exc:
             logger.warning("No se pudo enviar correo factura #%s via Brevo: %s", order_id, exc)
             return False
+
+    async def send_operational_email(
+        self,
+        *,
+        recipient_email: str,
+        recipient_name: str,
+        title: str,
+        content: str,
+    ) -> bool:
+        if not self.api_key or not self.sender_email:
+            logger.info("Brevo no configurado; se omite correo operacional a %s.", recipient_email)
+            return False
+
+        safe_name = escape(recipient_name or "Cliente")
+        safe_title = escape(title or "Actualización Operativa")
+        safe_content = escape(content).replace("\n", "<br/>")
+
+        html_content = (
+            "<!doctype html><html lang='es'>"
+            "<body style='margin:0;padding:0;background:#f8fafc;"
+            "font-family:sans-serif;color:#1e293b;'>"
+            "<div style='max-width:580px;margin:24px auto;background:#fff;"
+            "border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;'>"
+            "<div style='background:#064fe8;padding:24px;text-align:center;color:#fff;'>"
+            "<h1 style='margin:0;font-size:22px;'>CAPRICHO STORE</h1>"
+            f"<p style='margin:6px 0 0;color:#dbeafe;font-size:13px;'>{safe_title}</p></div>"
+            "<div style='padding:24px;'>"
+            f"<p style='margin:0 0 16px;font-size:15px;'>Hola <strong>{safe_name}</strong>,</p>"
+            f"<p style='font-size:14px;line-height:1.6;color:#334155;'>{safe_content}</p>"
+            "<div style='margin-top:24px;padding:14px;background:#f1f5f9;border-radius:8px;"
+            "font-size:12px;color:#64748b;'>"
+            "Este es un aviso operativo directo de Capricho Store.</div>"
+            "</div>"
+            "<div style='padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;"
+            "font-size:12px;color:#64748b;'>"
+            "Capricho Store · Santa Cruz, Bolivia</div></div></body></html>"
+        )
+
+        payload = {
+            "sender": {"email": self.sender_email, "name": self.sender_name},
+            "to": [{"email": recipient_email, "name": recipient_name}],
+            "subject": f"{title} | Capricho Store",
+            "htmlContent": html_content,
+            "textContent": f"Hola {recipient_name},\n\n{content}\n\nCapricho Store",
+            "tags": ["operational", "notification"],
+        }
+
+        headers = {
+            "accept": "application/json",
+            "api-key": self.api_key,
+            "content-type": "application/json",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                response = await client.post(self.endpoint, headers=headers, json=payload)
+                response.raise_for_status()
+            logger.info("Notificación enviada por correo a %s via Brevo", recipient_email)
+            return True
+        except Exception as exc:
+            logger.warning("No se pudo enviar notificación a %s via Brevo: %s", recipient_email, exc)
+            return False

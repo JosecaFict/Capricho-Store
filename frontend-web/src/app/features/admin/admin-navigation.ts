@@ -73,6 +73,7 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
       { label: 'Reservas', path: '/admin/reservas', permissions: ['reservas.ver'] },
       { label: 'Clientes', path: '/admin/clientes', permissions: ['ventas.ver'] },
       { label: 'Devoluciones', path: '/admin/devoluciones', permissions: ['ventas.ver'] },
+      { label: 'Notificaciones', path: '/admin/notificaciones', permissions: ['ventas.ver'] },
     ],
   },
   {
