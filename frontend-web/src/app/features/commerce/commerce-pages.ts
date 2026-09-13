@@ -1619,9 +1619,20 @@ export class AddressesPage {
                 </li>
               }
             </ul>
-            <button class="button button--quiet" type="button" (click)="startReturn(sale)">
-              Solicitar devolución
-            </button>
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
+              @if (isReturnEligible(sale.fecha_venta).eligible && (sale.estado === 'PAGADA' || sale.estado === 'CONFIRMADA')) {
+                <span class="status-chip" style="background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; font-size: 0.75rem;">
+                  ✓ Devolución disponible ({{ isReturnEligible(sale.fecha_venta).remaining }} d. hábiles)
+                </span>
+                <button class="button button--quiet" type="button" (click)="startReturn(sale)">
+                  Solicitar devolución
+                </button>
+              } @else {
+                <span class="status-chip" style="background: #f1f5f9; color: #64748b; font-size: 0.75rem;">
+                  Plazo de devolución finalizado (>5 días hábiles)
+                </span>
+              }
+            </div>
             @if (returnSale()?.id_venta === sale.id_venta) {
               <form class="return-form" [formGroup]="returnForm" (ngSubmit)="submitReturn()">
                 <label class="field"
@@ -1760,6 +1771,35 @@ export class HistoryPage {
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos crear la devolución.')),
       });
+  }
+
+  isReturnEligible(saleDateStr: string): { eligible: boolean; remaining: number } {
+    const saleDate = new Date(saleDateStr);
+    let cur = new Date(saleDate);
+    let added = 0;
+    while (added < 5) {
+      cur.setDate(cur.getDate() + 1);
+      const day = cur.getDay();
+      if (day !== 0 && day !== 6) {
+        added++;
+      }
+    }
+    cur.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const eligible = now <= cur;
+
+    let elapsed = 0;
+    const scan = new Date(saleDate);
+    scan.setDate(scan.getDate() + 1);
+    while (scan <= now) {
+      const day = scan.getDay();
+      if (day !== 0 && day !== 6) {
+        elapsed++;
+      }
+      scan.setDate(scan.getDate() + 1);
+    }
+    const remaining = Math.max(0, 5 - elapsed);
+    return { eligible, remaining };
   }
 }
 

@@ -7,8 +7,8 @@ import { Branch, Product } from '../../core/models/catalog.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
-import { Sale } from '../../core/models/commerce.model';
-import { PosSalesAdmin, SalesHistoryAdmin } from './commerce-admin';
+import { ReturnRequest, Sale } from '../../core/models/commerce.model';
+import { PosSalesAdmin, ReturnsAdmin, SalesHistoryAdmin } from './commerce-admin';
 
 const mockBranches: Branch[] = [
   { id_sucursal: 1, nombre: 'Sucursal Central', direccion: 'Av. Principal 100' },
@@ -455,6 +455,160 @@ describe('SalesHistoryAdmin', () => {
     // 7. Invoice download trigger
     component.downloadInvoice(101);
     expect(commerce.saleInvoice).toHaveBeenCalledWith(101);
+  });
+});
+
+describe('ReturnsAdmin', () => {
+  const mockReturns: ReturnRequest[] = [
+    {
+      id_devolucion: 1,
+      id_venta: 101,
+      id_cliente: 1,
+      cliente_nombre: 'María López',
+      motivo: 'Talla no adecuada',
+      estado: 'PENDIENTE',
+      fecha_solicitud: '2026-09-12T10:00:00Z',
+      fecha_resolucion: null,
+      items: [
+        {
+          id_detalle_devolucion: 11,
+          id_detalle_venta: 1,
+          id_variante: 101,
+          producto: 'Polera Oversize Basic',
+          talla: 'M',
+          color: 'Negro',
+          cantidad: 1,
+          estado_prenda: 'APTA_REINGRESO',
+        },
+      ],
+    },
+    {
+      id_devolucion: 2,
+      id_venta: 102,
+      id_cliente: null,
+      cliente_nombre: null,
+      motivo: 'Falla en costura',
+      estado: 'COMPLETADA',
+      fecha_solicitud: '2026-09-11T14:00:00Z',
+      fecha_resolucion: '2026-09-11T14:30:00Z',
+      items: [
+        {
+          id_detalle_devolucion: 12,
+          id_detalle_venta: 2,
+          id_variante: 201,
+          producto: 'Jean Baggy Classic',
+          talla: '32',
+          color: 'Azul',
+          cantidad: 1,
+          estado_prenda: 'NO_APTA',
+        },
+      ],
+    },
+  ];
+
+  it('renders returns, computes KPIs, filters by tab, and manages counter returns', () => {
+    const commerce = {
+      adminReturns: vi.fn().mockReturnValue(of(mockReturns)),
+      updateReturn: vi.fn().mockReturnValue(of({ ...mockReturns[0], estado: 'APROBADA' })),
+      inspectSaleForReturn: vi.fn().mockReturnValue(
+        of({
+          id_venta: 101,
+          id_cliente: null,
+          cliente_nombre: 'Consumidor Final',
+          id_sucursal: 1,
+          sucursal: 'Sucursal Central',
+          canal_venta: 'PRESENCIAL',
+          modalidad_entrega: 'MOSTRADOR',
+          total: '120.00',
+          fecha_venta: '2026-09-13T10:00:00Z',
+          es_retornable: true,
+          dias_habiles_transcurridos: 0,
+          dias_habiles_limite: 5,
+          fecha_limite_devolucion: '2026-09-18T23:59:59Z',
+          motivo_invalidez: null,
+          items: [
+            {
+              id_detalle_venta: 1,
+              id_variante: 101,
+              sku: 'POL-NEG-M',
+              producto: 'Polera Oversize Basic',
+              talla: 'M',
+              color: 'Negro',
+              cantidad_vendida: 1,
+              cantidad_devuelta: 0,
+              cantidad_disponible: 1,
+              precio_unitario: '120.00',
+              imagen_url: null,
+            },
+          ],
+        }),
+      ),
+      createAdminReturn: vi.fn().mockReturnValue(
+        of({
+          id_devolucion: 3,
+          id_venta: 101,
+          id_cliente: null,
+          cliente_nombre: 'Consumidor Final',
+          motivo: 'Cambio de talla solicitado en caja',
+          estado: 'COMPLETADA',
+          fecha_solicitud: '2026-09-13T12:00:00Z',
+          fecha_resolucion: '2026-09-13T12:00:00Z',
+          items: [],
+        }),
+      ),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [ReturnsAdmin],
+      providers: [
+        { provide: CommerceService, useValue: commerce },
+        { provide: ApiErrorService, useValue: { message: (_e: unknown, f: string) => f } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ReturnsAdmin);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    // 1. Check data loading & KPIs
+    expect(component.items().length).toBe(2);
+    expect(component.kpis().total).toBe(2);
+    expect(component.kpis().pending).toBe(1);
+    expect(component.kpis().completed).toBe(1);
+
+    // 2. Filter by status tab
+    component.statusTab.set('PENDIENTE');
+    expect(component.filteredItems().length).toBe(1);
+    expect(component.filteredItems()[0].id_devolucion).toBe(1);
+
+    component.statusTab.set('TODAS');
+
+    // 3. Search query
+    component.searchQuery.set('costura');
+    expect(component.filteredItems().length).toBe(1);
+    expect(component.filteredItems()[0].id_devolucion).toBe(2);
+    component.searchQuery.set('');
+
+    // 4. Update state transition
+    component.update(1, 'APROBADA');
+    expect(commerce.updateReturn).toHaveBeenCalledWith(1, 'APROBADA');
+
+    // 5. Counter return modal flow
+    component.openCounterReturnModal();
+    expect(component.showModal()).toBe(true);
+
+    component.searchSaleId.set(101);
+    component.searchSale();
+    expect(commerce.inspectSaleForReturn).toHaveBeenCalledWith(101);
+    expect(component.inspectedSale()?.es_retornable).toBe(true);
+
+    component.modalMotivo.set('Cambio de talla solicitado en caja');
+    expect(component.canSubmitCounterReturn()).toBe(true);
+
+    component.submitCounterReturn();
+    expect(commerce.createAdminReturn).toHaveBeenCalled();
+    expect(component.showModal()).toBe(false);
+    expect(component.items().length).toBe(3);
   });
 });
 

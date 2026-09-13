@@ -4,7 +4,15 @@ import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angu
 import { finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { Branch, Product, ProductVariant } from '../../core/models/catalog.model';
-import { CustomerAdminSummary, Order, Reservation, ReturnRequest, Sale } from '../../core/models/commerce.model';
+import {
+  CustomerAdminSummary,
+  Order,
+  Reservation,
+  ReturnRequest,
+  Sale,
+  SaleReturnInspectionResponse,
+  SaleReturnLineInspection,
+} from '../../core/models/commerce.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
@@ -2381,61 +2389,514 @@ export class OrdersAdmin {
 
 @Component({
   selector: 'app-returns-admin',
-  imports: [DatePipe, StatusPanel],
-  template: `<section>
-    <header class="admin-page-heading">
-      <div>
-        <h1>Devoluciones</h1>
-        <p>Revisa solicitudes y reintegra stock apto al completar.</p>
+  imports: [CommonModule, FormsModule, DatePipe, BolivianosPipe, StatusPanel],
+  template: `
+    <section class="returns-admin-view">
+      <header class="admin-page-heading">
+        <div>
+          <p class="eyebrow">Gestión Posventa</p>
+          <h1>Devoluciones</h1>
+          <p>Revisa solicitudes online y gestiona devoluciones en mostrador bajo la política de máximo 5 días hábiles.</p>
+        </div>
+        <button class="button button--primary" type="button" (click)="openCounterReturnModal()">
+          + Registrar Devolución en Mostrador
+        </button>
+      </header>
+
+      @if (successMessage()) {
+        <div class="admin-notice admin-notice--success" role="status">
+          <span>{{ successMessage() }}</span>
+          <button type="button" class="pos-notice-close" (click)="successMessage.set('')" aria-label="Cerrar">✕</button>
+        </div>
+      }
+
+      @if (error()) {
+        <div class="admin-notice admin-notice--error" role="alert">
+          <span>{{ error() }}</span>
+          <button type="button" class="pos-notice-close" (click)="error.set('')" aria-label="Cerrar">✕</button>
+        </div>
+      }
+
+      <!-- Métricas KPIs -->
+      <div class="sales-kpi-grid">
+        <div class="sales-kpi-card sales-kpi-card--total">
+          <span class="kpi-icon">📦</span>
+          <div class="kpi-info">
+            <span class="kpi-label">Total Devoluciones</span>
+            <strong class="kpi-value">{{ kpis().total }}</strong>
+            <span class="kpi-sub">Histórico acumulado</span>
+          </div>
+        </div>
+
+        <div class="sales-kpi-card returns-kpi-card--pending">
+          <span class="kpi-icon">⏳</span>
+          <div class="kpi-info">
+            <span class="kpi-label">Pendientes</span>
+            <strong class="kpi-value" style="color: #d97706;">{{ kpis().pending }}</strong>
+            <span class="kpi-sub">Por revisar o inspeccionar</span>
+          </div>
+        </div>
+
+        <div class="sales-kpi-card returns-kpi-card--approved">
+          <span class="kpi-icon">📋</span>
+          <div class="kpi-info">
+            <span class="kpi-label">Aprobadas</span>
+            <strong class="kpi-value" style="color: #2563eb;">{{ kpis().approved }}</strong>
+            <span class="kpi-sub">Esperando recepción física</span>
+          </div>
+        </div>
+
+        <div class="sales-kpi-card returns-kpi-card--completed">
+          <span class="kpi-icon">✅</span>
+          <div class="kpi-info">
+            <span class="kpi-label">Completadas</span>
+            <strong class="kpi-value" style="color: #059669;">{{ kpis().completed }}</strong>
+            <span class="kpi-sub">Stock reintegrado</span>
+          </div>
+        </div>
+
+        <div class="sales-kpi-card returns-kpi-card--rejected">
+          <span class="kpi-icon">✕</span>
+          <div class="kpi-info">
+            <span class="kpi-label">Rechazadas</span>
+            <strong class="kpi-value" style="color: #dc2626;">{{ kpis().rejected }}</strong>
+            <span class="kpi-sub">Fuera de plazo / condición</span>
+          </div>
+        </div>
       </div>
-    </header>
-    @if (error()) {
-      <p class="admin-notice admin-notice--error">{{ error() }}</p>
-    }
-    @if (loading()) {
-      <div class="admin-skeleton-grid"><span></span></div>
-    } @else if (!items().length) {
-      <app-status-panel title="Sin devoluciones" message="No existen solicitudes pendientes." />
-    } @else {
-      <div class="admin-card-list">
-        @for (item of items(); track item.id_devolucion) {
-          <article>
-            <header>
-              <div>
-                <h2>Devolución #{{ item.id_devolucion }}</h2>
-                <p>Venta #{{ item.id_venta }} / {{ item.fecha_solicitud | date: 'short' }}</p>
+
+      <!-- Barra de Filtros y Búsqueda -->
+      <div class="sales-filterbar">
+        <div class="sales-tabs">
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="statusTab() === 'TODAS'"
+            (click)="statusTab.set('TODAS')"
+          >
+            Todas <span class="sales-tab-badge">{{ kpis().total }}</span>
+          </button>
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="statusTab() === 'PENDIENTE'"
+            (click)="statusTab.set('PENDIENTE')"
+          >
+            Pendientes <span class="sales-tab-badge">{{ kpis().pending }}</span>
+          </button>
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="statusTab() === 'APROBADA'"
+            (click)="statusTab.set('APROBADA')"
+          >
+            Aprobadas <span class="sales-tab-badge">{{ kpis().approved }}</span>
+          </button>
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="statusTab() === 'COMPLETADA'"
+            (click)="statusTab.set('COMPLETADA')"
+          >
+            Completadas <span class="sales-tab-badge">{{ kpis().completed }}</span>
+          </button>
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="statusTab() === 'RECHAZADA'"
+            (click)="statusTab.set('RECHAZADA')"
+          >
+            Rechazadas <span class="sales-tab-badge">{{ kpis().rejected }}</span>
+          </button>
+        </div>
+
+        <div class="sales-search-box">
+          <span>🔍</span>
+          <input
+            type="text"
+            placeholder="Buscar por Nº devolución, Nº venta, cliente, motivo..."
+            [value]="searchQuery()"
+            (input)="searchQuery.set($any($event.target).value)"
+          />
+          @if (searchQuery()) {
+            <button type="button" class="sales-search-clear" (click)="searchQuery.set('')">✕</button>
+          }
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="admin-skeleton-grid"><span></span><span></span></div>
+      } @else if (!filteredItems().length) {
+        <app-status-panel
+          title="Sin devoluciones encontradas"
+          message="No existen registros de devolución para los criterios seleccionados."
+        />
+      } @else {
+        <div class="returns-card-grid">
+          @for (item of filteredItems(); track item.id_devolucion) {
+            <article class="return-card">
+              <header class="return-card__header">
+                <div>
+                  <h2 class="return-card__title">Devolución #{{ item.id_devolucion }}</h2>
+                  <p class="return-card__subtitle">
+                    Venta <strong>#{{ item.id_venta }}</strong> · Solicitado {{ item.fecha_solicitud | date: 'short' }}
+                  </p>
+                </div>
+                <span class="status-chip" [class]="badgeClass(item.estado)">{{ item.estado }}</span>
+              </header>
+
+              <div class="return-card__customer">
+                <span>👤</span>
+                <span>{{ item.cliente_nombre || 'Consumidor Final (Mostrador)' }}</span>
               </div>
-              <span class="status-chip">{{ item.estado }}</span>
+
+              <blockquote class="return-card__reason">
+                "{{ item.motivo }}"
+              </blockquote>
+
+              <div class="return-card__items">
+                <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--ink-soft);">
+                  Prendas Devueltas ({{ item.items.length }})
+                </span>
+                @for (line of item.items; track line.id_detalle_devolucion) {
+                  <div class="return-card__item-row">
+                    <div>
+                      <strong>{{ line.producto }}</strong>
+                      <span style="color: var(--ink-soft); font-size: 0.78rem;"> ({{ line.color }} / {{ line.talla }})</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <strong>{{ line.cantidad }} u.</strong>
+                      <span
+                        class="condition-badge"
+                        [class.condition-badge--apta]="line.estado_prenda === 'APTA_REINGRESO'"
+                        [class.condition-badge--no-apta]="line.estado_prenda === 'NO_APTA'"
+                      >
+                        {{ line.estado_prenda === 'APTA_REINGRESO' ? '✓ Apta' : '⚠️ No Apta' }}
+                      </span>
+                    </div>
+                  </div>
+                }
+              </div>
+
+              @if (item.fecha_resolucion) {
+                <div style="font-size: 0.78rem; color: var(--ink-soft);">
+                  Resolución: {{ item.fecha_resolucion | date: 'short' }}
+                </div>
+              }
+
+              @if (nextStates(item.estado).length > 0) {
+                <div class="return-card__actions">
+                  @for (state of nextStates(item.estado); track state) {
+                    <button
+                      class="button"
+                      [class.button--primary]="state === 'COMPLETADA'"
+                      [class.button--secondary]="state === 'APROBADA'"
+                      [class.button--danger]="state === 'RECHAZADA'"
+                      type="button"
+                      [disabled]="saving()"
+                      (click)="update(item.id_devolucion, state)"
+                    >
+                      @if (state === 'COMPLETADA') {
+                        ✓ Completar y Reintegrar Stock
+                      } @else if (state === 'APROBADA') {
+                        📋 Aprobar Solicitud
+                      } @else if (state === 'RECHAZADA') {
+                        ✕ Rechazar
+                      } @else {
+                        {{ state }}
+                      }
+                    </button>
+                  }
+                </div>
+              }
+            </article>
+          }
+        </div>
+      }
+
+      <!-- Modal de Registro de Devolución en Mostrador -->
+      @if (showModal()) {
+        <div class="admin-modal-backdrop" (click)="closeCounterReturnModal()">
+          <div
+            class="admin-modal-card"
+            style="max-width: 720px;"
+            (click)="$event.stopPropagation()"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="counter-return-modal-title"
+          >
+            <header class="admin-modal-header">
+              <div>
+                <span class="admin-modal-kicker">Atención al Cliente · Mostrador</span>
+                <h2 id="counter-return-modal-title" class="admin-modal-title">
+                  Registrar Devolución en Mostrador
+                </h2>
+                <p class="admin-modal-subtitle">
+                  Política oficial: plazo máximo de 5 días hábiles a partir de la fecha de venta.
+                </p>
+              </div>
+              <button
+                type="button"
+                class="admin-modal-close"
+                (click)="closeCounterReturnModal()"
+                [disabled]="saving()"
+                aria-label="Cerrar modal"
+              >
+                ✕
+              </button>
             </header>
-            <p>{{ item.motivo }}</p>
-            <div class="record-actions">
-              @for (state of nextStates(item.estado); track state) {
+
+            <div style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; overflow-y: auto;">
+              <!-- Búsqueda de Venta -->
+              <div style="display: flex; gap: 10px; align-items: flex-end;">
+                <label class="field" style="flex: 1;">
+                  <span>Número de Venta o Factura (ID)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Ej. 6"
+                    [value]="searchSaleId() ?? ''"
+                    (input)="searchSaleId.set($any($event.target).value ? Number($any($event.target).value) : null)"
+                    (keyup.enter)="searchSale()"
+                  />
+                </label>
                 <button
-                  class="button button--quiet"
                   type="button"
-                  [disabled]="saving()"
-                  (click)="update(item.id_devolucion, state)"
+                  class="button button--primary"
+                  [disabled]="!searchSaleId() || searchingSale()"
+                  (click)="searchSale()"
                 >
-                  {{ state.toLowerCase() }}
+                  {{ searchingSale() ? 'Buscando...' : '🔍 Buscar Venta' }}
                 </button>
+              </div>
+
+              @if (searchError()) {
+                <div class="admin-notice admin-notice--error">
+                  <span>{{ searchError() }}</span>
+                </div>
+              }
+
+              <!-- Detalle de Venta Inspeccionada -->
+              @if (inspectedSale(); as sale) {
+                <!-- Resumen de Venta -->
+                <div class="counter-sale-grid">
+                  <div class="metric-item">
+                    <span>Venta</span>
+                    <strong>#{{ sale.id_venta }}</strong>
+                  </div>
+                  <div class="metric-item">
+                    <span>Sucursal</span>
+                    <strong>{{ sale.sucursal }}</strong>
+                  </div>
+                  <div class="metric-item">
+                    <span>Cliente</span>
+                    <strong>{{ sale.cliente_nombre || 'Consumidor Final' }}</strong>
+                  </div>
+                  <div class="metric-item">
+                    <span>Fecha Emisión</span>
+                    <strong>{{ sale.fecha_venta | date: 'short' }}</strong>
+                  </div>
+                  <div class="metric-item">
+                    <span>Total Pagado</span>
+                    <strong style="color: #059669;">{{ sale.total | bolivianos }}</strong>
+                  </div>
+                </div>
+
+                <!-- Banner de 5 Días Hábiles -->
+                @if (sale.es_retornable) {
+                  <div class="policy-banner policy-banner--valid">
+                    <span class="policy-banner__icon">✓</span>
+                    <div class="policy-banner__text">
+                      <strong>Válida para Devolución en Plazo Legal</strong>
+                      <span>
+                        Quedan {{ sale.dias_habiles_limite - sale.dias_habiles_transcurridos }} día(s) hábil(es)
+                        (Límite: {{ sale.fecha_limite_devolucion | date: 'mediumDate' }}).
+                      </span>
+                    </div>
+                  </div>
+                } @else {
+                  <div class="policy-banner policy-banner--expired">
+                    <span class="policy-banner__icon">✕</span>
+                    <div class="policy-banner__text">
+                      <strong>No Elegible para Devolución</strong>
+                      <span>{{ sale.motivo_invalidez || 'La venta no admite devolución o ha superado los 5 días hábiles.' }}</span>
+                    </div>
+                  </div>
+                }
+
+                <!-- Tabla de Selección de Prendas -->
+                <div>
+                  <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">
+                    Seleccionar Prendas a Devolver:
+                  </label>
+                  <div class="modal-table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style="width: 36px;">Sel.</th>
+                          <th>Prenda / Talla / Color</th>
+                          <th>Comprado</th>
+                          <th>Disponible</th>
+                          <th style="width: 110px;">Cant. Devolver</th>
+                          <th>Condición de Prenda</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (item of sale.items; track item.id_detalle_venta) {
+                          <tr>
+                            <td>
+                              <input
+                                type="checkbox"
+                                [disabled]="item.cantidad_disponible <= 0 || !sale.es_retornable"
+                                [checked]="isLineSelected(item.id_detalle_venta)"
+                                (change)="toggleLineSelection(item.id_detalle_venta, $any($event.target).checked, item.cantidad_disponible)"
+                              />
+                            </td>
+                            <td>
+                              <strong>{{ item.producto }}</strong>
+                              <span style="color: var(--ink-soft); font-size: 0.75rem;"> ({{ item.color }} / {{ item.talla }})</span>
+                            </td>
+                            <td>{{ item.cantidad_vendida }}</td>
+                            <td>
+                              <strong [style.color]="item.cantidad_disponible > 0 ? '#059669' : '#dc2626'">
+                                {{ item.cantidad_disponible }}
+                              </strong>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="1"
+                                [max]="item.cantidad_disponible"
+                                [disabled]="!isLineSelected(item.id_detalle_venta)"
+                                [value]="getLineQuantity(item.id_detalle_venta)"
+                                (input)="updateLineQuantity(item.id_detalle_venta, Number($any($event.target).value), item.cantidad_disponible)"
+                                style="width: 70px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;"
+                              />
+                            </td>
+                            <td>
+                              <select
+                                [disabled]="!isLineSelected(item.id_detalle_venta)"
+                                [value]="getLineCondition(item.id_detalle_venta)"
+                                (change)="updateLineCondition(item.id_detalle_venta, $any($event.target).value)"
+                                style="padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.78rem;"
+                              >
+                                <option value="APTA_REINGRESO">✓ Apta (Reintegra stock)</option>
+                                <option value="NO_APTA">⚠️ No Apta (Defecto / Merma)</option>
+                              </select>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Motivo -->
+                <label class="field">
+                  <span>Motivo de la Devolución *</span>
+                  <input
+                    type="text"
+                    placeholder="Ej: Cambio de talla solicitado en tienda, prenda con defecto en costura..."
+                    [value]="modalMotivo()"
+                    (input)="modalMotivo.set($any($event.target).value)"
+                  />
+                </label>
+
+                <!-- Checkbox de Procesamiento Inmediato -->
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer;">
+                  <input
+                    type="checkbox"
+                    [checked]="modalCompletarInmediato()"
+                    (change)="modalCompletarInmediato.set($any($event.target).checked)"
+                  />
+                  <span>
+                    <strong>Completar inmediatamente en mostrador</strong> (reintegra stock físico en sucursal para prendas aptas).
+                  </span>
+                </label>
               }
             </div>
-          </article>
-        }
-      </div>
-    }
-  </section>`,
+
+            <footer style="padding: 1rem 1.5rem; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; background: var(--surface-muted);">
+              <button
+                type="button"
+                class="button button--quiet"
+                (click)="closeCounterReturnModal()"
+                [disabled]="saving()"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                class="button button--primary"
+                [disabled]="!canSubmitCounterReturn() || saving()"
+                (click)="submitCounterReturn()"
+              >
+                {{ saving() ? 'Registrando...' : 'Confirmar Devolución' }}
+              </button>
+            </footer>
+          </div>
+        </div>
+      }
+    </section>
+  `,
 })
 export class ReturnsAdmin {
   private readonly commerce = inject(CommerceService);
   private readonly errors = inject(ApiErrorService);
+
   readonly items = signal<ReturnRequest[]>([]);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
+  readonly successMessage = signal('');
+
+  readonly statusTab = signal<'TODAS' | 'PENDIENTE' | 'APROBADA' | 'COMPLETADA' | 'RECHAZADA'>('TODAS');
+  readonly searchQuery = signal('');
+
+  // Counter return modal state
+  readonly showModal = signal(false);
+  readonly searchSaleId = signal<number | null>(null);
+  readonly searchingSale = signal(false);
+  readonly searchError = signal('');
+  readonly inspectedSale = signal<SaleReturnInspectionResponse | null>(null);
+  readonly lineSelections = signal<Record<number, { selected: boolean; quantity: number; condition: 'APTA_REINGRESO' | 'NO_APTA' }>>({});
+  readonly modalMotivo = signal('');
+  readonly modalCompletarInmediato = signal(true);
+
+  readonly kpis = computed(() => {
+    const list = this.items();
+    return {
+      total: list.length,
+      pending: list.filter((i) => i.estado === 'PENDIENTE').length,
+      approved: list.filter((i) => i.estado === 'APROBADA').length,
+      completed: list.filter((i) => i.estado === 'COMPLETADA').length,
+      rejected: list.filter((i) => i.estado === 'RECHAZADA').length,
+    };
+  });
+
+  readonly filteredItems = computed(() => {
+    let list = this.items();
+    const tab = this.statusTab();
+    if (tab !== 'TODAS') {
+      list = list.filter((i) => i.estado === tab);
+    }
+    const q = this.searchQuery().trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (i) =>
+          String(i.id_devolucion).includes(q) ||
+          String(i.id_venta).includes(q) ||
+          (i.cliente_nombre && i.cliente_nombre.toLowerCase().includes(q)) ||
+          i.motivo.toLowerCase().includes(q),
+      );
+    }
+    return list;
+  });
+
   constructor() {
     this.load();
   }
+
   load(): void {
     this.loading.set(true);
     this.commerce
@@ -2447,6 +2908,22 @@ export class ReturnsAdmin {
           this.error.set(this.errors.message(error, 'No pudimos cargar las devoluciones.')),
       });
   }
+
+  badgeClass(state: string): string {
+    switch (state) {
+      case 'PENDIENTE':
+        return 'order-badge--pending';
+      case 'APROBADA':
+        return 'order-badge--confirmed';
+      case 'COMPLETADA':
+        return 'order-badge--completed';
+      case 'RECHAZADA':
+        return 'order-badge--cancelled';
+      default:
+        return 'order-badge--default';
+    }
+  }
+
   nextStates(state: string): string[] {
     return (
       (
@@ -2457,20 +2934,174 @@ export class ReturnsAdmin {
       )[state] ?? []
     );
   }
+
   update(id: number, state: string): void {
     this.saving.set(true);
+    this.error.set('');
+    this.successMessage.set('');
     this.commerce
       .updateReturn(id, state)
       .pipe(finalize(() => this.saving.set(false)))
       .subscribe({
-        next: (updated) =>
+        next: (updated) => {
           this.items.update((items) =>
             items.map((item) => (item.id_devolucion === id ? updated : item)),
-          ),
+          );
+          this.successMessage.set(`Devolución #${id} actualizada a ${state}.`);
+        },
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos actualizar la devolución.')),
       });
   }
+
+  openCounterReturnModal(): void {
+    this.showModal.set(true);
+    this.searchSaleId.set(null);
+    this.searchingSale.set(false);
+    this.searchError.set('');
+    this.inspectedSale.set(null);
+    this.lineSelections.set({});
+    this.modalMotivo.set('');
+    this.modalCompletarInmediato.set(true);
+  }
+
+  closeCounterReturnModal(): void {
+    this.showModal.set(false);
+  }
+
+  searchSale(): void {
+    const id = this.searchSaleId();
+    if (!id || id <= 0) return;
+    this.searchingSale.set(true);
+    this.searchError.set('');
+    this.inspectedSale.set(null);
+    this.lineSelections.set({});
+
+    this.commerce
+      .inspectSaleForReturn(id)
+      .pipe(finalize(() => this.searchingSale.set(false)))
+      .subscribe({
+        next: (sale) => {
+          this.inspectedSale.set(sale);
+          const initialSelections: Record<number, { selected: boolean; quantity: number; condition: 'APTA_REINGRESO' | 'NO_APTA' }> = {};
+          sale.items.forEach((item) => {
+            initialSelections[item.id_detalle_venta] = {
+              selected: item.cantidad_disponible > 0 && sale.es_retornable,
+              quantity: Math.min(1, item.cantidad_disponible),
+              condition: 'APTA_REINGRESO',
+            };
+          });
+          this.lineSelections.set(initialSelections);
+        },
+        error: (err) => {
+          this.searchError.set(this.errors.message(err, 'No fue posible encontrar la venta solicitada.'));
+        },
+      });
+  }
+
+  isLineSelected(detailId: number): boolean {
+    return !!this.lineSelections()[detailId]?.selected;
+  }
+
+  getLineQuantity(detailId: number): number {
+    return this.lineSelections()[detailId]?.quantity ?? 1;
+  }
+
+  getLineCondition(detailId: number): 'APTA_REINGRESO' | 'NO_APTA' {
+    return this.lineSelections()[detailId]?.condition ?? 'APTA_REINGRESO';
+  }
+
+  toggleLineSelection(detailId: number, checked: boolean, available: number): void {
+    this.lineSelections.update((map) => {
+      const current = map[detailId] ?? { quantity: 1, condition: 'APTA_REINGRESO' };
+      return {
+        ...map,
+        [detailId]: {
+          ...current,
+          selected: checked,
+          quantity: Math.min(Math.max(1, current.quantity), Math.max(1, available)),
+        },
+      };
+    });
+  }
+
+  updateLineQuantity(detailId: number, qty: number, available: number): void {
+    const validQty = Math.min(Math.max(1, qty), Math.max(1, available));
+    this.lineSelections.update((map) => {
+      const current = map[detailId] ?? { selected: true, condition: 'APTA_REINGRESO' };
+      return {
+        ...map,
+        [detailId]: {
+          ...current,
+          quantity: validQty,
+        },
+      };
+    });
+  }
+
+  updateLineCondition(detailId: number, cond: string): void {
+    const condition = cond === 'NO_APTA' ? 'NO_APTA' : 'APTA_REINGRESO';
+    this.lineSelections.update((map) => {
+      const current = map[detailId] ?? { selected: true, quantity: 1 };
+      return {
+        ...map,
+        [detailId]: {
+          ...current,
+          condition,
+        },
+      };
+    });
+  }
+
+  canSubmitCounterReturn(): boolean {
+    const sale = this.inspectedSale();
+    if (!sale || !sale.es_retornable) return false;
+    if (!this.modalMotivo().trim() || this.modalMotivo().trim().length < 3) return false;
+
+    const selections = this.lineSelections();
+    const hasSelected = Object.values(selections).some((s) => s.selected && s.quantity > 0);
+    return hasSelected;
+  }
+
+  submitCounterReturn(): void {
+    const sale = this.inspectedSale();
+    if (!sale || !this.canSubmitCounterReturn()) return;
+
+    const selections = this.lineSelections();
+    const items = Object.entries(selections)
+      .filter(([_, s]) => s.selected && s.quantity > 0)
+      .map(([detailId, s]) => ({
+        id_detalle_venta: Number(detailId),
+        cantidad: s.quantity,
+        estado_prenda: s.condition,
+      }));
+
+    this.saving.set(true);
+    this.searchError.set('');
+
+    this.commerce
+      .createAdminReturn({
+        id_venta: sale.id_venta,
+        motivo: this.modalMotivo().trim(),
+        items,
+        completar_inmediato: this.modalCompletarInmediato(),
+      })
+      .pipe(finalize(() => this.saving.set(false)))
+      .subscribe({
+        next: (newReturn) => {
+          this.items.update((prev) => [newReturn, ...prev]);
+          this.successMessage.set(
+            `Devolución #${newReturn.id_devolucion} para la venta #${sale.id_venta} registrada con éxito (${newReturn.estado}).`,
+          );
+          this.closeCounterReturnModal();
+        },
+        error: (err) => {
+          this.searchError.set(this.errors.message(err, 'No fue posible registrar la devolución en mostrador.'));
+        },
+      });
+  }
+
+  protected readonly Number = Number;
 }
 
 @Component({

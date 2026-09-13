@@ -16,6 +16,8 @@ import {
   CustomerAdminDetail,
   CustomerAdminSummary,
   CustomerAdminUpdateRequest,
+  AdminReturnCreate,
+  SaleReturnInspectionResponse,
 } from '../models/commerce.model';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
@@ -145,6 +147,17 @@ export class CommerceService {
     return this.http.patch<ReturnRequest>(`${API_BASE_URL}/admin/returns/${id}/status`, {
       estado,
     });
+  }
+  inspectSaleForReturn(saleId: number) {
+    return this.http.get<SaleReturnInspectionResponse>(
+      `${API_BASE_URL}/admin/returns/inspect-sale/${saleId}`,
+    );
+  }
+  createAdminReturn(payload: AdminReturnCreate) {
+    return this.http.post<ReturnRequest>(`${API_BASE_URL}/admin/returns`, payload);
+  }
+  sale(saleId: number) {
+    return this.http.get<Sale>(`${API_BASE_URL}/sales/${saleId}`);
   }
   supplierPurchaseHistory(params?: Params) {
     return this.http.get<SupplierPurchaseHistoryPage>(`${API_BASE_URL}/supplier-purchase-history`, {

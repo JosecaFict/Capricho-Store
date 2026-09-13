@@ -41,10 +41,15 @@ from app.modules.commerce.models import (
     Venta,
 )
 from app.modules.commerce.repository import CommerceRepository
+from app.modules.commerce.business_days import (
+    calculate_business_days_elapsed,
+    is_return_window_valid,
+)
 from app.modules.commerce.schemas import (
     AddressCreate,
     AddressResponse,
     AddressUpdate,
+    AdminReturnCreate,
     CartItemCreate,
     CartItemUpdate,
     CartResponse,
@@ -62,6 +67,8 @@ from app.modules.commerce.schemas import (
     ReturnStatusUpdate,
     SaleCreate,
     SaleResponse,
+    SaleReturnInspectionResponse,
+    SaleReturnLineInspection,
     ShippingQuoteCreate,
     StripeCheckoutResponse,
     StripeCheckoutStatusResponse,
@@ -1250,6 +1257,25 @@ class CommerceService:
             for item in await self.repository.customer_sales(customer.id_cliente)
         ]
 
+    async def get_sale(
+        self, user_id: int, sale_id: int, *, all_branches: bool = False
+    ) -> SaleResponse:
+        sale = await self.repository.get(Venta, sale_id)
+        if sale is None:
+            raise CommerceNotFoundError("La venta no existe")
+
+        customer = await self.repository.customer_by_user(user_id)
+        if customer and sale.id_cliente == customer.id_cliente:
+            return await self._sale_response(sale)
+
+        employee = await self.repository.employee_by_user(user_id)
+        if employee and employee.estado_laboral == "ACTIVO":
+            if not all_branches and sale.id_sucursal != employee.id_sucursal:
+                raise CommerceNotFoundError("La venta no existe")
+            return await self._sale_response(sale)
+
+        raise CommerceForbiddenError("No tienes permiso para ver esta venta")
+
     async def _restore_sale_stock(
         self,
         sale: Venta,
@@ -1697,6 +1723,13 @@ class CommerceService:
             raise CommerceNotFoundError("La compra no existe")
         if sale.estado not in {"PAGADA", "CONFIRMADA"}:
             raise InvalidCommerceOperationError("La compra no admite devolución")
+
+        is_valid, remaining, deadline = is_return_window_valid(sale.fecha_venta, max_days=5)
+        if not is_valid:
+            raise CommerceConflictError(
+                "El plazo máximo para solicitar devolución es de 5 días hábiles a partir de la compra"
+            )
+
         sale_details = {
             item.id_detalle_venta: item
             for item in await self.repository.sale_details(sale.id_venta)
@@ -1747,15 +1780,255 @@ class CommerceService:
                     estado_prenda=detail.estado_prenda,
                 )
             )
+
+        cliente_nombre = None
+        if returned.id_cliente:
+            customer = await self.repository.get(Cliente, returned.id_cliente)
+            if customer:
+                user = await self.repository.get(Usuario, customer.id_usuario)
+                if user:
+                    cliente_nombre = f"{user.nombres} {user.apellidos or ''}".strip()
+        else:
+            cliente_nombre = "Consumidor Final"
+
         return ReturnResponse(
             id_devolucion=returned.id_devolucion,
             id_venta=returned.id_venta,
+            id_cliente=returned.id_cliente,
+            cliente_nombre=cliente_nombre,
             motivo=returned.motivo,
             estado=returned.estado,
             fecha_solicitud=returned.fecha_solicitud,
             fecha_resolucion=returned.fecha_resolucion,
             items=items,
         )
+
+    async def inspect_sale_for_return(
+        self, user_id: int, sale_id: int, *, all_branches: bool = False
+    ) -> SaleReturnInspectionResponse:
+        sale = await self.repository.get(Venta, sale_id)
+        if sale is None:
+            raise CommerceNotFoundError("La venta no existe")
+
+        employee = await self.repository.employee_by_user(user_id)
+        customer = await self.repository.customer_by_user(user_id)
+
+        if employee and employee.estado_laboral == "ACTIVO":
+            if not all_branches and sale.id_sucursal != employee.id_sucursal:
+                raise CommerceNotFoundError("La venta no pertenece a tu sucursal asignada")
+        elif customer and sale.id_cliente == customer.id_cliente:
+            pass
+        else:
+            raise CommerceForbiddenError("No tienes permiso para consultar esta venta")
+
+        branch = await self.repository.get(Sucursal, sale.id_sucursal)
+        branch_name = branch.nombre if branch else f"Sucursal #{sale.id_sucursal}"
+
+        cliente_nombre = None
+        cliente_correo = None
+        cliente_telefono = None
+        if sale.id_cliente:
+            c = await self.repository.get(Cliente, sale.id_cliente)
+            if c:
+                u = await self.repository.get(Usuario, c.id_usuario)
+                if u:
+                    cliente_nombre = f"{u.nombres} {u.apellidos or ''}".strip()
+                    cliente_correo = (
+                        u.correo if not u.correo.endswith("@pos.caprichostore.com") else None
+                    )
+                    cliente_telefono = u.telefono
+        else:
+            cliente_nombre = "Consumidor Final"
+
+        is_valid, remaining, deadline = is_return_window_valid(sale.fecha_venta, max_days=5)
+        elapsed = calculate_business_days_elapsed(sale.fecha_venta)
+
+        es_retornable = True
+        motivo_invalidez = None
+
+        if sale.estado not in {"PAGADA", "CONFIRMADA"}:
+            es_retornable = False
+            motivo_invalidez = (
+                f"La venta se encuentra en estado {sale.estado}, no admite devolución"
+            )
+        elif not is_valid:
+            es_retornable = False
+            motivo_invalidez = (
+                f"El plazo máximo de 5 días hábiles ha expirado (transcurrieron {elapsed} días hábiles)"
+            )
+
+        sale_details = await self.repository.sale_details(sale.id_venta)
+        items: list[SaleReturnLineInspection] = []
+        total_available = 0
+
+        for item in sale_details:
+            returned_qty = await self.repository.returned_quantity(item.id_detalle_venta)
+            available_qty = max(0, item.cantidad - returned_qty)
+            total_available += available_qty
+            line = await self._line(item.id_detalle_venta, item.id_variante, item.cantidad)
+            items.append(
+                SaleReturnLineInspection(
+                    id_detalle_venta=item.id_detalle_venta,
+                    id_variante=item.id_variante,
+                    sku=line.sku,
+                    producto=line.producto,
+                    talla=line.talla,
+                    color=line.color,
+                    cantidad_vendida=item.cantidad,
+                    cantidad_devuelta=returned_qty,
+                    cantidad_disponible=available_qty,
+                    precio_unitario=item.precio_unitario,
+                    imagen_url=line.imagen_url,
+                )
+            )
+
+        if total_available == 0 and es_retornable:
+            es_retornable = False
+            motivo_invalidez = "Todos los artículos de esta venta ya han sido devueltos"
+
+        return SaleReturnInspectionResponse(
+            id_venta=sale.id_venta,
+            id_cliente=sale.id_cliente,
+            cliente_nombre=cliente_nombre,
+            cliente_correo=cliente_correo,
+            cliente_telefono=cliente_telefono,
+            id_sucursal=sale.id_sucursal,
+            sucursal=branch_name,
+            canal_venta=sale.canal_venta,
+            modalidad_entrega=sale.modalidad_entrega,
+            total=sale.total,
+            fecha_venta=sale.fecha_venta,
+            es_retornable=es_retornable,
+            dias_habiles_transcurridos=elapsed,
+            dias_habiles_limite=5,
+            fecha_limite_devolucion=deadline,
+            motivo_invalidez=motivo_invalidez,
+            items=items,
+        )
+
+    async def create_admin_return(
+        self, user_id: int, payload: AdminReturnCreate, *, all_branches: bool = False
+    ) -> ReturnResponse:
+        employee = await self._employee(user_id)
+        sale = await self.repository.get(Venta, payload.id_venta)
+        if sale is None:
+            raise CommerceNotFoundError("La venta no existe")
+        if not all_branches and sale.id_sucursal != employee.id_sucursal:
+            raise CommerceNotFoundError("La venta no pertenece a tu sucursal asignada")
+        if sale.estado not in {"PAGADA", "CONFIRMADA"}:
+            raise InvalidCommerceOperationError(
+                "La compra no admite devolución en su estado actual"
+            )
+
+        is_valid, remaining, deadline = is_return_window_valid(sale.fecha_venta, max_days=5)
+        if not is_valid:
+            raise CommerceConflictError(
+                "El plazo máximo para registrar devolución es de 5 días hábiles a partir de la compra"
+            )
+
+        sale_details = {
+            item.id_detalle_venta: item
+            for item in await self.repository.sale_details(sale.id_venta)
+        }
+        identifiers = [item.id_detalle_venta for item in payload.items]
+        if len(identifiers) != len(set(identifiers)):
+            raise InvalidCommerceOperationError("No repita un artículo en la devolución")
+
+        for item in payload.items:
+            detail = sale_details.get(item.id_detalle_venta)
+            if detail is None:
+                raise InvalidCommerceOperationError("Un artículo no pertenece a la compra")
+            returned_qty = await self.repository.returned_quantity(item.id_detalle_venta)
+            if item.cantidad + returned_qty > detail.cantidad:
+                raise CommerceConflictError(
+                    "La cantidad a devolver supera la cantidad comprada disponible"
+                )
+
+        initial_state = "COMPLETADA" if payload.completar_inmediato else "PENDIENTE"
+        resolution_date = datetime.now(UTC) if payload.completar_inmediato else None
+
+        returned = await self.repository.add(
+            Devolucion(
+                id_venta=sale.id_venta,
+                id_cliente=sale.id_cliente,
+                id_empleado=employee.id_empleado,
+                motivo=payload.motivo,
+                estado=initial_state,
+                fecha_resolucion=resolution_date,
+            )
+        )
+        for item in payload.items:
+            await self.repository.add(
+                DetalleDevolucion(
+                    id_devolucion=returned.id_devolucion,
+                    id_detalle_venta=item.id_detalle_venta,
+                    cantidad=item.cantidad,
+                    estado_prenda=item.estado_prenda,
+                )
+            )
+
+        if payload.completar_inmediato:
+            for item in payload.items:
+                if item.estado_prenda != "APTA_REINGRESO":
+                    continue
+                sale_detail = sale_details[item.id_detalle_venta]
+                inventory = await self.repository.inventory_for_update(
+                    sale.id_sucursal, sale_detail.id_variante
+                )
+                movement = await self.repository.add(
+                    MovimientoInventario(
+                        id_inventario=inventory.id_inventario,
+                        id_empleado=employee.id_empleado,
+                        tipo_movimiento="DEVOLUCION",
+                        cantidad=item.cantidad,
+                        referencia_tipo="DEVOLUCION",
+                        referencia_id=returned.id_devolucion,
+                        motivo=returned.motivo,
+                    )
+                )
+                remaining = item.cantidad
+                restored_before = await self.repository.restored_sale_lots(
+                    sale.id_venta, sale_detail.id_variante
+                )
+                for allocation, lot in await self.repository.sale_lot_allocations(
+                    sale.id_venta, sale_detail.id_variante
+                ):
+                    capacity = max(
+                        0,
+                        allocation.cantidad - restored_before.get(lot.id_lote, 0),
+                    )
+                    restored = min(remaining, capacity)
+                    if not restored:
+                        continue
+                    lot.cantidad_disponible += restored
+                    await self.repository.add(
+                        MovimientoLote(
+                            id_movimiento=movement.id_movimiento,
+                            id_lote=lot.id_lote,
+                            cantidad=restored,
+                            costo_unitario=allocation.costo_unitario,
+                        )
+                    )
+                    remaining -= restored
+                    if not remaining:
+                        break
+                if remaining:
+                    raise CommerceConflictError(
+                        "No fue posible restaurar las capas FIFO de la venta"
+                    )
+
+        if sale.id_cliente:
+            customer = await self.repository.get(Cliente, sale.id_cliente)
+            if customer:
+                await self._notify(
+                    customer.id_usuario,
+                    f"DEVOLUCION_{initial_state}",
+                    "Devolución registrada en mostrador",
+                    f"Se ha registrado tu devolución #{returned.id_devolucion} con estado {initial_state.lower()}.",
+                )
+
+        await self.session.commit()
+        return await self._return_response(returned)
 
     async def list_returns(
         self, user_id: int, *, operational: bool, all_branches: bool = False

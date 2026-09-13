@@ -270,6 +270,13 @@ class ReturnCreate(BaseModel):
     items: list[ReturnLineCreate] = Field(min_length=1)
 
 
+class AdminReturnCreate(BaseModel):
+    id_venta: int = Field(gt=0)
+    motivo: str = Field(min_length=3, max_length=255)
+    items: list[ReturnLineCreate] = Field(min_length=1)
+    completar_inmediato: bool = True
+
+
 class ReturnStatusUpdate(BaseModel):
     estado: ReturnState
 
@@ -288,11 +295,47 @@ class ReturnLineResponse(ORMResponse):
 class ReturnResponse(ORMResponse):
     id_devolucion: int
     id_venta: int
+    id_cliente: int | None = None
+    cliente_nombre: str | None = None
     motivo: str
     estado: ReturnState
     fecha_solicitud: datetime
     fecha_resolucion: datetime | None
     items: list[ReturnLineResponse]
+
+
+class SaleReturnLineInspection(ORMResponse):
+    id_detalle_venta: int
+    id_variante: int
+    sku: str
+    producto: str
+    talla: str
+    color: str
+    cantidad_vendida: int
+    cantidad_devuelta: int
+    cantidad_disponible: int
+    precio_unitario: Decimal
+    imagen_url: str | None = None
+
+
+class SaleReturnInspectionResponse(ORMResponse):
+    id_venta: int
+    id_cliente: int | None = None
+    cliente_nombre: str | None = None
+    cliente_correo: str | None = None
+    cliente_telefono: str | None = None
+    id_sucursal: int
+    sucursal: str
+    canal_venta: str
+    modalidad_entrega: str
+    total: Decimal
+    fecha_venta: datetime
+    es_retornable: bool
+    dias_habiles_transcurridos: int
+    dias_habiles_limite: int = 5
+    fecha_limite_devolucion: datetime
+    motivo_invalidez: str | None = None
+    items: list[SaleReturnLineInspection]
 
 
 class NotificationResponse(ORMResponse):

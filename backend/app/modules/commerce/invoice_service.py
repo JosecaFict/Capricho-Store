@@ -431,8 +431,8 @@ def generate_invoice_pdf(data: InvoiceData) -> bytes:
     # 5. Footer Notice
     footer_text = (
         "<b>¡Gracias por tu compra en Capricho Store!</b><br/>"
-        "Garantía y cambios hasta 7 días presentando este comprobante en cualquiera de "
-        "nuestras sucursales.<br/>"
+        "Garantía, cambios y devoluciones hasta 5 días hábiles a partir de la fecha de emisión "
+        "presentando este comprobante en cualquiera de nuestras sucursales.<br/>"
         "Este documento es un respaldo digital oficial de la transacción comercial."
     )
     footer_p = Paragraph(

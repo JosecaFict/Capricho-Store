@@ -16,6 +16,7 @@ from app.modules.commerce.schemas import (
     AddressCreate,
     AddressResponse,
     AddressUpdate,
+    AdminReturnCreate,
     CartItemCreate,
     CartItemUpdate,
     CartResponse,
@@ -31,6 +32,7 @@ from app.modules.commerce.schemas import (
     ReturnStatusUpdate,
     SaleCreate,
     SaleResponse,
+    SaleReturnInspectionResponse,
     ShippingQuoteCreate,
     ShippingQuoteResponse,
     StripeCheckoutResponse,
@@ -178,6 +180,15 @@ async def list_sales(
     )
 
 
+@router.get("/sales/{sale_id}", response_model=SaleResponse)
+async def get_sale(sale_id: int, principal: Authenticated, service: Service):
+    return await service.get_sale(
+        principal.user.id_usuario,
+        sale_id,
+        all_branches="ADMIN" in principal.roles,
+    )
+
+
 @router.get("/history/purchases", response_model=list[SaleResponse])
 async def customer_purchase_history(principal: Authenticated, service: Service):
     return await service.list_customer_sales(principal.user.id_usuario)
@@ -322,6 +333,39 @@ async def list_operational_returns(
     return await service.list_returns(
         principal.user.id_usuario,
         operational=True,
+        all_branches="ADMIN" in principal.roles,
+    )
+
+
+@router.get(
+    "/admin/returns/inspect-sale/{sale_id}",
+    response_model=SaleReturnInspectionResponse,
+)
+async def inspect_sale_for_return(
+    sale_id: int,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
+    service: Service,
+):
+    return await service.inspect_sale_for_return(
+        principal.user.id_usuario,
+        sale_id,
+        all_branches="ADMIN" in principal.roles,
+    )
+
+
+@router.post(
+    "/admin/returns",
+    response_model=ReturnResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_admin_return(
+    payload: AdminReturnCreate,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.crear"))],
+    service: Service,
+):
+    return await service.create_admin_return(
+        principal.user.id_usuario,
+        payload,
         all_branches="ADMIN" in principal.roles,
     )
 

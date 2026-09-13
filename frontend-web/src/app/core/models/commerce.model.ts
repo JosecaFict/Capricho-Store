@@ -125,6 +125,8 @@ export interface ShippingQuote {
 export interface ReturnRequest {
   id_devolucion: number;
   id_venta: number;
+  id_cliente?: number | null;
+  cliente_nombre?: string | null;
   motivo: string;
   estado: string;
   fecha_solicitud: string;
@@ -139,6 +141,51 @@ export interface ReturnRequest {
     cantidad: number;
     estado_prenda: string;
   }>;
+}
+
+export interface SaleReturnLineInspection {
+  id_detalle_venta: number;
+  id_variante: number;
+  sku: string;
+  producto: string;
+  talla: string;
+  color: string;
+  cantidad_vendida: number;
+  cantidad_devuelta: number;
+  cantidad_disponible: number;
+  precio_unitario: string;
+  imagen_url?: string | null;
+}
+
+export interface SaleReturnInspectionResponse {
+  id_venta: number;
+  id_cliente: number | null;
+  cliente_nombre?: string | null;
+  cliente_correo?: string | null;
+  cliente_telefono?: string | null;
+  id_sucursal: number;
+  sucursal: string;
+  canal_venta: string;
+  modalidad_entrega: string;
+  total: string;
+  fecha_venta: string;
+  es_retornable: boolean;
+  dias_habiles_transcurridos: number;
+  dias_habiles_limite: number;
+  fecha_limite_devolucion: string;
+  motivo_invalidez?: string | null;
+  items: SaleReturnLineInspection[];
+}
+
+export interface AdminReturnCreate {
+  id_venta: number;
+  motivo: string;
+  items: Array<{
+    id_detalle_venta: number;
+    cantidad: number;
+    estado_prenda: 'APTA_REINGRESO' | 'NO_APTA';
+  }>;
+  completar_inmediato: boolean;
 }
 
 export interface OperationalNotification {

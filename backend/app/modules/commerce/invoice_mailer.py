@@ -74,7 +74,7 @@ class InvoiceMailer:
             f"<td style='text-align:right;color:#064fe8;font-weight:800;font-size:15px;'>"
             f"Bs. {total_bob}</td></tr></table></div>"
             "<p style='font-size:12px;color:#64748b;margin:18px 0 0;line-height:1.4;'>"
-            "* Cuentas con 7 días de garantía para cambios presentando tu factura adjunta."
+            "* Cuentas con un plazo máximo de 5 días hábiles para cambios y devoluciones presentando tu factura adjunta."
             "</p></div>"
             "<div style='background:#f1f5f9;padding:14px;text-align:center;"
             "font-size:12px;color:#64748b;'>"

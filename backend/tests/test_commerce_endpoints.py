@@ -425,5 +425,108 @@ async def test_list_sales_endpoint_with_data() -> None:
     assert data[0]["cliente_nombre"] == "María López"
     assert data[0]["metodo_pago"] == "💵 Efectivo"
 
+async def test_inspect_sale_for_return_endpoint() -> None:
+    service = AsyncMock()
+    service.inspect_sale_for_return.return_value = {
+        "id_venta": 6,
+        "id_cliente": None,
+        "cliente_nombre": "Consumidor Final",
+        "cliente_correo": None,
+        "cliente_telefono": None,
+        "id_sucursal": 1,
+        "sucursal": "Central",
+        "canal_venta": "PRESENCIAL",
+        "modalidad_entrega": "MOSTRADOR",
+        "total": "120.00",
+        "fecha_venta": NOW,
+        "es_retornable": True,
+        "dias_habiles_transcurridos": 1,
+        "dias_habiles_limite": 5,
+        "fecha_limite_devolucion": NOW,
+        "motivo_invalidez": None,
+        "items": [
+            {
+                "id_detalle_venta": 1,
+                "id_variante": 7,
+                "sku": "POL-NEG-M",
+                "producto": "Polera clásica",
+                "talla": "M",
+                "color": "Negro",
+                "cantidad_vendida": 2,
+                "cantidad_devuelta": 0,
+                "cantidad_disponible": 2,
+                "precio_unitario": "60.00",
+                "imagen_url": None,
+            }
+        ],
+    }
+    response = await call(
+        "GET",
+        "/api/v1/admin/returns/inspect-sale/6",
+        service=service,
+        actor=principal("ventas.ver"),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cliente_nombre"] == "Consumidor Final"
+    assert data["es_retornable"] is True
+    assert data["items"][0]["cantidad_disponible"] == 2
 
 
+async def test_admin_create_counter_return_endpoint() -> None:
+    service = AsyncMock()
+    completed_return = {
+        **RETURN,
+        "id_cliente": None,
+        "cliente_nombre": "Consumidor Final",
+        "estado": "COMPLETADA",
+    }
+    service.create_admin_return.return_value = completed_return
+    response = await call(
+        "POST",
+        "/api/v1/admin/returns",
+        service=service,
+        actor=principal("ventas.crear"),
+        json={
+            "id_venta": 6,
+            "motivo": "Falla de confección en costura",
+            "items": [{"id_detalle_venta": 1, "cantidad": 1, "estado_prenda": "NO_APTA"}],
+            "completar_inmediato": True,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["estado"] == "COMPLETADA"
+    assert response.json()["cliente_nombre"] == "Consumidor Final"
+
+
+async def test_get_sale_by_id_endpoint() -> None:
+    service = AsyncMock()
+    service.get_sale.return_value = {
+        "id_venta": 6,
+        "id_cliente": 1,
+        "cliente_nombre": "Ana Pérez",
+        "cliente_correo": "ana@example.com",
+        "cliente_telefono": None,
+        "id_sucursal": 1,
+        "sucursal": "Central",
+        "id_empleado": 2,
+        "empleado_nombre": "Pedro Cajero",
+        "id_reserva": None,
+        "canal_venta": "PRESENCIAL",
+        "modalidad_entrega": "MOSTRADOR",
+        "metodo_pago": "Efectivo",
+        "estado": "CONFIRMADA",
+        "subtotal": "120.00",
+        "costo_envio": "0.00",
+        "total": "120.00",
+        "fecha_venta": NOW,
+        "items": [LINE],
+    }
+    response = await call(
+        "GET",
+        "/api/v1/sales/6",
+        service=service,
+        actor=principal("ventas.ver"),
+    )
+    assert response.status_code == 200
+    assert response.json()["id_venta"] == 6
