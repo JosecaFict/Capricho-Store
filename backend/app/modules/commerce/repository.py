@@ -242,6 +242,22 @@ class CommerceRepository:
         )
         return list((await self.session.scalars(statement)).all())
 
+    async def customer_pending_stripe_sessions(self, customer_id: int) -> list[str]:
+        statement = (
+            select(TransaccionPasarela.external_session_id)
+            .join(Pago, Pago.id_pago == TransaccionPasarela.id_pago)
+            .join(Venta, Venta.id_venta == Pago.id_venta)
+            .where(
+                Venta.id_cliente == customer_id,
+                Venta.estado == "PENDIENTE",
+                TransaccionPasarela.proveedor == "STRIPE",
+                TransaccionPasarela.external_session_id.is_not(None),
+            )
+            .order_by(TransaccionPasarela.created_at.desc())
+            .limit(10)
+        )
+        return [str(sid) for sid in (await self.session.scalars(statement)).all() if sid]
+
     async def orders(
         self, *, state: str | None = None, branch_id: int | None = None
     ) -> list[Pedido]:

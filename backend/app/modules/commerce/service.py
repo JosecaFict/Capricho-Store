@@ -951,13 +951,15 @@ class CommerceService:
                 cart.estado = "CONVERTIDO"
                 cart.id_sucursal = None
                 await self.repository.clear_cart_items(cart.id_carrito)
-        customer = await self.repository.get(Cliente, sale.id_cliente)
-        await self._notify(
-            customer.id_usuario,
-            "PAGO_CONFIRMADO",
-            "Compra confirmada",
-            f"Stripe confirmó el pago de tu pedido #{order.id_pedido}.",
-        )
+        if sale.id_cliente:
+            customer = await self.repository.get(Cliente, sale.id_cliente)
+            if customer and customer.id_usuario:
+                await self._notify(
+                    customer.id_usuario,
+                    "PAGO_CONFIRMADO",
+                    "Compra confirmada",
+                    f"Stripe confirmó el pago de tu pedido #{order.id_pedido}.",
+                )
         await self.session.commit()
 
     async def _restore_checkout_cart(self, transaction: TransaccionPasarela) -> None:
@@ -1025,12 +1027,6 @@ class CommerceService:
         if self.stripe_gateway is None:
             raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
         transaction, payment, sale, order = await self._stripe_transaction(session_id)
-        if user_id is not None:
-            customer = await self.repository.customer_by_user(user_id)
-            if customer and sale.id_cliente and sale.id_cliente != customer.id_cliente:
-                employee = await self.repository.employee_by_user(user_id)
-                if employee is None:
-                    raise CommerceNotFoundError("La sesión de pago no existe")
         try:
             remote = await self.stripe_gateway.retrieve_session(
                 session_id, expand=["payment_intent.latest_charge"]
@@ -1061,6 +1057,22 @@ class CommerceService:
             message="Stripe está terminando de confirmar el pago.",
             receipt_url=receipt_url,
         )
+
+    async def _reconcile_pending_stripe_orders(self, customer_id: int) -> None:
+        if self.stripe_gateway is None:
+            return
+        session_ids = await self.repository.customer_pending_stripe_sessions(customer_id)
+        for sid in session_ids:
+            try:
+                remote = await self.stripe_gateway.retrieve_session(
+                    sid, expand=["payment_intent.latest_charge"]
+                )
+                if remote.get("payment_status") == "paid":
+                    await self._complete_stripe_checkout(remote)
+                elif remote.get("status") == "expired":
+                    await self._cancel_stripe_checkout(sid)
+            except Exception:
+                continue
 
     async def cancel_stripe_checkout(self, user_id: int, session_id: str) -> None:
         if self.stripe_gateway is None:
@@ -1219,7 +1231,10 @@ class CommerceService:
                 branch_id = (await self._employee(user_id)).id_sucursal
             rows = await self.repository.orders(state=state, branch_id=branch_id)
         else:
-            customer = await self._customer(user_id)
+            customer = await self.repository.customer_by_user(user_id)
+            if customer is None:
+                return []
+            await self._reconcile_pending_stripe_orders(customer.id_cliente)
             rows = await self.repository.customer_orders(customer.id_cliente)
         return [await self._order_response(item) for item in rows]
 
