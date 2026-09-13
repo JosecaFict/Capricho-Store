@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, inject, OnInit, signal, ViewChild } from '@angular/core';
+import { Component, ElementRef, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import {
   AbstractControl,
   FormBuilder,
@@ -7,10 +7,26 @@ import {
   ValidationErrors,
   Validators,
 } from '@angular/forms';
+import * as L from 'leaflet';
 import { finalize, forkJoin } from 'rxjs';
 import { PermissionService } from '../../core/permissions/permission.service';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { AdminApiService, Entity } from './admin-api.service';
+
+const branchPinIcon = L.divIcon({
+  className: 'branch-marker-wrapper',
+  html: `
+    <div class="branch-pin-bubble">
+      <svg width="32" height="40" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0C5.37 0 0 5.37 0 12C0 19.5 12 30 12 30C12 30 24 19.5 24 12C24 5.37 18.63 0 12 0Z" fill="#2563eb"/>
+        <circle cx="12" cy="11" r="5" fill="#ffffff"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [32, 40],
+  iconAnchor: [16, 40],
+  popupAnchor: [0, -40],
+});
 
 function validSchedule(control: AbstractControl): ValidationErrors | null {
   const opening = control.get('hora_apertura')?.value;
@@ -89,6 +105,7 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
             <select
               id="branch-city"
               formControlName="id_ciudad"
+              (change)="onCityChange()"
               required
               [attr.aria-invalid]="fieldInvalid('id_ciudad')"
               aria-describedby="branch-city-error"
@@ -141,6 +158,75 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
               aria-describedby="branch-schedule-error"
             />
           </label>
+          <!-- Sección de Ubicación Geográfica con Mapa y Pin -->
+          <div class="branch-map-section field--wide">
+            <div class="branch-map-header">
+              <div>
+                <span class="branch-map-kicker">Georreferenciación (OpenRouteService & Envíos)</span>
+                <strong class="branch-map-title">Ubicación exacta de la sucursal</strong>
+                <p class="branch-map-help">
+                  Haz clic en el mapa o arrastra el pin 📍 hasta la puerta del local para calcular rutas de delivery con precisión milimétrica.
+                </p>
+              </div>
+
+              <!-- Botones de acción rápida para ubicar -->
+              <div class="branch-map-actions">
+                <button
+                  type="button"
+                  class="map-tool-btn"
+                  (click)="searchAddressOnMap()"
+                  [disabled]="searchingAddress() || !form.get('direccion')?.value"
+                  title="Buscar en el mapa la dirección escrita arriba"
+                >
+                  @if (searchingAddress()) {
+                    <span>Buscando…</span>
+                  } @else {
+                    <span>🔍 Buscar por dirección</span>
+                  }
+                </button>
+                <button
+                  type="button"
+                  class="map-tool-btn map-tool-btn--gps"
+                  (click)="detectCurrentLocation()"
+                  [disabled]="detectingGps()"
+                  title="Usar GPS del dispositivo actual"
+                >
+                  @if (detectingGps()) {
+                    <span>Detectando GPS…</span>
+                  } @else {
+                    <span>📍 Mi ubicación GPS</span>
+                  }
+                </button>
+              </div>
+            </div>
+
+            <!-- Contenedor del mapa Leaflet -->
+            <div class="branch-map-canvas-wrap">
+              <div id="branch-map-container" class="branch-map-canvas"></div>
+              @if (mapStatusMessage()) {
+                <div class="branch-map-status-pill" [class.branch-map-status-pill--error]="isMapStatusError()">
+                  {{ mapStatusMessage() }}
+                </div>
+              }
+            </div>
+
+            <div class="branch-map-footer">
+              <div class="branch-coords-display">
+                <span class="coords-label">Coordenadas fijadas:</span>
+                @if (form.get('latitud')?.value && form.get('longitud')?.value) {
+                  <strong class="coords-value">
+                    Lat: {{ form.get('latitud')?.value }} · Lng: {{ form.get('longitud')?.value }}
+                  </strong>
+                } @else {
+                  <span class="coords-empty">Ningún punto fijado aún en el mapa</span>
+                }
+              </div>
+              <small class="branch-hint-text">
+                💡 Haz clic o arrastra el pin directamente a la calle o puerta de la sucursal.
+              </small>
+            </div>
+          </div>
+
           <label class="field">
             <span>Latitud opcional</span>
             <input
@@ -148,6 +234,7 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
               type="number"
               step="0.000001"
               formControlName="latitud"
+              (input)="onManualCoordChange()"
               [attr.aria-invalid]="fieldInvalid('latitud')"
               aria-describedby="branch-latitude-error"
             />
@@ -164,6 +251,7 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
               type="number"
               step="0.000001"
               formControlName="longitud"
+              (input)="onManualCoordChange()"
               [attr.aria-invalid]="fieldInvalid('longitud')"
               aria-describedby="branch-longitude-error"
             />
@@ -175,7 +263,7 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
           </label>
           <label class="field">
             <span>Google Place ID opcional</span>
-            <input formControlName="place_id" maxlength="255" />
+            <input formControlName="place_id" maxlength="255" placeholder="Opcional (solo si usas Google)" />
           </label>
           <label class="check-field">
             <input type="checkbox" formControlName="activo" /> Sucursal activa
@@ -279,7 +367,7 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
     }
   `,
 })
-export class BranchesAdmin implements OnInit {
+export class BranchesAdmin implements OnInit, OnDestroy {
   private readonly api = inject(AdminApiService);
   private readonly fb = inject(FormBuilder);
   private readonly errors = inject(ApiErrorService);
@@ -295,6 +383,13 @@ export class BranchesAdmin implements OnInit {
   readonly message = signal('');
   readonly isError = signal(false);
   readonly loadError = signal('');
+
+  private map: L.Map | null = null;
+  private marker: L.Marker | null = null;
+  readonly searchingAddress = signal(false);
+  readonly detectingGps = signal(false);
+  readonly mapStatusMessage = signal('');
+  readonly isMapStatusError = signal(false);
 
   @ViewChild('branchName') private branchName?: ElementRef<HTMLInputElement>;
   private returnFocus: HTMLElement | null = null;
@@ -322,6 +417,10 @@ export class BranchesAdmin implements OnInit {
     this.load();
   }
 
+  ngOnDestroy(): void {
+    this.destroyMap();
+  }
+
   load(): void {
     this.loading.set(true);
     this.loadError.set('');
@@ -346,7 +445,9 @@ export class BranchesAdmin implements OnInit {
     this.submitted.set(false);
     this.showForm.set(true);
     this.clearMessage();
+    this.mapStatusMessage.set('');
     this.focusForm();
+    setTimeout(() => this.initMap(), 80);
   }
 
   edit(branch: Entity): void {
@@ -367,15 +468,239 @@ export class BranchesAdmin implements OnInit {
     this.submitted.set(false);
     this.showForm.set(true);
     this.clearMessage();
+    this.mapStatusMessage.set('');
     window.scrollTo({ top: 0 });
     this.focusForm();
+    setTimeout(() => this.initMap(), 80);
   }
 
   closeForm(): void {
+    this.destroyMap();
     this.showForm.set(false);
     this.editingId.set(null);
     this.returnFocus?.focus();
     this.returnFocus = null;
+  }
+
+  private initMap(): void {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const container = document.getElementById('branch-map-container');
+    if (!container) return;
+
+    this.destroyMap();
+
+    try {
+      const latVal = this.form.get('latitud')?.value;
+      const lngVal = this.form.get('longitud')?.value;
+
+      const hasCoords =
+        latVal !== null &&
+        lngVal !== null &&
+        latVal !== undefined &&
+        lngVal !== undefined &&
+        !isNaN(Number(latVal)) &&
+        !isNaN(Number(lngVal));
+
+      const initialCenter: [number, number] = hasCoords
+        ? [Number(latVal), Number(lngVal)]
+        : [-17.7833, -63.1821]; // Santa Cruz default
+
+      const initialZoom = hasCoords ? 16 : 13;
+
+      this.map = L.map(container, {
+        center: initialCenter,
+        zoom: initialZoom,
+        zoomControl: true,
+      });
+
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(this.map);
+
+      if (hasCoords) {
+        this.marker = L.marker(initialCenter, {
+          icon: branchPinIcon,
+          draggable: true,
+        }).addTo(this.map);
+
+        this.marker.on('dragend', () => {
+          if (this.marker) {
+            const pos = this.marker.getLatLng();
+            this.setPinLocation(pos.lat, pos.lng);
+          }
+        });
+      }
+
+      this.map.on('click', (e: L.LeafletMouseEvent) => {
+        this.setPinLocation(e.latlng.lat, e.latlng.lng);
+      });
+
+      setTimeout(() => {
+        try {
+          this.map?.invalidateSize();
+        } catch {
+          // ignore
+        }
+      }, 150);
+    } catch (err) {
+      console.warn('Map initialization skipped or failed:', err);
+    }
+  }
+
+  private destroyMap(): void {
+    if (this.map) {
+      try {
+        this.map.remove();
+      } catch {
+        // ignore
+      }
+      this.map = null;
+      this.marker = null;
+    }
+  }
+
+  setPinLocation(lat: number, lng: number, updateView = false): void {
+    const latRounded = Number(lat.toFixed(6));
+    const lngRounded = Number(lng.toFixed(6));
+
+    this.form.patchValue({
+      latitud: latRounded,
+      longitud: lngRounded,
+    });
+    this.form.get('latitud')?.markAsDirty();
+    this.form.get('longitud')?.markAsDirty();
+
+    if (!this.marker && this.map) {
+      this.marker = L.marker([latRounded, lngRounded], {
+        icon: branchPinIcon,
+        draggable: true,
+      }).addTo(this.map);
+
+      this.marker.on('dragend', () => {
+        if (this.marker) {
+          const pos = this.marker.getLatLng();
+          this.setPinLocation(pos.lat, pos.lng);
+        }
+      });
+    } else if (this.marker) {
+      this.marker.setLatLng([latRounded, lngRounded]);
+    }
+
+    if (updateView && this.map) {
+      this.map.setView([latRounded, lngRounded], 16);
+    }
+
+    this.mapStatusMessage.set(`📍 Pin fijado en: ${latRounded}, ${lngRounded}`);
+    this.isMapStatusError.set(false);
+  }
+
+  onManualCoordChange(): void {
+    const lat = Number(this.form.get('latitud')?.value);
+    const lng = Number(this.form.get('longitud')?.value);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      if (this.marker && this.map) {
+        this.marker.setLatLng([lat, lng]);
+        this.map.panTo([lat, lng]);
+      } else if (this.map) {
+        this.setPinLocation(lat, lng, true);
+      }
+    }
+  }
+
+  onCityChange(): void {
+    if (this.form.get('latitud')?.value || this.form.get('longitud')?.value) {
+      return;
+    }
+    const cityId = this.form.get('id_ciudad')?.value;
+    const cityObj = this.cities().find((c) => c['id_ciudad'] === cityId);
+    if (!cityObj || !this.map) return;
+    const name = String(cityObj['nombre']).toLowerCase();
+    if (name.includes('santa cruz')) {
+      this.map.setView([-17.7833, -63.1821], 13);
+    } else if (name.includes('la paz')) {
+      this.map.setView([-16.5000, -68.1500], 13);
+    } else if (name.includes('cochabamba')) {
+      this.map.setView([-17.3895, -66.1568], 13);
+    }
+  }
+
+  searchAddressOnMap(): void {
+    const address = this.form.get('direccion')?.value?.trim();
+    if (!address) {
+      this.mapStatusMessage.set('Escribe una dirección arriba para buscar.');
+      this.isMapStatusError.set(true);
+      return;
+    }
+
+    const cityId = this.form.get('id_ciudad')?.value;
+    const cityObj = this.cities().find((c) => c['id_ciudad'] === cityId);
+    const cityName = cityObj ? String(cityObj['nombre']) : 'Santa Cruz';
+
+    const query = `${address}, ${cityName}, Bolivia`;
+    this.searchingAddress.set(true);
+    this.mapStatusMessage.set(`Buscando en OpenStreetMap: "${address}"…`);
+    this.isMapStatusError.set(false);
+
+    fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=bo&q=${encodeURIComponent(query)}`,
+    )
+      .then((res) => res.json())
+      .then((data: Array<{ lat: string; lon: string; display_name: string }>) => {
+        this.searchingAddress.set(false);
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          this.setPinLocation(lat, lng, true);
+          this.mapStatusMessage.set(`✓ Ubicación encontrada: ${data[0].display_name.slice(0, 55)}…`);
+          this.isMapStatusError.set(false);
+        } else {
+          this.mapStatusMessage.set(
+            'No se encontró la dirección exacta. Haz clic en el mapa para ubicar el pin.',
+          );
+          this.isMapStatusError.set(true);
+        }
+      })
+      .catch(() => {
+        this.searchingAddress.set(false);
+        this.mapStatusMessage.set(
+          'No se pudo conectar con el buscador. Haz clic en el mapa para colocar el pin.',
+        );
+        this.isMapStatusError.set(true);
+      });
+  }
+
+  detectCurrentLocation(): void {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      this.mapStatusMessage.set('Tu navegador no soporta geolocalización GPS.');
+      this.isMapStatusError.set(true);
+      return;
+    }
+
+    this.detectingGps.set(true);
+    this.mapStatusMessage.set('Detectando coordenadas GPS del dispositivo…');
+    this.isMapStatusError.set(false);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        this.detectingGps.set(false);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        this.setPinLocation(lat, lng, true);
+        this.mapStatusMessage.set('✓ Coordenadas GPS obtenidas con éxito.');
+        this.isMapStatusError.set(false);
+      },
+      (err) => {
+        this.detectingGps.set(false);
+        let msg = 'No pudimos obtener tu ubicación GPS.';
+        if (err.code === err.PERMISSION_DENIED) {
+          msg = 'Permiso de ubicación denegado por el navegador.';
+        }
+        this.mapStatusMessage.set(msg);
+        this.isMapStatusError.set(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
   }
 
   save(): void {

@@ -2869,3 +2869,193 @@ textarea {
   }
 }
 
+/* ==========================================================================
+   SECTOR DE MAPA INTERACTIVO Y GEORREFERENCIACIÓN DE SUCURSAL
+   ========================================================================== */
+.branch-map-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--surface-muted, #f8fafc);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 10px;
+  margin: 0.5rem 0;
+}
+
+.branch-map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.branch-map-kicker {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #2563eb;
+  display: block;
+}
+
+.branch-map-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--ink, #0f172a);
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.branch-map-help {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft, #64748b);
+  max-width: 580px;
+  line-height: 1.4;
+}
+
+.branch-map-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.map-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid var(--line, #cbd5e1);
+  background: #ffffff;
+  color: var(--ink, #0f172a);
+  cursor: pointer;
+  transition: all 120ms ease;
+
+  &:hover:not(:disabled) {
+    background: var(--ink, #0f172a);
+    color: #ffffff;
+    border-color: var(--ink, #0f172a);
+    transform: translateY(-1px);
+  }
+
+  &--gps {
+    border-color: #2563eb;
+    color: #2563eb;
+
+    &:hover:not(:disabled) {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #2563eb;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.branch-map-canvas-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--line, #cbd5e1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.branch-map-canvas {
+  width: 100%;
+  height: 320px;
+  background: #e2e8f0;
+}
+
+.branch-map-status-pill {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  max-width: 90%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &--error {
+    background: rgba(185, 28, 28, 0.9);
+  }
+}
+
+.branch-map-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.35rem;
+}
+
+.branch-coords-display {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.coords-label {
+  color: var(--ink-soft, #64748b);
+  font-weight: 600;
+}
+
+.coords-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #a7f3d0;
+  font-size: 0.85rem;
+}
+
+.coords-empty {
+  color: var(--ink-soft, #64748b);
+  font-style: italic;
+}
+
+.branch-hint-text {
+  font-size: 0.75rem;
+  color: var(--ink-soft, #64748b);
+}
+
+/* Custom Marker Pin */
+.branch-marker-wrapper {
+  background: none !important;
+  border: none !important;
+}
+
+.branch-pin-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
+  transition: transform 120ms ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+}
+
