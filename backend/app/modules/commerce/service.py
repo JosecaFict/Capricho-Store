@@ -1,7 +1,10 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from math import asin, cos, radians, sin, sqrt
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1561,18 +1564,21 @@ class CommerceService:
         return await self._return_response(returned)
 
     async def _notify(self, user_id: int, kind: str, title: str, content: str) -> None:
-        await self.repository.add(
-            Notificacion(
-                id_usuario=user_id,
-                id_campania=None,
-                tipo=kind,
-                canal="EMAIL",
-                proveedor="SISTEMA",
-                titulo=title,
-                contenido=content,
-                estado="PENDIENTE",
+        try:
+            await self.repository.add(
+                Notificacion(
+                    id_usuario=user_id,
+                    id_campania=None,
+                    tipo=kind,
+                    canal="EMAIL",
+                    proveedor="SISTEMA",
+                    titulo=title,
+                    contenido=content,
+                    estado="PENDIENTE",
+                )
             )
-        )
+        except Exception as exc:
+            logger.warning("No se pudo registrar la notificacion: %s", exc)
 
     async def list_notifications(self, user_id: int):
         return await self.repository.notifications(user_id)

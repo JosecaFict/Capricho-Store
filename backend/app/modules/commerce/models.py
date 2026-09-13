@@ -358,9 +358,7 @@ class Notificacion(Base):
     id_usuario: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("capricho.usuario.id_usuario", ondelete="SET NULL")
     )
-    id_campania: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("capricho.campania.id_campania", ondelete="SET NULL")
-    )
+    id_campania: Mapped[int | None] = mapped_column(BigInteger)
     tipo: Mapped[str] = mapped_column(String(50), nullable=False)
     canal: Mapped[str] = mapped_column(String(10), nullable=False)
     proveedor: Mapped[str] = mapped_column(String(30), nullable=False)
