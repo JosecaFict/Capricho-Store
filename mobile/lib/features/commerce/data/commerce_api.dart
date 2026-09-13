@@ -170,7 +170,10 @@ class CommerceApi {
   Future<StripeCheckoutStatusResponse> getCheckoutStatus(String sessionId) async {
     try {
       final response = await _dio.get('/checkout/$sessionId/status');
-      return StripeCheckoutStatusResponse.fromJson(response.data as Map<String, dynamic>);
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      return StripeCheckoutStatusResponse.fromJson(data);
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }

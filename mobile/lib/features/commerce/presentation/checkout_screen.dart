@@ -858,9 +858,17 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
         final status = await api.getCheckoutStatus(widget.sessionId);
         if (!mounted) return;
 
-        if (status.status == 'PAGADO' && status.order != null) {
+        if (status.status == 'PAGADO') {
           t.cancel();
-          widget.onSuccess(status.order!, status.receiptUrl);
+          if (status.order != null) {
+            widget.onSuccess(status.order!, status.receiptUrl);
+          } else {
+            if (!mounted) return;
+            Navigator.of(context).pop();
+            ref.read(cartProvider.notifier).refresh();
+            ref.read(ordersProvider.notifier).refresh();
+            context.go('/pedidos');
+          }
         } else if (status.status == 'CANCELADO' || status.status == 'RECHAZADO') {
           t.cancel();
           widget.onCancel();
@@ -871,7 +879,12 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
                 : 'Procesando pago con Stripe...';
           });
         }
-      } catch (_) {}
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _statusMessage = 'Confirmando estado con Stripe...';
+        });
+      }
     });
   }
 
@@ -900,9 +913,24 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
               style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
             ),
             const SizedBox(height: 20),
-            OutlinedButton(
-              onPressed: widget.onCancel,
-              child: const Text('Volver al checkout'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton(
+                  onPressed: widget.onCancel,
+                  child: const Text('Volver al checkout'),
+                ),
+                const SizedBox(width: 10),
+                FilledButton.tonal(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    ref.read(cartProvider.notifier).refresh();
+                    ref.read(ordersProvider.notifier).refresh();
+                    context.go('/pedidos');
+                  },
+                  child: const Text('Ver Mis Pedidos'),
+                ),
+              ],
             ),
           ],
         ),

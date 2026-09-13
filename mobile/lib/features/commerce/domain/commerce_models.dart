@@ -315,11 +315,12 @@ class StripeCheckoutStatusResponse {
   });
 
   factory StripeCheckoutStatusResponse.fromJson(Map<String, dynamic> json) {
+    final orderData = json['order'];
     return StripeCheckoutStatusResponse(
       status: json['status'] as String? ?? 'PROCESANDO',
       message: json['message'] as String? ?? '',
-      order: json['order'] != null
-          ? Order.fromJson(json['order'] as Map<String, dynamic>)
+      order: orderData is Map
+          ? Order.fromJson(Map<String, dynamic>.from(orderData))
           : null,
       receiptUrl: json['receipt_url'] as String?,
     );
@@ -383,7 +384,9 @@ class Order {
           ? DateTime.parse(json['fecha_finalizacion'] as String)
           : null,
       items: (json['items'] as List<dynamic>?)
-              ?.map((e) => CommerceLineItem.fromJson(e as Map<String, dynamic>))
+              ?.map((e) => CommerceLineItem.fromJson(
+                    e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{},
+                  ))
               .toList() ??
           [],
       receiptUrl: json['receipt_url'] as String?,
