@@ -260,14 +260,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         sessionId: sessionId,
         onSuccess: (order, receiptUrl) {
           Navigator.of(ctx).pop();
-          // Refrescar carrito
           ref.read(cartProvider.notifier).refresh();
           ref.read(ordersProvider.notifier).refresh();
           _showSuccessScreen(order, receiptUrl);
         },
-        onCancel: () {
+        onCancel: ([reason]) {
           Navigator.of(ctx).pop();
-          setState(() => _processingCheckout = false);
+          setState(() {
+            _processingCheckout = false;
+            if (reason != null && reason.isNotEmpty) {
+              _error = reason;
+            }
+          });
         },
       ),
     );
@@ -818,10 +822,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 }
 
+enum _PollerPhase { verifying, success, failed }
+
 class _PaymentPollerView extends StatefulWidget {
   final String sessionId;
   final void Function(Order order, String? receiptUrl) onSuccess;
-  final VoidCallback onCancel;
+  final void Function([String? reason]) onCancel;
 
   const _PaymentPollerView({
     required this.sessionId,
@@ -835,7 +841,8 @@ class _PaymentPollerView extends StatefulWidget {
 
 class _PaymentPollerViewState extends State<_PaymentPollerView> {
   Timer? _timer;
-  String _statusMessage = 'Esperando confirmación de pago en Stripe...';
+  _PollerPhase _phase = _PollerPhase.verifying;
+  String _statusMessage = 'Esperando confirmación segura de Stripe...';
 
   @override
   void initState() {
@@ -850,7 +857,7 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
   }
 
   void _startPolling() {
-    _timer = Timer.periodic(const Duration(seconds: 3), (t) async {
+    _timer = Timer.periodic(const Duration(seconds: 2), (t) async {
       final container = ProviderScope.containerOf(context, listen: false);
       final api = container.read(commerceApiProvider);
 
@@ -860,18 +867,43 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
 
         if (status.status == 'PAGADO') {
           t.cancel();
-          if (status.order != null) {
-            widget.onSuccess(status.order!, status.receiptUrl);
-          } else {
+          // Cerrar automáticamente la ventana interna del navegador de Stripe
+          try {
+            await closeInAppWebView();
+          } catch (_) {}
+
+          if (!mounted) return;
+          setState(() {
+            _phase = _PollerPhase.success;
+            _statusMessage = '¡Pago confirmado con éxito!';
+          });
+
+          // Breve animación para mostrar el estado completado antes de navegar
+          Future.delayed(const Duration(milliseconds: 1400), () {
             if (!mounted) return;
-            Navigator.of(context).pop();
-            ref.read(cartProvider.notifier).refresh();
-            ref.read(ordersProvider.notifier).refresh();
-            context.go('/pedidos');
-          }
+            if (status.order != null) {
+              widget.onSuccess(status.order!, status.receiptUrl);
+            } else {
+              Navigator.of(context).pop();
+              final c = ProviderScope.containerOf(context, listen: false);
+              c.read(cartProvider.notifier).refresh();
+              c.read(ordersProvider.notifier).refresh();
+              context.go('/pedidos');
+            }
+          });
         } else if (status.status == 'CANCELADO' || status.status == 'RECHAZADO') {
           t.cancel();
-          widget.onCancel();
+          try {
+            await closeInAppWebView();
+          } catch (_) {}
+
+          if (!mounted) return;
+          setState(() {
+            _phase = _PollerPhase.failed;
+            _statusMessage = status.message.isNotEmpty
+                ? status.message
+                : 'El pago fue cancelado o rechazado por la pasarela.';
+          });
         } else {
           setState(() {
             _statusMessage = status.message.isNotEmpty
@@ -891,47 +923,134 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: AppColors.cobalt),
-            const SizedBox(height: 18),
-            const Text(
-              'Verificando tu pago con Stripe',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: AppColors.ink,
+            if (_phase == _PollerPhase.verifying) ...[
+              const CircularProgressIndicator(color: AppColors.cobalt),
+              const SizedBox(height: 18),
+              const Text(
+                'Verificando tu pago con Stripe',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _statusMessage,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                OutlinedButton(
-                  onPressed: widget.onCancel,
-                  child: const Text('Volver al checkout'),
+              const SizedBox(height: 8),
+              Text(
+                _statusMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  OutlinedButton(
+                    onPressed: () {
+                      try {
+                        closeInAppWebView();
+                      } catch (_) {}
+                      widget.onCancel();
+                    },
+                    child: const Text('Volver al checkout'),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.tonal(
+                    onPressed: () {
+                      try {
+                        closeInAppWebView();
+                      } catch (_) {}
+                      Navigator.of(context).pop();
+                      final c = ProviderScope.containerOf(context, listen: false);
+                      c.read(cartProvider.notifier).refresh();
+                      c.read(ordersProvider.notifier).refresh();
+                      context.go('/pedidos');
+                    },
+                    child: const Text('Ver Mis Pedidos'),
+                  ),
+                ],
+              ),
+            ] else if (_phase == _PollerPhase.success) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(width: 10),
-                FilledButton.tonal(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    ref.read(cartProvider.notifier).refresh();
-                    ref.read(ordersProvider.notifier).refresh();
-                    context.go('/pedidos');
-                  },
-                  child: const Text('Ver Mis Pedidos'),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.success,
+                  size: 52,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '¡Pago Completado!',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _statusMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.success,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Cargando los detalles de tu compra...',
+                style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
+              ),
+            ] else if (_phase == _PollerPhase.failed) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.cancel_rounded,
+                  color: AppColors.error,
+                  size: 52,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Pago No Completado',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _statusMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () => widget.onCancel(_statusMessage),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.ink,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Volver al checkout'),
+              ),
+            ],
           ],
         ),
       ),
