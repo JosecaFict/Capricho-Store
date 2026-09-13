@@ -374,3 +374,56 @@ async def test_cart_endpoints_support_branch_and_clear() -> None:
     assert add_response.json()["id_sucursal"] == 2
     assert add_response.json()["sucursal"] == "Banzer"
 
+
+async def test_list_sales_endpoint() -> None:
+    service = AsyncMock()
+    service.list_sales.return_value = []
+    response = await call(
+        "GET",
+        "/api/v1/sales",
+        service=service,
+        actor=principal("ventas.ver"),
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+async def test_list_sales_endpoint_with_data() -> None:
+    service = AsyncMock()
+    service.list_sales.return_value = [
+        {
+            "id_venta": 101,
+            "id_cliente": 1,
+            "cliente_nombre": "María López",
+            "cliente_correo": "maria@example.com",
+            "cliente_telefono": "77123456",
+            "id_sucursal": 1,
+            "sucursal": "Central",
+            "id_empleado": 5,
+            "empleado_nombre": "Carlos Cajero",
+            "id_reserva": None,
+            "canal_venta": "PRESENCIAL",
+            "modalidad_entrega": "MOSTRADOR",
+            "metodo_pago": "💵 Efectivo",
+            "estado": "COMPLETADA",
+            "subtotal": "200.00",
+            "costo_envio": "0.00",
+            "total": "200.00",
+            "fecha_venta": NOW,
+            "items": [LINE],
+        }
+    ]
+    response = await call(
+        "GET",
+        "/api/v1/sales?canal=PRESENCIAL",
+        service=service,
+        actor=principal("ventas.ver"),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["cliente_nombre"] == "María López"
+    assert data[0]["metodo_pago"] == "💵 Efectivo"
+
+
+

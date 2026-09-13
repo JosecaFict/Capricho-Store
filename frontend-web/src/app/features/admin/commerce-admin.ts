@@ -3115,6 +3115,7 @@ export class SalesHistoryAdmin {
   formatDeliveryMode(mode: string): string {
     switch (mode) {
       case 'MOSTRADOR':
+      case 'ENTREGA_DIRECTA':
         return 'Venta en mostrador';
       case 'DELIVERY':
         return 'Envío por delivery';

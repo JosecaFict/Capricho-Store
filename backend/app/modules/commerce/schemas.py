@@ -26,7 +26,7 @@ OrderState = Literal[
     "CANCELADO",
 ]
 ReturnState = Literal["PENDIENTE", "APROBADA", "RECHAZADA", "COMPLETADA"]
-DeliveryMode = Literal["ENTREGA_DIRECTA", "RETIRO_SUCURSAL", "DELIVERY"]
+DeliveryMode = Literal["ENTREGA_DIRECTA", "MOSTRADOR", "RETIRO_SUCURSAL", "DELIVERY"]
 
 
 class ORMResponse(BaseModel):
