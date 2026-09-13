@@ -313,3 +313,45 @@ async def test_update_customer_empty_payload_rejected():
         json={},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_create_quick_customer_success():
+    service = AsyncMock()
+    created = CustomerAdminSummary(
+        id_cliente=99,
+        id_usuario=999,
+        nombres="Juan Carlos",
+        apellidos="Perez",
+        nombre_completo="Juan Carlos Perez",
+        correo="juan.perez@example.com",
+        ci="6829401",
+        telefono="78012345",
+        estado="ACTIVO",
+        total_pedidos=0,
+        total_reservas=0,
+        total_ventas=0,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    service.create_quick_customer.return_value = created
+    principal = make_principal("ventas.ver")
+
+    response = await call_customer_endpoint(
+        "POST",
+        "/customers/quick",
+        principal=principal,
+        service=service,
+        json={
+            "nombres": "Juan Carlos",
+            "apellidos": "Perez",
+            "ci": "6829401",
+            "correo": "juan.perez@example.com",
+            "telefono": "78012345",
+        },
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["id_cliente"] == 99
+    assert data["nombre_completo"] == "Juan Carlos Perez"
+

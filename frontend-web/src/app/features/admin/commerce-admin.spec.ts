@@ -220,6 +220,7 @@ describe('PosSalesAdmin', () => {
     component.confirm();
     expect(commerce.createPosSale).toHaveBeenCalledWith({
       id_sucursal: 2,
+      id_cliente: null,
       modalidad_entrega: 'ENTREGA_DIRECTA',
       registrar_efectivo: true,
       items: [{ id_variante: 101, cantidad: 2 }],

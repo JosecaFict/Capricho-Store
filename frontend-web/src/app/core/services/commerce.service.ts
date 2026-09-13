@@ -162,4 +162,19 @@ export class CommerceService {
   updateAdminCustomer(id: number, payload: CustomerAdminUpdateRequest) {
     return this.http.patch<CustomerAdminDetail>(`${API_BASE_URL}/customers/${id}`, payload);
   }
+  quickCreateCustomer(payload: {
+    nombres: string;
+    apellidos?: string;
+    ci?: string;
+    correo?: string;
+    telefono?: string;
+  }) {
+    return this.http.post<CustomerAdminSummary>(`${API_BASE_URL}/customers/quick`, payload);
+  }
+  saleInvoice(saleId: number) {
+    return this.http.get(`${API_BASE_URL}/sales/${saleId}/invoice`, {
+      responseType: 'blob',
+    });
+  }
 }
+

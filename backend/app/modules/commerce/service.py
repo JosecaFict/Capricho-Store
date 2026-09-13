@@ -757,6 +757,10 @@ class CommerceService:
         except Exception:
             await self.session.rollback()
             raise
+
+        if sale.id_cliente:
+            await self._dispatch_order_invoice_email(None, sale)
+
         return await self._sale_response(sale)
 
     @staticmethod
@@ -1293,11 +1297,13 @@ class CommerceService:
             receipt_url=receipt_url,
         )
 
-    async def _assemble_invoice(self, order: Pedido, sale: Venta) -> tuple[InvoiceData, bytes]:
+    async def _assemble_invoice(
+        self, order: Pedido | None, sale: Venta
+    ) -> tuple[InvoiceData, bytes]:
         branch = await self.repository.get(Sucursal, sale.id_sucursal)
         address = (
             await self.repository.get(DireccionCliente, order.id_direccion)
-            if order.id_direccion
+            if order and order.id_direccion
             else None
         )
         customer = await self.repository.get(Cliente, sale.id_cliente) if sale.id_cliente else None
@@ -1306,7 +1312,7 @@ class CommerceService:
             if customer and customer.id_usuario
             else None
         )
-        payment = await self.repository.payment_by_sale(order.id_venta)
+        payment = await self.repository.payment_by_sale(sale.id_venta)
         tx = (
             await self.repository.gateway_transaction_by_payment(payment.id_pago)
             if payment
@@ -1337,6 +1343,8 @@ class CommerceService:
                 if address.referencia:
                     destino_parts.append(f"(Ref: {address.referencia})")
             destino_entrega = ", ".join(destino_parts) if destino_parts else "Entrega a domicilio"
+        elif sale.modalidad_entrega == "ENTREGA_DIRECTA" or order is None:
+            destino_entrega = f"Venta directa en mostrador: {sucursal_nombre}"
         else:
             destino_entrega = f"Retiro en sucursal: {sucursal_nombre}"
 
@@ -1362,9 +1370,14 @@ class CommerceService:
             for row in raw_items
         ]
 
+        invoice_num = (
+            f"FAC-{order.id_pedido:06d}" if order else f"FAC-POS-{sale.id_venta:06d}"
+        )
+        fecha_emision = order.fecha_creacion if order else sale.fecha_venta
+
         data = InvoiceData(
-            numero_factura=f"FAC-{order.id_pedido:06d}",
-            fecha_emision=order.fecha_creacion,
+            numero_factura=invoice_num,
+            fecha_emision=fecha_emision,
             estado_pago=sale.estado,
             tienda_nombre="CAPRICHO STORE",
             tienda_nit="102938475",
@@ -1388,28 +1401,33 @@ class CommerceService:
         pdf_bytes = generate_invoice_pdf(data)
         return data, pdf_bytes
 
-    async def _dispatch_order_invoice_email(self, order: Pedido, sale: Venta) -> None:
+    async def _dispatch_order_invoice_email(
+        self, order: Pedido | None, sale: Venta
+    ) -> None:
         try:
             invoice_data, pdf_bytes = await self._assemble_invoice(order, sale)
             if not invoice_data.cliente_correo:
+                ref_label = f"pedido #{order.id_pedido}" if order else f"venta #{sale.id_venta}"
                 logger.info(
-                    "Pedido #%s no tiene correo de cliente; se omite el despacho de factura.",
-                    order.id_pedido,
+                    "La %s no tiene correo de cliente; se omite el despacho de factura.",
+                    ref_label,
                 )
                 return
+            order_id = order.id_pedido if order else sale.id_venta
             mailer = self.invoice_mailer or InvoiceMailer()
             await mailer.send_invoice_email(
                 recipient_email=invoice_data.cliente_correo,
                 recipient_name=invoice_data.cliente_nombre,
-                order_id=order.id_pedido,
+                order_id=order_id,
                 total_bob=f"{invoice_data.total:.2f}",
                 delivery_mode=sale.modalidad_entrega,
                 pdf_bytes=pdf_bytes,
             )
         except Exception as exc:
+            ref_label = f"pedido #{order.id_pedido}" if order else f"venta #{sale.id_venta}"
             logger.warning(
-                "No se pudo despachar el correo de factura para el pedido #%s: %s",
-                order.id_pedido,
+                "No se pudo despachar el correo de factura para la %s: %s",
+                ref_label,
                 exc,
             )
 
@@ -1429,6 +1447,23 @@ class CommerceService:
             if employee is None or employee.estado_laboral != "ACTIVO":
                 raise CommerceForbiddenError("No tienes permiso para ver esta factura")
 
+        _, pdf_bytes = await self._assemble_invoice(order, sale)
+        return pdf_bytes
+
+    async def get_sale_invoice_pdf(self, user_id: int, sale_id: int) -> bytes:
+        sale = await self.repository.get(Venta, sale_id)
+        if sale is None:
+            raise CommerceNotFoundError("La venta no existe")
+
+        customer = await self.repository.customer_by_user(user_id)
+        is_owner = customer is not None and sale.id_cliente == customer.id_cliente
+
+        if not is_owner:
+            employee = await self.repository.employee_by_user(user_id)
+            if employee is None or employee.estado_laboral != "ACTIVO":
+                raise CommerceForbiddenError("No tienes permiso para ver esta factura")
+
+        order = await self.repository.order_by_sale(sale.id_venta)
         _, pdf_bytes = await self._assemble_invoice(order, sale)
         return pdf_bytes
 

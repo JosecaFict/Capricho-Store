@@ -88,4 +88,41 @@ describe('CommerceService', () => {
 
     expect(receivedBlob).toBeTruthy();
   });
+
+  it('downloads the official PDF invoice for a direct POS sale', () => {
+    let receivedBlob: Blob | null = null;
+    service.saleInvoice(45).subscribe((blob) => {
+      receivedBlob = blob;
+    });
+
+    const request = http.expectOne(`${API_BASE_URL}/sales/45/invoice`);
+    expect(request.request.method).toBe('GET');
+    expect(request.request.responseType).toBe('blob');
+    const mockBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+    request.flush(mockBlob);
+
+    expect(receivedBlob).toBeTruthy();
+  });
+
+  it('quick creates a customer at POS counter', () => {
+    service
+      .quickCreateCustomer({
+        nombres: 'Ana',
+        apellidos: 'Silva',
+        ci: '778899',
+        correo: 'ana@example.com',
+      })
+      .subscribe();
+
+    const request = http.expectOne(`${API_BASE_URL}/customers/quick`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      nombres: 'Ana',
+      apellidos: 'Silva',
+      ci: '778899',
+      correo: 'ana@example.com',
+    });
+    request.flush({ id_cliente: 7, nombre_completo: 'Ana Silva' });
+  });
 });
+

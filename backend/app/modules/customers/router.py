@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
@@ -12,6 +12,7 @@ from app.modules.customers.schemas import (
     CustomerAdminDetail,
     CustomerAdminSummary,
     CustomerAdminUpdateRequest,
+    CustomerQuickCreateRequest,
 )
 from app.modules.customers.service import CustomerAdminService
 
@@ -54,6 +55,29 @@ async def update_customer(
     )
     return await service.update_customer(
         customer_id=customer_id,
+        payload=payload,
+        actor=principal,
+        audit_context=audit_context,
+    )
+
+
+@router.post(
+    "/customers/quick",
+    response_model=CustomerAdminSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_quick_customer(
+    payload: CustomerQuickCreateRequest,
+    request: Request,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
+    service: Annotated[CustomerAdminService, Depends(get_customer_admin_service)],
+) -> CustomerAdminSummary:
+    audit_context = build_request_audit_context(
+        request,
+        user_id=principal.user.id_usuario,
+        session_id=principal.session_id,
+    )
+    return await service.create_quick_customer(
         payload=payload,
         actor=principal,
         audit_context=audit_context,

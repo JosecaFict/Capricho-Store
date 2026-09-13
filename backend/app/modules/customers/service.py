@@ -1,6 +1,6 @@
+import secrets
 from datetime import UTC, datetime
-from decimal import Decimal
-from typing import Sequence
+from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -9,13 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.db.audit_context import AuditContext, apply_audit_context
 from app.modules.auth.dependencies import CurrentPrincipal
-from app.modules.auth.models import Ciudad, Cliente, Usuario
+from app.modules.auth.models import Ciudad, Cliente, Rol, Usuario, UsuarioRol
 from app.modules.commerce.models import DireccionCliente, Pedido, Reserva, Venta
 from app.modules.customers.schemas import (
     CustomerAddressItem,
     CustomerAdminDetail,
     CustomerAdminSummary,
     CustomerAdminUpdateRequest,
+    CustomerQuickCreateRequest,
 )
 
 
@@ -276,3 +277,67 @@ class CustomerAdminService:
 
         await self.session.commit()
         return await self.get_customer(customer_id)
+
+    async def create_quick_customer(
+        self,
+        payload: CustomerQuickCreateRequest,
+        actor: CurrentPrincipal,
+        audit_context: AuditContext,
+    ) -> CustomerAdminSummary:
+        if payload.ci:
+            ci_val = payload.ci.strip()
+            ci_stmt = (
+                select(Cliente.id_cliente)
+                .join(Usuario, Usuario.id_usuario == Cliente.id_usuario)
+                .where(Usuario.ci == ci_val)
+            )
+            existing_id = (await self.session.execute(ci_stmt)).scalar_one_or_none()
+            if existing_id is not None:
+                return await self.get_customer(existing_id)
+
+        if payload.correo:
+            mail_val = str(payload.correo).strip().lower()
+            mail_stmt = (
+                select(Cliente.id_cliente)
+                .join(Usuario, Usuario.id_usuario == Cliente.id_usuario)
+                .where(Usuario.correo == mail_val)
+            )
+            existing_id = (await self.session.execute(mail_stmt)).scalar_one_or_none()
+            if existing_id is not None:
+                return await self.get_customer(existing_id)
+            final_email = mail_val
+        else:
+            final_email = f"cliente.{uuid4().hex[:10]}@pos.caprichostore.com"
+
+        role_stmt = select(Rol).where(Rol.nombre == "CLIENTE", Rol.activo.is_(True))
+        client_role = (await self.session.execute(role_stmt)).scalar_one_or_none()
+        if client_role is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="El rol CLIENTE no está configurado en el sistema",
+            )
+
+        temp_password = secrets.token_urlsafe(16)
+        user = Usuario(
+            nombres=payload.nombres.strip(),
+            apellidos=payload.apellidos.strip() if payload.apellidos else "",
+            ci=payload.ci.strip() if payload.ci else None,
+            correo=final_email,
+            telefono=payload.telefono.strip() if payload.telefono else None,
+            password_hash=hash_password(temp_password),
+            estado="ACTIVO",
+        )
+        self.session.add(user)
+        await self.session.flush()
+
+        customer = Cliente(id_usuario=user.id_usuario, estado="ACTIVO")
+        self.session.add_all([
+            UsuarioRol(id_usuario=user.id_usuario, id_rol=client_role.id_rol),
+            customer,
+        ])
+        await self.session.flush()
+
+        await apply_audit_context(self.session, audit_context)
+        await self.session.commit()
+
+        return await self.get_customer(customer.id_cliente)

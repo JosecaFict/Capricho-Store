@@ -77,3 +77,27 @@ class CustomerAdminUpdateRequest(BaseModel):
         if not self.model_fields_set:
             raise ValueError("At least one field is required to update")
         return self
+
+
+class CustomerQuickCreateRequest(BaseModel):
+    nombres: str = Field(min_length=1, max_length=100)
+    apellidos: str = Field(default="", max_length=100)
+    ci: str | None = Field(default=None, max_length=30)
+    correo: EmailStr | None = None
+    telefono: str | None = Field(default=None, max_length=30)
+
+    @field_validator("nombres")
+    @classmethod
+    def strip_nombres(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("El nombre no puede estar vacío")
+        return stripped
+
+    @field_validator("apellidos", "telefono", "ci")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+

@@ -248,6 +248,18 @@ async def get_order_invoice(order_id: int, principal: Authenticated, service: Se
     )
 
 
+@router.get("/sales/{sale_id}/invoice")
+async def get_sale_invoice(sale_id: int, principal: Authenticated, service: Service) -> Response:
+    pdf_bytes = await service.get_sale_invoice_pdf(principal.user.id_usuario, sale_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="Factura_Venta_{sale_id}.pdf"',
+        },
+    )
+
+
 @router.get("/admin/orders", response_model=list[OrderResponse])
 async def list_operational_orders(
     principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],

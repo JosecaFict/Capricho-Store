@@ -58,6 +58,9 @@ export interface Sale {
   id_cliente: number | null;
   id_sucursal: number;
   sucursal: string;
+  cliente_nombre?: string | null;
+  cliente_correo?: string | null;
+  cliente_telefono?: string | null;
   id_empleado: number | null;
   id_reserva: number | null;
   canal_venta: string;

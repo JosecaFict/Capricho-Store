@@ -265,6 +265,10 @@ class CommerceRepository:
         )
         return list((await self.session.scalars(statement)).all())
 
+    async def order_by_sale(self, sale_id: int) -> Pedido | None:
+        statement = select(Pedido).where(Pedido.id_venta == sale_id)
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
     async def pending_stripe_sessions(self, customer_id: int | None = None) -> list[str]:
         statement = (
             select(TransaccionPasarela.external_session_id)

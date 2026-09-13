@@ -4,7 +4,7 @@ import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angu
 import { finalize, forkJoin } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { Branch, Product, ProductVariant } from '../../core/models/catalog.model';
-import { Order, Reservation, ReturnRequest, Sale } from '../../core/models/commerce.model';
+import { CustomerAdminSummary, Order, Reservation, ReturnRequest, Sale } from '../../core/models/commerce.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
@@ -21,7 +21,7 @@ interface SaleLine {
 
 @Component({
   selector: 'app-pos-sales-admin',
-  imports: [ReactiveFormsModule, FormsModule, BolivianosPipe],
+  imports: [ReactiveFormsModule, FormsModule, BolivianosPipe, DatePipe],
   template: `
     <section class="pos-sales-page">
       <header class="admin-page-heading">
@@ -48,12 +48,18 @@ interface SaleLine {
           </p>
           <div class="pos-success-details">
             <div class="pos-success-metric">
-              <span>Canal de venta</span>
-              <strong>Presencial / Mostrador</strong>
+              <span>Cliente Facturado</span>
+              <strong>{{ sale.cliente_nombre || 'Consumidor Final' }}</strong>
             </div>
+            @if (sale.cliente_correo) {
+              <div class="pos-success-metric">
+                <span>Factura Digital</span>
+                <strong style="color: #059669;">✉️ Enviada a {{ sale.cliente_correo }}</strong>
+              </div>
+            }
             <div class="pos-success-metric">
               <span>Modalidad de entrega</span>
-              <strong>Directa</strong>
+              <strong>Directa / Mostrador</strong>
             </div>
             <div class="pos-success-metric">
               <span>Prendas vendidas</span>
@@ -61,10 +67,18 @@ interface SaleLine {
             </div>
             <div class="pos-success-metric">
               <span>Fecha y hora</span>
-              <strong>{{ sale.fecha_venta }}</strong>
+              <strong>{{ sale.fecha_venta | date: 'short' }}</strong>
             </div>
           </div>
           <div class="pos-success-actions">
+            <button
+              type="button"
+              class="button button--secondary"
+              [disabled]="downloadingInvoice()"
+              (click)="downloadSaleInvoice(sale.id_venta)"
+            >
+              {{ downloadingInvoice() ? 'Generando PDF…' : '📄 Descargar Factura PDF' }}
+            </button>
             <button type="button" class="button button--secondary" (click)="printTicket()">
               🖨️ Imprimir comprobante
             </button>
@@ -341,6 +355,163 @@ interface SaleLine {
             </table>
           </div>
 
+          <!-- Sección de Datos del Cliente / Facturación -->
+          <div class="pos-customer-section" style="padding: 1rem 1.25rem; border-top: 1px solid var(--line-subtle, #e2e8f0); background: #fafaf9; border-radius: 8px; margin: 1rem 1.25rem 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+              <span style="font-weight: 800; font-size: 0.95rem; color: #1e293b;">
+                👤 Datos del Cliente para la Factura / Comprobante
+              </span>
+              <div class="pos-customer-modes" style="display: flex; gap: 0.35rem; background: #e2e8f0; padding: 0.2rem; border-radius: 6px;">
+                <button
+                  type="button"
+                  class="button button--small"
+                  [class.button--primary]="customerMode() === 'ANON'"
+                  [class.button--ghost]="customerMode() !== 'ANON'"
+                  style="font-size: 0.8rem; padding: 0.25rem 0.6rem; min-height: 28px;"
+                  (click)="setCustomerMode('ANON')"
+                >
+                  Consumidor Final
+                </button>
+                <button
+                  type="button"
+                  class="button button--small"
+                  [class.button--primary]="customerMode() === 'SEARCH'"
+                  [class.button--ghost]="customerMode() !== 'SEARCH'"
+                  style="font-size: 0.8rem; padding: 0.25rem 0.6rem; min-height: 28px;"
+                  (click)="setCustomerMode('SEARCH')"
+                >
+                  🔍 Buscar Registrado
+                </button>
+                <button
+                  type="button"
+                  class="button button--small"
+                  [class.button--primary]="customerMode() === 'NEW'"
+                  [class.button--ghost]="customerMode() !== 'NEW'"
+                  style="font-size: 0.8rem; padding: 0.25rem 0.6rem; min-height: 28px;"
+                  (click)="setCustomerMode('NEW')"
+                >
+                  + Nuevo Cliente
+                </button>
+              </div>
+            </div>
+
+            <!-- Modo 1: Consumidor Final -->
+            @if (customerMode() === 'ANON') {
+              <div style="font-size: 0.85rem; color: #64748b; display: flex; align-items: center; gap: 0.5rem;">
+                <span>ℹ️ La venta y factura se emitirán a <strong>Consumidor Final (NIT/CI: S/N)</strong>.</span>
+              </div>
+            }
+
+            <!-- Modo 2: Buscar Cliente Registrado -->
+            @if (customerMode() === 'SEARCH') {
+              @if (selectedCustomer(); as c) {
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 0.6rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 6px;">
+                  <div>
+                    <strong style="color: #0f172a; font-size: 0.95rem;">✓ {{ c.nombre_completo }}</strong>
+                    <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.15rem;">
+                      <span>CI/NIT: <strong>{{ c.ci || 'Sin CI' }}</strong></span> ·
+                      <span>Correo: <strong>{{ c.correo }}</strong></span>
+                      @if (c.telefono) {
+                        · <span>Tel: <strong>{{ c.telefono }}</strong></span>
+                      }
+                    </div>
+                  </div>
+                  <button type="button" class="text-button text-button--danger" style="font-size: 0.8rem;" (click)="clearSelectedCustomer()">
+                    Cambiar cliente
+                  </button>
+                </div>
+              } @else {
+                <div style="position: relative;">
+                  <input
+                    type="text"
+                    [value]="customerSearchQuery()"
+                    (input)="onCustomerSearchInput($any($event.target).value)"
+                    placeholder="Buscar por CI/NIT, Nombre o Correo..."
+                    style="width: 100%; padding: 0.5rem 0.75rem; font-size: 0.88rem; border-radius: 6px; border: 1px solid #cbd5e1;"
+                  />
+                  @if (searchingCustomers()) {
+                    <small style="position: absolute; right: 10px; top: 10px; color: #64748b;">Buscando…</small>
+                  }
+                  @if (customerSearchResults().length > 0) {
+                    <div style="position: absolute; z-index: 50; top: 100%; left: 0; right: 0; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 200px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: 4px;">
+                      @for (item of customerSearchResults(); track item.id_cliente) {
+                        <div
+                          (click)="selectCustomer(item)"
+                          style="padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;"
+                          onmouseover="this.style.background='#f8fafc'"
+                          onmouseout="this.style.background='#ffffff'"
+                        >
+                          <div>
+                            <strong style="color: #1e293b; font-size: 0.9rem;">{{ item.nombre_completo }}</strong>
+                            <div style="font-size: 0.78rem; color: #64748b;">
+                              CI: {{ item.ci || 'S/N' }} · {{ item.correo }}
+                            </div>
+                          </div>
+                          <span class="button button--small button--secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem; min-height: 24px;">Seleccionar</span>
+                        </div>
+                      }
+                    </div>
+                  } @else if (customerSearchQuery().length >= 2 && !searchingCustomers() && customerSearchResults().length === 0) {
+                    <div style="font-size: 0.82rem; color: #64748b; margin-top: 0.4rem;">
+                      No se encontraron clientes registrados con ese criterio.
+                    </div>
+                  }
+                </div>
+              }
+            }
+
+            <!-- Modo 3: Registrar Nuevo Cliente Rápido -->
+            @if (customerMode() === 'NEW') {
+              @if (selectedCustomer(); as c) {
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 0.6rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 6px;">
+                  <div>
+                    <strong style="color: #059669; font-size: 0.95rem;">✓ Cliente registrado: {{ c.nombre_completo }}</strong>
+                    <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.15rem;">
+                      <span>CI/NIT: <strong>{{ c.ci || 'Sin CI' }}</strong></span> ·
+                      <span>Correo: <strong>{{ c.correo }}</strong></span>
+                    </div>
+                  </div>
+                  <button type="button" class="text-button text-button--danger" style="font-size: 0.8rem;" (click)="clearSelectedCustomer()">
+                    Editar datos
+                  </button>
+                </div>
+              } @else {
+                <form [formGroup]="quickCustomerForm" (ngSubmit)="saveQuickCustomer()" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem; align-items: end;">
+                  <label class="field" style="margin-bottom: 0;">
+                    <span style="font-size: 0.8rem;">Nombre / Razón Social *</span>
+                    <input formControlName="nombres" placeholder="Ej. Juan Carlos o Empresa SRL" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;" />
+                  </label>
+                  <label class="field" style="margin-bottom: 0;">
+                    <span style="font-size: 0.8rem;">Apellidos</span>
+                    <input formControlName="apellidos" placeholder="Ej. Pérez" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;" />
+                  </label>
+                  <label class="field" style="margin-bottom: 0;">
+                    <span style="font-size: 0.8rem;">CI o NIT (para factura)</span>
+                    <input formControlName="ci" placeholder="Ej. 6829401 o 102938475" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;" />
+                  </label>
+                  <label class="field" style="margin-bottom: 0;">
+                    <span style="font-size: 0.8rem;">Correo (envío de PDF)</span>
+                    <input formControlName="correo" type="email" placeholder="cliente@correo.com" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;" />
+                  </label>
+                  <label class="field" style="margin-bottom: 0;">
+                    <span style="font-size: 0.8rem;">Teléfono</span>
+                    <input formControlName="telefono" placeholder="Ej. 78012345" style="padding: 0.4rem 0.6rem; font-size: 0.85rem;" />
+                  </label>
+                  <div>
+                    <button
+                      type="submit"
+                      class="button button--secondary"
+                      style="min-height: 38px; width: 100%; font-size: 0.85rem;"
+                      [disabled]="savingQuickCustomer() || quickCustomerForm.invalid"
+                    >
+                      {{ savingQuickCustomer() ? 'Guardando…' : '✓ Fijar para Factura' }}
+                    </button>
+                  </div>
+                </form>
+              }
+            }
+          </div>
+
           <footer class="pos-ticket-footer">
             <div class="pos-ticket-total-wrap">
               <span class="pos-ticket-total-label">Total a cobrar en efectivo:</span>
@@ -367,6 +538,7 @@ interface SaleLine {
   `,
 })
 export class PosSalesAdmin {
+  private readonly fb = inject(FormBuilder);
   private readonly commerce = inject(CommerceService);
   private readonly catalog = inject(CatalogService);
   private readonly auth = inject(AuthService);
@@ -378,6 +550,23 @@ export class PosSalesAdmin {
   readonly saving = signal(false);
   readonly error = signal('');
   readonly completed = signal<Sale | null>(null);
+
+  // Customer signals for POS invoicing
+  readonly customerMode = signal<'ANON' | 'SEARCH' | 'NEW'>('ANON');
+  readonly selectedCustomer = signal<CustomerAdminSummary | null>(null);
+  readonly customerSearchQuery = signal<string>('');
+  readonly customerSearchResults = signal<CustomerAdminSummary[]>([]);
+  readonly searchingCustomers = signal<boolean>(false);
+  readonly savingQuickCustomer = signal<boolean>(false);
+  readonly downloadingInvoice = signal<boolean>(false);
+
+  readonly quickCustomerForm = this.fb.nonNullable.group({
+    nombres: ['', [Validators.required, Validators.minLength(2)]],
+    apellidos: [''],
+    ci: [''],
+    correo: ['', [Validators.email]],
+    telefono: [''],
+  });
 
   // Branch signals
   readonly selectedBranchId = signal<number | null>(null);
@@ -717,9 +906,11 @@ export class PosSalesAdmin {
     }
     this.saving.set(true);
     this.error.set('');
+    const customerId = this.selectedCustomer()?.id_cliente ?? null;
     this.commerce
       .createPosSale({
         id_sucursal: branchId,
+        id_cliente: customerId,
         modalidad_entrega: 'ENTREGA_DIRECTA',
         registrar_efectivo: true,
         items: this.lines().map((item) => ({
@@ -741,6 +932,89 @@ export class PosSalesAdmin {
       });
   }
 
+  setCustomerMode(mode: 'ANON' | 'SEARCH' | 'NEW'): void {
+    this.customerMode.set(mode);
+    if (mode === 'ANON') {
+      this.selectedCustomer.set(null);
+    }
+  }
+
+  onCustomerSearchInput(q: string): void {
+    this.customerSearchQuery.set(q);
+    if (!q || q.trim().length < 2) {
+      this.customerSearchResults.set([]);
+      return;
+    }
+    this.searchingCustomers.set(true);
+    this.commerce.adminCustomers({ q: q.trim(), limit: 8 }).subscribe({
+      next: (results) => {
+        this.customerSearchResults.set(results);
+        this.searchingCustomers.set(false);
+      },
+      error: () => {
+        this.customerSearchResults.set([]);
+        this.searchingCustomers.set(false);
+      },
+    });
+  }
+
+  selectCustomer(customer: CustomerAdminSummary): void {
+    this.selectedCustomer.set(customer);
+    this.customerSearchResults.set([]);
+    this.customerSearchQuery.set('');
+  }
+
+  clearSelectedCustomer(): void {
+    this.selectedCustomer.set(null);
+  }
+
+  saveQuickCustomer(): void {
+    if (this.quickCustomerForm.invalid) return;
+    this.savingQuickCustomer.set(true);
+    this.error.set('');
+    const val = this.quickCustomerForm.getRawValue();
+    this.commerce
+      .quickCreateCustomer({
+        nombres: val.nombres.trim(),
+        apellidos: val.apellidos.trim() || undefined,
+        ci: val.ci.trim() || undefined,
+        correo: val.correo.trim() || undefined,
+        telefono: val.telefono.trim() || undefined,
+      })
+      .pipe(finalize(() => this.savingQuickCustomer.set(false)))
+      .subscribe({
+        next: (created) => {
+          this.selectedCustomer.set(created);
+          this.quickCustomerForm.reset();
+        },
+        error: (err) => {
+          this.error.set(this.errors.message(err, 'No pudimos registrar los datos del cliente.'));
+        },
+      });
+  }
+
+  downloadSaleInvoice(saleId: number): void {
+    this.downloadingInvoice.set(true);
+    this.commerce
+      .saleInvoice(saleId)
+      .pipe(finalize(() => this.downloadingInvoice.set(false)))
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `factura_venta_${saleId}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          a.remove();
+        },
+        error: (err) => {
+          this.error.set(this.errors.message(err, 'No pudimos descargar la factura.'));
+        },
+      });
+  }
+
   printTicket(): void {
     window.print();
   }
@@ -749,6 +1023,10 @@ export class PosSalesAdmin {
     this.completed.set(null);
     this.lines.set([]);
     this.clearSelection();
+    this.selectedCustomer.set(null);
+    this.customerMode.set('ANON');
+    this.customerSearchQuery.set('');
+    this.customerSearchResults.set([]);
     this.error.set('');
     const branchId = this.selectedBranchId();
     if (branchId) {

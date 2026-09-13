@@ -207,3 +207,65 @@ async def test_update_order_status_to_retirado_triggers_invoice_email():
     assert call_kwargs["order_id"] == 77
     assert call_kwargs["pdf_bytes"].startswith(b"%PDF-")
 
+
+@pytest.mark.asyncio
+async def test_get_sale_invoice_pdf():
+    session = AsyncMock()
+    repository = AsyncMock()
+    service = CommerceService(session, repository)
+
+    sale = Venta(
+        id_venta=50,
+        id_cliente=10,
+        id_sucursal=1,
+        canal_venta="PRESENCIAL",
+        modalidad_entrega="ENTREGA_DIRECTA",
+        estado="PAGADA",
+        subtotal=Decimal("350.00"),
+        descuento_total=Decimal("0.00"),
+        costo_envio=Decimal("0.00"),
+        total=Decimal("350.00"),
+        fecha_venta=datetime.now(),
+    )
+    branch = Sucursal(
+        id_sucursal=1, nombre="Central", direccion="Av. San Martin", telefono="77000000"
+    )
+    customer = Cliente(id_cliente=10, id_usuario=500)
+    user = Usuario(
+        id_usuario=500,
+        nombres="Carlos",
+        apellidos="Mendoza",
+        correo="carlos@test.com",
+        ci="456789",
+    )
+
+    async def mock_get(entity, ident):
+        if entity is Venta and ident == 50:
+            return sale
+        if entity is Sucursal and ident == 1:
+            return branch
+        if entity is Cliente and ident == 10:
+            return customer
+        if entity is Usuario and ident == 500:
+            return user
+        return None
+
+    repository.get.side_effect = mock_get
+    repository.customer_by_user.return_value = customer
+    repository.order_by_sale.return_value = None
+    repository.payment_by_sale.return_value = None
+    repository.sale_invoice_items.return_value = [
+        {
+            "marca": "Nike",
+            "producto": "Camiseta Deportiva",
+            "color": "Blanco",
+            "talla": "M",
+            "cantidad": 1,
+            "precio_unitario": Decimal("350.00"),
+            "subtotal": Decimal("350.00"),
+        }
+    ]
+
+    pdf = await service.get_sale_invoice_pdf(user_id=500, sale_id=50)
+    assert pdf.startswith(b"%PDF-")
+
