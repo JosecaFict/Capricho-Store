@@ -335,7 +335,7 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
 
 @Component({
   selector: 'app-purchases-admin',
-  imports: [CommonModule, ReactiveFormsModule, BolivianosPipe],
+  imports: [CommonModule, ReactiveFormsModule],
   template: `<div class="admin-page">
     <header class="admin-page-heading">
       <div>
@@ -565,101 +565,181 @@ export class SupplierDetail extends BaseAdmin implements OnInit {
           </button>
         }
       </div>
-    }
-
-    <div class="purchase-card-grid">
-      @for (o of filteredOrders(); track o['id_orden_compra']) {
-        <article class="purchase-card">
-          <header class="purchase-card-header">
-            <div class="purchase-card-identity">
-              <span class="purchase-card-number">Orden #{{ o['id_orden_compra'] }}</span>
-              <span
-                class="purchase-status-badge"
-                [class.purchase-status-badge--received]="o['estado'] === 'RECIBIDA'"
-                [class.purchase-status-badge--pending]="isPending(o['estado'])"
-                [class.purchase-status-badge--cancelled]="o['estado'] === 'CANCELADA'"
+    } @else {
+      <div class="admin-table-wrap purchase-table-wrap">
+        <table class="purchase-table">
+          <thead>
+            <tr>
+              <th>Orden</th>
+              <th>Proveedor</th>
+              <th>Destino</th>
+              <th>Volumen</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (o of filteredOrders(); track o['id_orden_compra']) {
+              <tr
+                class="purchase-row"
+                [class.purchase-row--expanded]="isExpanded(o['id_orden_compra'])"
               >
-                @if (o['estado'] === 'RECIBIDA') {
-                  ● Recibida
-                } @else if (isPending(o['estado'])) {
-                  ⏳ {{ formatState(o['estado']) }}
-                } @else {
-                  ✕ Cancelada
-                }
-              </span>
-            </div>
-            <span class="purchase-card-date">{{ o['fecha_orden'] | date: 'mediumDate' }}</span>
-          </header>
+                <td class="purchase-col-order">
+                  <div class="purchase-order-info">
+                    <strong class="purchase-order-badge">Orden #{{ o['id_orden_compra'] }}</strong>
+                    <span
+                      class="purchase-status-badge"
+                      [class.purchase-status-badge--received]="o['estado'] === 'RECIBIDA'"
+                      [class.purchase-status-badge--pending]="isPending(o['estado'])"
+                      [class.purchase-status-badge--cancelled]="o['estado'] === 'CANCELADA'"
+                    >
+                      @if (o['estado'] === 'RECIBIDA') {
+                        ● Recibida
+                      } @else if (isPending(o['estado'])) {
+                        ⏳ {{ formatState(o['estado']) }}
+                      } @else {
+                        ✕ Cancelada
+                      }
+                    </span>
+                    <small class="purchase-order-date">{{ o['fecha_orden'] | date: 'mediumDate' }}</small>
+                  </div>
+                </td>
+                <td class="purchase-col-supplier">
+                  <strong class="purchase-supplier-name">{{ supplierName(o['id_proveedor']) }}</strong>
+                </td>
+                <td class="purchase-col-branch">
+                  <span class="purchase-branch-pill">{{ branchName(o['id_sucursal']) }}</span>
+                </td>
+                <td class="purchase-col-volume">
+                  <span class="purchase-volume-badge">
+                    <strong>{{ orderUnitCount(o) }}</strong> prendas
+                  </span>
+                </td>
+                <td class="purchase-col-actions">
+                  <div class="purchase-actions-group">
+                    <button
+                      type="button"
+                      class="button--review"
+                      [class.button--review-active]="isExpanded(o['id_orden_compra'])"
+                      (click)="toggleExpanded(o['id_orden_compra'])"
+                    >
+                      @if (isExpanded(o['id_orden_compra'])) {
+                        ▲ Ocultar
+                      } @else {
+                        ▼ Revisar
+                      }
+                    </button>
+                    @if (canManage() && nextStates(o['estado']).length) {
+                      @for (state of nextStates(o['estado']); track state) {
+                        <button
+                          type="button"
+                          class="button button--quiet button--small"
+                          (click)="setState(o, state)"
+                        >
+                          {{ state }}
+                        </button>
+                      }
+                    }
+                  </div>
+                </td>
+              </tr>
 
-          <div class="purchase-card-body">
-            <div class="purchase-card-row">
-              <span class="purchase-card-label">🏢 Proveedor:</span>
-              <strong class="purchase-card-value">{{ supplierName(o['id_proveedor']) }}</strong>
-            </div>
-            <div class="purchase-card-row">
-              <span class="purchase-card-label">📍 Destino:</span>
-              <span class="purchase-branch-pill">{{ branchName(o['id_sucursal']) }}</span>
-            </div>
-            <div class="purchase-card-row">
-              <span class="purchase-card-label">👕 Volumen:</span>
-              <span class="purchase-volume-text">
-                <strong>{{ orderUnitCount(o) }} prendas</strong> solicitadas en
-                {{ o['detalles']?.length }} variante(s)
-              </span>
-            </div>
-          </div>
+              @if (isExpanded(o['id_orden_compra'])) {
+                <tr class="purchase-expanded-row">
+                  <td colspan="5">
+                    <div class="purchase-review-panel">
+                      <header class="purchase-review-header">
+                        <div class="purchase-review-title">
+                          <span class="purchase-review-icon">📋</span>
+                          <div>
+                            <h4>Revisión de Orden #{{ o['id_orden_compra'] }}</h4>
+                            <p>Prendas solicitadas al proveedor y balance de recepción.</p>
+                          </div>
+                        </div>
+                        <div class="purchase-review-stats">
+                          <span class="stat-pill stat-pill--order">
+                            Pedido: <strong>{{ orderUnitCount(o) }}</strong>
+                          </span>
+                          <span class="stat-pill stat-pill--received">
+                            Recibido: <strong>{{ orderReceivedCount(o) }}</strong>
+                          </span>
+                          <span
+                            class="stat-pill"
+                            [class.stat-pill--pending]="orderPendingCount(o) > 0"
+                            [class.stat-pill--complete]="orderPendingCount(o) === 0"
+                          >
+                            Pendiente: <strong>{{ orderPendingCount(o) }}</strong>
+                          </span>
+                        </div>
+                      </header>
 
-          <details class="purchase-order-detail">
-            <summary class="purchase-summary-btn">
-              <span>▼ Revisar cantidades solicitadas ({{ o['detalles']?.length }})</span>
-            </summary>
-            <div class="purchase-order-detail__scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Producto y variante</th>
-                    <th>Pedido</th>
-                    <th>Recibido</th>
-                    <th>Pendiente</th>
-                    <th>Costo estimado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (detail of o['detalles']; track detail['id_detalle_orden']) {
-                    <tr>
-                      <td>{{ variantName(detail['id_variante']) }}</td>
-                      <td>{{ detail['cantidad'] }}</td>
-                      <td>{{ detail['cantidad_recibida'] || 0 }}</td>
-                      <td>
-                        <strong>{{ detail['cantidad_pendiente'] ?? detail['cantidad'] }}</strong>
-                      </td>
-                      <td>
-                        {{
-                          detail['costo_unitario_estimado'] === null
-                            ? 'Sin estimación'
-                            : (detail['costo_unitario_estimado'] | bolivianos)
-                        }}
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </details>
-
-          @if (canManage() && nextStates(o['estado']).length) {
-            <footer class="purchase-card-footer">
-              <div class="admin-row-actions">
-                @for (state of nextStates(o['estado']); track state) {
-                  <button (click)="setState(o, state)">{{ state }}</button>
-                }
-              </div>
-            </footer>
-          }
-        </article>
-      }
-    </div>
+                      <div class="purchase-review-table-wrap">
+                        <table class="purchase-products-table">
+                          <thead>
+                            <tr>
+                              <th>Producto</th>
+                              <th class="num-cell">Pedido</th>
+                              <th class="num-cell">Recibido</th>
+                              <th class="num-cell">Pendiente</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (item of orderProductSummary(o); track item.id_producto || item.producto) {
+                              <tr>
+                                <td>
+                                  <div class="product-cell">
+                                    @if (item.marca) {
+                                      <span class="product-brand-chip">{{ item.marca }}</span>
+                                    }
+                                    <strong class="product-name">{{ item.producto }}</strong>
+                                  </div>
+                                </td>
+                                <td class="num-cell">
+                                  <span class="qty-pill qty-pill--order">{{ item.pedido }}</span>
+                                </td>
+                                <td class="num-cell">
+                                  <span class="qty-pill qty-pill--received">{{ item.recibido }}</span>
+                                </td>
+                                <td class="num-cell">
+                                  <span
+                                    class="qty-pill"
+                                    [class.qty-pill--pending]="item.pendiente > 0"
+                                    [class.qty-pill--complete]="item.pendiente === 0"
+                                  >
+                                    {{ item.pendiente }}
+                                  </span>
+                                </td>
+                              </tr>
+                            } @empty {
+                              <tr>
+                                <td colspan="4" class="empty-products-cell">
+                                  No hay productos registrados en esta orden.
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                          <tfoot>
+                            <tr>
+                              <td><strong>Total general</strong></td>
+                              <td class="num-cell"><strong>{{ orderUnitCount(o) }}</strong></td>
+                              <td class="num-cell"><strong>{{ orderReceivedCount(o) }}</strong></td>
+                              <td class="num-cell">
+                                <strong>{{ orderPendingCount(o) }}</strong>
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   </div>`,
+  styleUrls: [],
 })
 export class PurchasesAdmin extends BaseAdmin implements OnInit {
   private permissions = inject(PermissionService);
@@ -788,6 +868,92 @@ export class PurchasesAdmin extends BaseAdmin implements OnInit {
       (total: number, detail: Entity) => total + Number(detail['cantidad'] || 0),
       0,
     );
+  }
+  orderReceivedCount(order: Entity): number {
+    return (order['detalles'] ?? []).reduce(
+      (total: number, detail: Entity) => total + Number(detail['cantidad_recibida'] || 0),
+      0,
+    );
+  }
+  orderPendingCount(order: Entity): number {
+    return (order['detalles'] ?? []).reduce(
+      (total: number, detail: Entity) =>
+        total +
+        Number(
+          detail['cantidad_pendiente'] !== undefined && detail['cantidad_pendiente'] !== null
+            ? detail['cantidad_pendiente']
+            : Math.max(0, Number(detail['cantidad'] || 0) - Number(detail['cantidad_recibida'] || 0)),
+        ),
+      0,
+    );
+  }
+  readonly expandedOrderId = signal<number | null>(null);
+  toggleExpanded(orderId: number) {
+    this.expandedOrderId.set(this.expandedOrderId() === orderId ? null : orderId);
+  }
+  isExpanded(orderId: number): boolean {
+    return this.expandedOrderId() === orderId;
+  }
+  orderProductSummary(order: Entity): {
+    id_producto: number;
+    producto: string;
+    marca: string;
+    pedido: number;
+    recibido: number;
+    pendiente: number;
+  }[] {
+    const summaryMap = new Map<
+      string,
+      {
+        id_producto: number;
+        producto: string;
+        marca: string;
+        pedido: number;
+        recibido: number;
+        pendiente: number;
+      }
+    >();
+
+    const details = (order['detalles'] ?? []) as Entity[];
+    for (const detail of details) {
+      const variantId = Number(detail['id_variante']);
+      const variant = this.variants().find((v) => Number(v['id_variante']) === variantId);
+      const productId = variant ? Number(variant['id_producto']) : variantId;
+      const catalogProd = this.catalogProducts().find(
+        (p) => Number(p['id_producto']) === productId,
+      );
+
+      const productName =
+        variant?.['producto'] || catalogProd?.['nombre'] || `Producto #${productId}`;
+      const brandName = catalogProd?.['marca'] || variant?.['marca'] || '';
+      const key = `${productId}-${productName}`;
+
+      const pedido = Number(detail['cantidad'] || 0);
+      const recibido = Number(detail['cantidad_recibida'] || 0);
+      const pendiente = Number(
+        detail['cantidad_pendiente'] !== undefined && detail['cantidad_pendiente'] !== null
+          ? detail['cantidad_pendiente']
+          : Math.max(0, pedido - recibido),
+      );
+
+      const existing = summaryMap.get(key);
+      if (existing) {
+        existing.pedido += pedido;
+        existing.recibido += recibido;
+        existing.pendiente += pendiente;
+      } else {
+        summaryMap.set(key, {
+          id_producto: productId,
+          producto: productName,
+          marca: brandName,
+          pedido,
+          recibido,
+          pendiente,
+        });
+      }
+    }
+
+    return Array.from(summaryMap.values());
   }
   addRow() {
     this.details.push(

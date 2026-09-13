@@ -171,6 +171,101 @@ describe('PurchasesAdmin', () => {
     component.searchQuery.set('4');
     expect(component.filteredOrders().map((o) => o['id_orden_compra'])).toEqual([4]);
   });
+
+  it('renders purchase orders table and expands product-level review without variant noise', () => {
+    const variants = [
+      { id_variante: 101, id_producto: 50, producto: 'Camisa Oxford', sku: 'OXF-S-BLA', color: 'Blanco', talla: 'S' },
+      { id_variante: 102, id_producto: 50, producto: 'Camisa Oxford', sku: 'OXF-M-BLA', color: 'Blanco', talla: 'M' },
+      { id_variante: 103, id_producto: 51, producto: 'Jean Denim', sku: 'JEA-30-AZU', color: 'Azul', talla: '30' },
+    ];
+    const orders = [
+      {
+        id_orden_compra: 7,
+        id_proveedor: 10,
+        id_sucursal: 2,
+        estado: 'RECIBIDA',
+        fecha_orden: '2026-09-13T10:00:00Z',
+        detalles: [
+          { id_variante: 101, cantidad: 10, cantidad_recibida: 10, cantidad_pendiente: 0 },
+          { id_variante: 102, cantidad: 15, cantidad_recibida: 15, cantidad_pendiente: 0 },
+          { id_variante: 103, cantidad: 20, cantidad_recibida: 18, cantidad_pendiente: 2 },
+        ],
+      },
+    ];
+    const api = {
+      list: vi.fn((path: string) => {
+        if (path === 'purchase-orders') return of(orders);
+        if (path === 'suppliers') return of([{ id_proveedor: 10, razon_social: 'Oriente Distribuciones' }]);
+        if (path === 'branches') return of([{ id_sucursal: 2, nombre: 'Sucursal Central' }]);
+        if (path === 'variants') return of(variants);
+        return of([]);
+      }),
+      products: vi.fn(() =>
+        of({
+          items: [
+            { id_producto: 50, nombre: 'Camisa Oxford', marca: 'Zara' },
+            { id_producto: 51, nombre: 'Jean Denim', marca: 'Levis' },
+          ],
+          total: 2,
+        }),
+      ),
+      post: vi.fn(() => of({})),
+      patch: vi.fn(() => of({})),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [PurchasesAdmin],
+      providers: [
+        { provide: AdminApiService, useValue: api },
+        { provide: PermissionService, useValue: { has: () => true } },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PurchasesAdmin);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const element = fixture.nativeElement as HTMLElement;
+
+    // Verify main table
+    const table = element.querySelector('.purchase-table');
+    expect(table).toBeTruthy();
+    expect(element.textContent).toContain('Oriente Distribuciones');
+    expect(element.textContent).toContain('Sucursal Central');
+    expect(element.textContent).toContain('45 prendas');
+
+    // Check product summary calculation
+    const summary = component.orderProductSummary(orders[0]);
+    expect(summary).toHaveLength(2);
+    expect(summary[0]).toEqual({
+      id_producto: 50,
+      producto: 'Camisa Oxford',
+      marca: 'Zara',
+      pedido: 25, // 10 + 15
+      recibido: 25,
+      pendiente: 0,
+    });
+    expect(summary[1]).toEqual({
+      id_producto: 51,
+      producto: 'Jean Denim',
+      marca: 'Levis',
+      pedido: 20,
+      recibido: 18,
+      pendiente: 2,
+    });
+
+    // Expand review
+    component.toggleExpanded(7);
+    fixture.detectChanges();
+
+    expect(element.textContent).toContain('Revisión de Orden #7');
+    expect(element.querySelector('.purchase-products-table')).toBeTruthy();
+    expect(element.textContent).toContain('Zara');
+    expect(element.textContent).toContain('Levis');
+    // Ensure no variant labels or SKUs are shown
+    expect(element.textContent).not.toContain('OXF-S-BLA');
+    expect(element.textContent).not.toContain('variante(s)');
+  });
 });
 
 describe('ReceiptsAdmin', () => {
