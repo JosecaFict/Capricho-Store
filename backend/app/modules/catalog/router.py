@@ -74,7 +74,6 @@ async def list_branches(
 
 @router.get("/cities", response_model=list[CityOption])
 async def list_cities(
-    _: Annotated[CurrentPrincipal, Depends(require_permission("sucursales.ver"))],
     service: Annotated[CatalogService, Depends(get_catalog_service)],
 ):
     return await service.list_cities()

@@ -2,7 +2,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { finalize, forkJoin } from 'rxjs';
+import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { Branch } from '../../core/models/catalog.model';
 import {
   Address,
@@ -609,7 +609,7 @@ export class CheckoutPage {
       cart: this.commerce.cart(),
       branches: this.catalog.branches(),
       addresses: this.commerce.addresses(),
-      cities: this.catalog.cities(),
+      cities: this.catalog.cities().pipe(catchError(() => of([]))),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
@@ -1380,7 +1380,10 @@ export class AddressesPage {
     es_principal: [false],
   });
   constructor() {
-    forkJoin({ addresses: this.commerce.addresses(), cities: this.catalog.cities() })
+    forkJoin({
+      addresses: this.commerce.addresses(),
+      cities: this.catalog.cities().pipe(catchError(() => of([]))),
+    })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
         next: (data) => {
