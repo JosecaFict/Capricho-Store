@@ -1811,3 +1811,438 @@ textarea {
     flex-direction: column;
   }
 }
+
+/* ============================================================
+   ADMIN ORDERS SURFACE (Tabs, Filterbar, Table, Thumbnails)
+   ============================================================ */
+
+.orders-admin-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Tabs con contadores */
+.orders-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.orders-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms ease;
+
+  &:hover {
+    color: var(--ink);
+    background: var(--surface-muted);
+  }
+
+  &.is-active {
+    color: var(--accent-dark);
+    background: rgba(6, 79, 232, 0.08);
+    border-color: rgba(6, 79, 232, 0.2);
+  }
+}
+
+.orders-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--surface-muted);
+  color: var(--ink-soft);
+
+  .is-active & {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  &--pending {
+    background: rgba(245, 158, 11, 0.18);
+    color: #b45309;
+  }
+  &--preparing {
+    background: rgba(139, 92, 246, 0.18);
+    color: #6d28d9;
+  }
+  &--ready {
+    background: rgba(6, 79, 232, 0.18);
+    color: #064fe8;
+  }
+  &--completed {
+    background: rgba(16, 185, 129, 0.18);
+    color: #047857;
+  }
+}
+
+/* Barra de filtros / búsqueda */
+.orders-filterbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.5fr) repeat(2, minmax(160px, 1fr)) auto;
+  gap: 0.75rem;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+.orders-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+  }
+
+  input,
+  select {
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: var(--surface);
+    color: var(--ink);
+
+    &:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(6, 79, 232, 0.15);
+    }
+  }
+}
+
+.orders-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 34px;
+  margin-top: 1rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms ease;
+
+  &:hover {
+    background: var(--surface-muted);
+    border-color: var(--ink-soft);
+  }
+}
+
+/* Tabla de órdenes */
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+
+  th {
+    background: var(--canvas);
+    border-bottom: 1px solid var(--line);
+    font-weight: 700;
+    padding: 12px 14px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+  }
+
+  tr {
+    border-bottom: 1px solid var(--line);
+    transition: background 120ms ease;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.015);
+    }
+  }
+
+  td {
+    padding: 14px;
+    vertical-align: middle;
+  }
+}
+
+/* Celda Pedido & Fecha */
+.order-id-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.order-id-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.order-date-text {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* Pastillas de modalidad */
+.order-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+
+  &--pickup {
+    background: rgba(6, 79, 232, 0.1);
+    color: var(--accent-dark);
+  }
+
+  &--delivery {
+    background: rgba(5, 150, 105, 0.12);
+    color: #047857;
+  }
+}
+
+.order-location-text {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  max-width: 220px;
+  line-height: 1.35;
+}
+
+/* Lista de prendas dentro de la celda */
+.orders-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: 320px;
+}
+
+.orders-item-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.orders-item-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  flex-shrink: 0;
+
+  &--placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+  }
+}
+
+.orders-item-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.orders-item-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orders-item-meta {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+
+  strong {
+    color: var(--ink);
+    margin-left: 0.25rem;
+  }
+}
+
+/* Precio y comprobante */
+.orders-price-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.orders-total-amount {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.orders-receipt-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-dark);
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--accent);
+  }
+}
+
+.orders-paid-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #047857;
+}
+
+/* Badges de estado */
+.order-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+
+  &--pending {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  &--preparing {
+    background: #ede9fe;
+    color: #5b21b6;
+  }
+
+  &--ready {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  &--completed {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  &--cancelled {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  &--default {
+    background: var(--surface-muted);
+    color: var(--ink);
+  }
+}
+
+/* Botones de acción */
+.orders-action-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 170px;
+}
+
+.order-primary-btn {
+  width: 100%;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink);
+  color: #ffffff;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 120ms ease;
+
+  &:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.order-cancel-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.75rem;
+  color: var(--danger);
+  cursor: pointer;
+  text-align: center;
+  padding: 0.2rem;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: all 120ms ease;
+
+  &:hover:not(:disabled) {
+    text-decoration-color: currentColor;
+  }
+}
+
+@media (max-width: 960px) {
+  .orders-filterbar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .orders-refresh-btn {
+    grid-column: 1 / -1;
+    justify-content: center;
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .orders-filterbar {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { Branch, Product, ProductVariant } from '../../core/models/catalog.model';
 import { Order, Reservation, ReturnRequest, Sale } from '../../core/models/commerce.model';
@@ -324,70 +324,347 @@ export class ReservationsAdmin {
   }
 }
 
+type OrderTab = 'TODOS' | 'PENDIENTE' | 'PREPARANDO' | 'LISTO' | 'COMPLETADO' | 'CANCELADO';
+
 @Component({
   selector: 'app-orders-admin',
-  imports: [DatePipe, BolivianosPipe, StatusPanel],
-  template: `<section>
-    <header class="admin-page-heading">
-      <div>
-        <h1>Pedidos</h1>
-        <p>Gestiona preparación, retiro y delivery según modalidad.</p>
+  imports: [DatePipe, BolivianosPipe, StatusPanel, FormsModule],
+  template: `
+    <section class="orders-admin-surface">
+      <header class="admin-page-heading">
+        <div>
+          <h1>Gestión de Pedidos</h1>
+          <p>Controla el pipeline de despacho: preparación, entrega en tienda y envíos delivery.</p>
+        </div>
+      </header>
+
+      @if (error()) {
+        <p class="admin-notice admin-notice--error">{{ error() }}</p>
+      }
+
+      <!-- Barra de pestañas por etapa -->
+      <nav class="orders-tabs" aria-label="Etapas de pedidos">
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'TODOS'"
+          (click)="activeTab.set('TODOS')"
+        >
+          Todos
+          <span class="orders-tab-badge">{{ counts().TODOS }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'PENDIENTE'"
+          (click)="activeTab.set('PENDIENTE')"
+        >
+          Por preparar
+          <span class="orders-tab-badge orders-tab-badge--pending">{{ counts().PENDIENTE }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'PREPARANDO'"
+          (click)="activeTab.set('PREPARANDO')"
+        >
+          En preparación
+          <span class="orders-tab-badge orders-tab-badge--preparing">{{ counts().PREPARANDO }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'LISTO'"
+          (click)="activeTab.set('LISTO')"
+        >
+          Listos para entrega
+          <span class="orders-tab-badge orders-tab-badge--ready">{{ counts().LISTO }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'COMPLETADO'"
+          (click)="activeTab.set('COMPLETADO')"
+        >
+          Completados
+          <span class="orders-tab-badge orders-tab-badge--completed">{{ counts().COMPLETADO }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'CANCELADO'"
+          (click)="activeTab.set('CANCELADO')"
+        >
+          Cancelados
+          <span class="orders-tab-badge">{{ counts().CANCELADO }}</span>
+        </button>
+      </nav>
+
+      <!-- Barra de filtros y búsqueda -->
+      <div class="orders-filterbar">
+        <div class="orders-filter-field">
+          <label for="order-search">Buscar pedido o prenda</label>
+          <input
+            id="order-search"
+            type="search"
+            placeholder="Ej: #12, Polo, Verde, Central..."
+            [ngModel]="searchTerm()"
+            (ngModelChange)="searchTerm.set($event)"
+          />
+        </div>
+        <div class="orders-filter-field">
+          <label for="order-branch">Sucursal</label>
+          <select
+            id="order-branch"
+            [ngModel]="selectedBranch()"
+            (ngModelChange)="selectedBranch.set($event)"
+          >
+            <option value="">Todas las sucursales</option>
+            @for (b of branches(); track b.id_sucursal) {
+              <option [value]="b.id_sucursal">{{ b.nombre }}</option>
+            }
+          </select>
+        </div>
+        <div class="orders-filter-field">
+          <label for="order-mode">Modalidad</label>
+          <select
+            id="order-mode"
+            [ngModel]="selectedMode()"
+            (ngModelChange)="selectedMode.set($event)"
+          >
+            <option value="">Todas las modalidades</option>
+            <option value="RETIRO_SUCURSAL">Retiro en tienda</option>
+            <option value="DELIVERY">Delivery a domicilio</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          class="orders-refresh-btn"
+          [disabled]="loading() || saving()"
+          (click)="load()"
+          title="Actualizar pedidos"
+        >
+          ↻ Actualizar
+        </button>
       </div>
-    </header>
-    @if (error()) {
-      <p class="admin-notice admin-notice--error">{{ error() }}</p>
-    }
-    @if (loading()) {
-      <div class="admin-skeleton-grid"><span></span></div>
-    } @else if (!items().length) {
-      <app-status-panel title="Sin pedidos" message="Los pedidos web aparecerán aquí." />
-    } @else {
-      <div class="admin-card-list">
-        @for (item of items(); track item.id_pedido) {
-          <article>
-            <header>
-              <div>
-                <h2>Pedido #{{ item.id_pedido }}</h2>
-                <p>{{ item.sucursal }} / {{ item.fecha_creacion | date: 'short' }}</p>
-              </div>
-              <span class="status-chip">{{ item.estado }}</span>
-            </header>
-            <p>
-              {{
-                item.modalidad_entrega === 'DELIVERY'
-                  ? item.direccion_entrega
-                  : 'Retiro en ' + item.direccion_sucursal
-              }}
-            </p>
-            <strong>{{ item.total | bolivianos }}</strong>
-            <div class="record-actions">
-              @for (state of nextOrderStates(item); track state) {
-                <button
-                  class="button button--quiet"
-                  type="button"
-                  [disabled]="saving()"
-                  (click)="update(item.id_pedido, state)"
-                >
-                  {{ stateLabel(state) }}
-                </button>
+
+      <!-- Contenido de la tabla -->
+      @if (loading()) {
+        <div class="admin-skeleton-grid"><span></span></div>
+      } @else if (!filteredItems().length) {
+        <app-status-panel
+          title="Sin pedidos encontrados"
+          message="No hay pedidos que coincidan con el filtro o la pestaña seleccionada."
+        />
+      } @else {
+        <div class="admin-table-wrap">
+          <table class="orders-table">
+            <thead>
+              <tr>
+                <th>Pedido</th>
+                <th>Modalidad & Destino</th>
+                <th>Prendas a Entregar</th>
+                <th>Total & Pago</th>
+                <th>Estado</th>
+                <th style="text-align: right;">Acción Siguiente</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of filteredItems(); track item.id_pedido) {
+                <tr>
+                  <!-- Pedido & Fecha -->
+                  <td>
+                    <div class="order-id-cell">
+                      <span class="order-id-title">Pedido #{{ item.id_pedido }}</span>
+                      <span class="order-date-text">{{ item.fecha_creacion | date: 'short' }}</span>
+                    </div>
+                  </td>
+
+                  <!-- Modalidad & Destino -->
+                  <td>
+                    @if (item.modalidad_entrega === 'DELIVERY') {
+                      <span class="order-mode-pill order-mode-pill--delivery">
+                        🚚 Delivery
+                      </span>
+                      <small class="order-location-text">
+                        {{ item.direccion_entrega || 'Dirección del cliente' }}
+                      </small>
+                    } @else {
+                      <span class="order-mode-pill order-mode-pill--pickup">
+                        🏬 Retiro en tienda
+                      </span>
+                      <small class="order-location-text">
+                        {{ item.sucursal }} · {{ item.direccion_sucursal }}
+                      </small>
+                    }
+                  </td>
+
+                  <!-- Prendas a entregar -->
+                  <td>
+                    <div class="orders-items-list">
+                      @for (line of item.items; track line.id_detalle) {
+                        <div class="orders-item-line">
+                          @if (line.imagen_url) {
+                            <img [src]="line.imagen_url" [alt]="line.producto" class="orders-item-thumb" />
+                          } @else {
+                            <span class="orders-item-thumb orders-item-thumb--placeholder">👕</span>
+                          }
+                          <div class="orders-item-info">
+                            <span class="orders-item-name" [title]="line.producto">{{ line.producto }}</span>
+                            <small class="orders-item-meta">
+                              {{ line.color }} · Talla {{ line.talla }} <strong>×{{ line.cantidad }}</strong>
+                            </small>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  </td>
+
+                  <!-- Total y comprobante -->
+                  <td>
+                    <div class="orders-price-cell">
+                      <span class="orders-total-amount">{{ item.total | bolivianos }}</span>
+                      @if (item.receipt_url) {
+                        <a
+                          [href]="item.receipt_url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="orders-receipt-link"
+                        >
+                          Recibo Stripe ↗
+                        </a>
+                      } @else {
+                        <span class="orders-paid-chip">✓ Pagado</span>
+                      }
+                    </div>
+                  </td>
+
+                  <!-- Estado actual -->
+                  <td>
+                    <span class="order-badge" [class]="statusBadgeClass(item.estado)">
+                      {{ statusLabel(item.estado) }}
+                    </span>
+                  </td>
+
+                  <!-- Acción principal y secundaria -->
+                  <td style="text-align: right;">
+                    <div class="orders-action-cell" style="align-items: flex-end;">
+                      @if (primaryAction(item); as act) {
+                        <button
+                          class="order-primary-btn"
+                          type="button"
+                          [disabled]="saving()"
+                          (click)="update(item.id_pedido, act.targetState)"
+                        >
+                          {{ act.label }}
+                        </button>
+                      }
+                      @if (canCancel(item)) {
+                        <button
+                          class="order-cancel-btn"
+                          type="button"
+                          [disabled]="saving()"
+                          (click)="confirmCancel(item)"
+                        >
+                          Cancelar pedido
+                        </button>
+                      }
+                    </div>
+                  </td>
+                </tr>
               }
-            </div>
-          </article>
-        }
-      </div>
-    }
-  </section>`,
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  `,
 })
 export class OrdersAdmin {
   private readonly commerce = inject(CommerceService);
+  private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
+
   readonly items = signal<Order[]>([]);
+  readonly branches = signal<Branch[]>([]);
+  readonly activeTab = signal<OrderTab>('TODOS');
+  readonly searchTerm = signal<string>('');
+  readonly selectedBranch = signal<string>('');
+  readonly selectedMode = signal<string>('');
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
+
+  readonly counts = computed(() => {
+    const all = this.items();
+    return {
+      TODOS: all.length,
+      PENDIENTE: all.filter((o) => o.estado === 'PENDIENTE').length,
+      PREPARANDO: all.filter((o) => o.estado === 'PREPARANDO').length,
+      LISTO: all.filter(
+        (o) => o.estado === 'LISTO_PARA_RETIRO' || o.estado === 'LISTO_PARA_ENVIO',
+      ).length,
+      COMPLETADO: all.filter((o) => o.estado === 'RETIRADO' || o.estado === 'ENTREGADO').length,
+      CANCELADO: all.filter((o) => o.estado === 'CANCELADO').length,
+    };
+  });
+
+  readonly filteredItems = computed(() => {
+    let result = this.items();
+    const tab = this.activeTab();
+    if (tab === 'PENDIENTE') {
+      result = result.filter((o) => o.estado === 'PENDIENTE');
+    } else if (tab === 'PREPARANDO') {
+      result = result.filter((o) => o.estado === 'PREPARANDO');
+    } else if (tab === 'LISTO') {
+      result = result.filter(
+        (o) => o.estado === 'LISTO_PARA_RETIRO' || o.estado === 'LISTO_PARA_ENVIO',
+      );
+    } else if (tab === 'COMPLETADO') {
+      result = result.filter((o) => o.estado === 'RETIRADO' || o.estado === 'ENTREGADO');
+    } else if (tab === 'CANCELADO') {
+      result = result.filter((o) => o.estado === 'CANCELADO');
+    }
+
+    const branch = this.selectedBranch();
+    if (branch) {
+      result = result.filter((o) => o.id_sucursal === Number(branch));
+    }
+
+    const mode = this.selectedMode();
+    if (mode) {
+      result = result.filter((o) => o.modalidad_entrega === mode);
+    }
+
+    const search = this.searchTerm().trim().toLowerCase();
+    if (search) {
+      result = result.filter((o) => {
+        const idMatch = String(o.id_pedido).includes(search) || `#${o.id_pedido}`.includes(search);
+        const branchMatch = o.sucursal.toLowerCase().includes(search);
+        const itemsMatch = o.items.some(
+          (i) =>
+            i.producto.toLowerCase().includes(search) ||
+            i.color.toLowerCase().includes(search) ||
+            i.sku.toLowerCase().includes(search),
+        );
+        const addressMatch = (o.direccion_entrega || o.direccion_sucursal || '')
+          .toLowerCase()
+          .includes(search);
+        return idMatch || branchMatch || itemsMatch || addressMatch;
+      });
+    }
+
+    return result;
+  });
+
   constructor() {
     this.load();
+    this.catalog.branches().subscribe({
+      next: (branches) => this.branches.set(branches),
+      error: () => {},
+    });
   }
+
   load(): void {
     this.loading.set(true);
     this.commerce
@@ -399,23 +676,72 @@ export class OrdersAdmin {
           this.error.set(this.errors.message(error, 'No pudimos cargar los pedidos.')),
       });
   }
-  nextOrderStates(item: Order): string[] {
-    const choices = {
-      PENDIENTE: ['PREPARANDO', 'CANCELADO'],
-      PREPARANDO:
-        item.modalidad_entrega === 'DELIVERY'
-          ? ['LISTO_PARA_ENVIO', 'CANCELADO']
-          : ['LISTO_PARA_RETIRO', 'CANCELADO'],
-      LISTO_PARA_RETIRO: ['RETIRADO', 'CANCELADO'],
-      LISTO_PARA_ENVIO: ['RECOGIDO', 'EN_CAMINO', 'CANCELADO'],
-      RECOGIDO: ['EN_CAMINO', 'ENTREGADO'],
-      EN_CAMINO: ['ENTREGADO'],
-    } as Record<string, string[]>;
-    return choices[item.estado] ?? [];
+
+  primaryAction(item: Order): { targetState: string; label: string } | null {
+    switch (item.estado) {
+      case 'PENDIENTE':
+        return { targetState: 'PREPARANDO', label: 'Comenzar preparación' };
+      case 'PREPARANDO':
+        return item.modalidad_entrega === 'DELIVERY'
+          ? { targetState: 'LISTO_PARA_ENVIO', label: 'Listo para envío' }
+          : { targetState: 'LISTO_PARA_RETIRO', label: 'Listo para retiro' };
+      case 'LISTO_PARA_RETIRO':
+        return { targetState: 'RETIRADO', label: 'Entregar (Retirado) ✓' };
+      case 'LISTO_PARA_ENVIO':
+        return { targetState: 'EN_CAMINO', label: 'Despachar (En camino)' };
+      case 'RECOGIDO':
+        return { targetState: 'EN_CAMINO', label: 'En camino' };
+      case 'EN_CAMINO':
+        return { targetState: 'ENTREGADO', label: 'Confirmar entrega ✓' };
+      default:
+        return null;
+    }
   }
-  stateLabel(state: string): string {
-    return state.toLowerCase().replaceAll('_', ' ');
+
+  canCancel(item: Order): boolean {
+    return ['PENDIENTE', 'PREPARANDO', 'LISTO_PARA_RETIRO', 'LISTO_PARA_ENVIO'].includes(item.estado);
   }
+
+  confirmCancel(item: Order): void {
+    if (confirm(`¿Confirmas que deseas cancelar el Pedido #${item.id_pedido}? Las prendas retornarán al stock.`)) {
+      this.update(item.id_pedido, 'CANCELADO');
+    }
+  }
+
+  statusLabel(state: string): string {
+    const map: Record<string, string> = {
+      PENDIENTE: 'Por preparar',
+      PREPARANDO: 'En preparación',
+      LISTO_PARA_RETIRO: 'Listo para retiro',
+      LISTO_PARA_ENVIO: 'Listo para envío',
+      RECOGIDO: 'Recogido',
+      EN_CAMINO: 'En camino',
+      RETIRADO: 'Retirado en tienda',
+      ENTREGADO: 'Entregado a cliente',
+      CANCELADO: 'Cancelado',
+    };
+    return map[state] || state.replaceAll('_', ' ');
+  }
+
+  statusBadgeClass(state: string): string {
+    switch (state) {
+      case 'PENDIENTE':
+        return 'order-badge--pending';
+      case 'PREPARANDO':
+        return 'order-badge--preparing';
+      case 'LISTO_PARA_RETIRO':
+      case 'LISTO_PARA_ENVIO':
+        return 'order-badge--ready';
+      case 'RETIRADO':
+      case 'ENTREGADO':
+        return 'order-badge--completed';
+      case 'CANCELADO':
+        return 'order-badge--cancelled';
+      default:
+        return 'order-badge--default';
+    }
+  }
+
   update(id: number, state: string): void {
     this.saving.set(true);
     this.commerce
