@@ -367,6 +367,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       debugPrint('[Checkout] Sesión creada: ${checkoutData.sessionId}, url: ${checkoutData.checkoutUrl}');
       final uri = Uri.parse(checkoutData.checkoutUrl);
+
+      // Mostrar el sondeo y estado de verificación antes de abrir Safari
+      // El temporizador de fondo detectará el pago y cerrará Safari automáticamente vía closeInAppWebView()
+      if (mounted) {
+        _showPaymentVerificationSheet(checkoutData.sessionId);
+      }
+
       bool launched = false;
       try {
         launched = await launchUrl(
@@ -388,6 +395,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       }
 
       if (!launched && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
         const msg = 'No se pudo abrir la pasarela de pago en el navegador de tu iPhone.';
         setState(() {
           _error = msg;
@@ -397,11 +405,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           const SnackBar(content: Text(msg), backgroundColor: AppColors.danger),
         );
         return;
-      }
-
-      // Al retornar del navegador interno, verificar el estado
-      if (mounted) {
-        _showPaymentVerificationSheet(checkoutData.sessionId);
       }
     } catch (e) {
       debugPrint('[Checkout] Error en api.checkout: $e');
@@ -461,73 +464,101 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_circle_rounded,
-                color: AppColors.success,
-                size: 54,
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              '¡Pedido Confirmado!',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: AppColors.ink,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Orden #${order.idPedido} registrada exitosamente.',
-              style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Total pagado: ${_currency.format(order.total)}',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-                color: AppColors.cobaltDark,
-              ),
-            ),
-            if (receiptUrl != null && receiptUrl.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse(receiptUrl),
-                  mode: LaunchMode.inAppBrowserView,
+        contentPadding: const EdgeInsets.fromLTRB(22, 26, 22, 24),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
                 ),
-                icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                label: const Text('Ver recibo de Stripe'),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.success,
+                  size: 54,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                '¡Pedido Confirmado!',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Orden #${order.idPedido} registrada exitosamente.',
+                style: const TextStyle(fontSize: 13, color: AppColors.inkSoft),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Total pagado: ${_currency.format(order.total)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                  color: AppColors.cobaltDark,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Botones simétricos y encuadrados al 100% de ancho
+              if (receiptUrl != null && receiptUrl.isNotEmpty) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => launchUrl(
+                      Uri.parse(receiptUrl),
+                      mode: LaunchMode.inAppBrowserView,
+                    ),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 18, color: AppColors.cobalt),
+                    label: const Text(
+                      'Ver recibo de Stripe',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.cobalt,
+                      side: const BorderSide(color: AppColors.cobalt, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    context.go('/pedidos');
+                  },
+                  icon: const Icon(Icons.shopping_bag_outlined, size: 18),
+                  label: const Text(
+                    'Ir a mis pedidos',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.cobalt,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
               ),
             ],
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              context.go('/pedidos');
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.cobalt,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Ir a mis pedidos'),
           ),
-        ],
+        ),
       ),
     );
   }
