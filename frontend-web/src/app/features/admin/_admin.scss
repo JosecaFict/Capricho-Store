@@ -2033,6 +2033,17 @@ textarea {
     background: rgba(5, 150, 105, 0.12);
     color: #047857;
   }
+
+  &--appointment {
+    background: rgba(139, 92, 246, 0.12);
+    color: #6d28d9;
+  }
+
+  &--appointment-today {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
 }
 
 .order-location-text {

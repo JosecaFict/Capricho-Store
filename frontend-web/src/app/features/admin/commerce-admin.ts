@@ -9,6 +9,7 @@ import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
 import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
+import { formatBranchName } from '../commerce/commerce-pages';
 import { AdminApiService, Entity } from './admin-api.service';
 
 interface SaleLine {
@@ -217,70 +218,387 @@ export class PosSalesAdmin {
   }
 }
 
+type ReservationTab =
+  | 'TODOS'
+  | 'PENDIENTE'
+  | 'CONFIRMADA'
+  | 'PREPARANDO'
+  | 'LISTA'
+  | 'CLIENTE_PRESENTE'
+  | 'CONVERTIDA'
+  | 'CANCELADA';
+
 @Component({
   selector: 'app-reservations-admin',
-  imports: [DatePipe, StatusPanel],
-  template: `<section>
-    <header class="admin-page-heading">
-      <div>
-        <h1>Reservas</h1>
-        <p>Prepara prendas y actualiza su estado operativo.</p>
+  imports: [DatePipe, BolivianosPipe, StatusPanel, FormsModule],
+  template: `
+    <section class="orders-admin-surface">
+      <header class="admin-page-heading">
+        <div>
+          <h1>Gestión de Reservas</h1>
+          <p>Supervisa citas en sucursal, apartado de prendas en probador y conversión a ventas.</p>
+        </div>
+      </header>
+
+      @if (error()) {
+        <p class="admin-notice admin-notice--error">{{ error() }}</p>
+      }
+
+      <!-- Barra de pestañas por etapa de reserva -->
+      <nav class="orders-tabs" aria-label="Etapas de reservas">
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'TODOS'"
+          (click)="activeTab.set('TODOS')"
+        >
+          Todas
+          <span class="orders-tab-badge">{{ counts().TODOS }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'PENDIENTE'"
+          (click)="activeTab.set('PENDIENTE')"
+        >
+          Por confirmar
+          <span class="orders-tab-badge orders-tab-badge--pending">{{ counts().PENDIENTE }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'CONFIRMADA'"
+          (click)="activeTab.set('CONFIRMADA')"
+        >
+          Confirmadas
+          <span class="orders-tab-badge orders-tab-badge--ready">{{ counts().CONFIRMADA }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'PREPARANDO'"
+          (click)="activeTab.set('PREPARANDO')"
+        >
+          Apartando
+          <span class="orders-tab-badge orders-tab-badge--preparing">{{ counts().PREPARANDO }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'LISTA'"
+          (click)="activeTab.set('LISTA')"
+        >
+          En probador
+          <span class="orders-tab-badge orders-tab-badge--completed">{{ counts().LISTA }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'CLIENTE_PRESENTE'"
+          (click)="activeTab.set('CLIENTE_PRESENTE')"
+        >
+          Cliente en tienda
+          <span class="orders-tab-badge orders-tab-badge--ready">{{ counts().CLIENTE_PRESENTE }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'CONVERTIDA'"
+          (click)="activeTab.set('CONVERTIDA')"
+        >
+          Concretadas
+          <span class="orders-tab-badge orders-tab-badge--completed">{{ counts().CONVERTIDA }}</span>
+        </button>
+        <button
+          type="button"
+          class="orders-tab"
+          [class.is-active]="activeTab() === 'CANCELADA'"
+          (click)="activeTab.set('CANCELADA')"
+        >
+          Canceladas
+          <span class="orders-tab-badge">{{ counts().CANCELADA }}</span>
+        </button>
+      </nav>
+
+      <!-- Barra de filtros y búsqueda -->
+      <div class="orders-filterbar">
+        <div class="orders-filter-field">
+          <label for="reservation-search">Buscar reserva o prenda</label>
+          <input
+            id="reservation-search"
+            type="search"
+            placeholder="Ej: #1, Ralph Lauren, S, Central..."
+            [ngModel]="searchTerm()"
+            (ngModelChange)="searchTerm.set($event)"
+          />
+        </div>
+        <div class="orders-filter-field">
+          <label for="reservation-branch">Sucursal</label>
+          <select
+            id="reservation-branch"
+            [ngModel]="selectedBranch()"
+            (ngModelChange)="selectedBranch.set($event)"
+          >
+            <option value="">Todas las sucursales</option>
+            @for (b of branches(); track b.id_sucursal) {
+              <option [value]="b.id_sucursal">{{ b.nombre }}</option>
+            }
+          </select>
+        </div>
+        <div class="orders-filter-field">
+          <label for="reservation-date-filter">Horario de visita</label>
+          <select
+            id="reservation-date-filter"
+            [ngModel]="selectedDateFilter()"
+            (ngModelChange)="selectedDateFilter.set($event)"
+          >
+            <option value="TODAS">Todas las fechas</option>
+            <option value="HOY">Citas de HOY</option>
+            <option value="PROXIMAS">Próximas citas</option>
+            <option value="SIN_CITA">Sin horario específico</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          class="orders-refresh-btn"
+          [disabled]="loading() || saving()"
+          (click)="load()"
+          title="Actualizar reservas"
+        >
+          ↻ Actualizar
+        </button>
       </div>
-    </header>
-    @if (error()) {
-      <p class="admin-notice admin-notice--error">{{ error() }}</p>
-    }
-    @if (loading()) {
-      <div class="admin-skeleton-grid"><span></span><span></span></div>
-    } @else if (!items().length) {
-      <app-status-panel title="Sin reservas" message="No existen reservas para procesar." />
-    } @else {
-      <div class="admin-card-list">
-        @for (item of items(); track item.id_reserva) {
-          <article>
-            <header>
-              <div>
-                <h2>Reserva #{{ item.id_reserva }}</h2>
-                <p>
-                  {{ item.sucursal }} /
-                  {{ item.fecha_cita ? (item.fecha_cita | date: 'short') : 'Sin cita' }}
-                </p>
-              </div>
-              <span class="status-chip">{{ item.estado }}</span>
-            </header>
-            <p>
-              @for (line of item.items; track line.id_detalle) {
-                {{ line.producto }} / {{ line.talla }} × {{ line.cantidad }}<br />
+
+      <!-- Contenido de la tabla -->
+      @if (loading()) {
+        <div class="admin-skeleton-grid"><span></span></div>
+      } @else if (!filteredItems().length) {
+        <app-status-panel
+          title="Sin reservas encontradas"
+          message="No hay reservas que coincidan con los filtros o la pestaña seleccionada."
+        />
+      } @else {
+        <div class="admin-table-wrap">
+          <table class="orders-table">
+            <thead>
+              <tr>
+                <th>Reserva</th>
+                <th>Cita / Visita</th>
+                <th>Sucursal</th>
+                <th>Prendas Apartadas</th>
+                <th>Total Estimado</th>
+                <th>Estado</th>
+                <th style="text-align: right;">Acción Siguiente</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of filteredItems(); track item.id_reserva) {
+                <tr>
+                  <!-- Reserva & Creación -->
+                  <td>
+                    <div class="order-id-cell">
+                      <span class="order-id-title">Reserva #{{ item.id_reserva }}</span>
+                      <span class="order-date-text">{{ item.fecha_reserva | date: 'short' }}</span>
+                    </div>
+                  </td>
+
+                  <!-- Cita / Visita -->
+                  <td>
+                    @if (isToday(item.fecha_cita)) {
+                      <span class="order-mode-pill order-mode-pill--appointment-today">
+                        🔥 CITA HOY
+                      </span>
+                      <strong class="order-location-text" style="color: #b45309; font-size: 0.85rem;">
+                        {{ item.fecha_cita | date: 'HH:mm' }}
+                      </strong>
+                    } @else if (item.fecha_cita) {
+                      <span class="order-mode-pill order-mode-pill--appointment">
+                        📅 Visita programada
+                      </span>
+                      <small class="order-location-text">
+                        {{ item.fecha_cita | date: 'dd/MM/yyyy HH:mm' }}
+                      </small>
+                    } @else {
+                      <span class="order-mode-pill" style="background: var(--surface-muted); color: var(--ink-soft);">
+                        Sin horario
+                      </span>
+                    }
+                  </td>
+
+                  <!-- Sucursal -->
+                  <td>
+                    <div class="order-id-cell">
+                      <span class="orders-item-name" style="font-weight: 700;">
+                        {{ formatBranchName(item.sucursal, item.id_sucursal) }}
+                      </span>
+                      @if (item.direccion_sucursal) {
+                        <small class="order-location-text">{{ item.direccion_sucursal }}</small>
+                      }
+                    </div>
+                  </td>
+
+                  <!-- Prendas apartadas -->
+                  <td>
+                    <div class="orders-items-list">
+                      @for (line of item.items; track line.id_detalle) {
+                        <div class="orders-item-line">
+                          @if (line.imagen_url) {
+                            <img [src]="line.imagen_url" [alt]="line.producto" class="orders-item-thumb" />
+                          } @else {
+                            <span class="orders-item-thumb orders-item-thumb--placeholder">👕</span>
+                          }
+                          <div class="orders-item-info">
+                            <span class="orders-item-name" [title]="line.producto">{{ line.producto }}</span>
+                            <small class="orders-item-meta">
+                              {{ line.color }} · Talla {{ line.talla }} <strong>×{{ line.cantidad }}</strong>
+                            </small>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  </td>
+
+                  <!-- Total estimado -->
+                  <td>
+                    <div class="orders-price-cell">
+                      <span class="orders-total-amount">{{ totalEstimated(item) | bolivianos }}</span>
+                      <small style="color: var(--ink-soft); font-size: 0.72rem;">Pago en tienda</small>
+                    </div>
+                  </td>
+
+                  <!-- Estado actual -->
+                  <td>
+                    <span class="order-badge" [class]="statusBadgeClass(item.estado)">
+                      {{ statusLabel(item.estado) }}
+                    </span>
+                  </td>
+
+                  <!-- Acción operativa -->
+                  <td style="text-align: right;">
+                    <div class="orders-action-cell" style="align-items: flex-end;">
+                      @if (primaryAction(item); as act) {
+                        <button
+                          class="order-primary-btn"
+                          type="button"
+                          [disabled]="saving()"
+                          (click)="update(item.id_reserva, act.targetState)"
+                        >
+                          {{ act.label }}
+                        </button>
+                      }
+                      @if (canCancel(item)) {
+                        <button
+                          class="order-cancel-btn"
+                          type="button"
+                          [disabled]="saving()"
+                          (click)="confirmCancel(item)"
+                        >
+                          Cancelar reserva
+                        </button>
+                      }
+                    </div>
+                  </td>
+                </tr>
               }
-            </p>
-            <div class="record-actions">
-              @for (state of nextReservationStates(item.estado); track state) {
-                <button
-                  class="button button--quiet"
-                  type="button"
-                  [disabled]="saving()"
-                  (click)="update(item.id_reserva, state)"
-                >
-                  {{ stateLabel(state) }}
-                </button>
-              }
-            </div>
-          </article>
-        }
-      </div>
-    }
-  </section>`,
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  `,
 })
 export class ReservationsAdmin {
   private readonly commerce = inject(CommerceService);
+  private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
+
   readonly items = signal<Reservation[]>([]);
+  readonly branches = signal<Branch[]>([]);
+  readonly activeTab = signal<ReservationTab>('TODOS');
+  readonly searchTerm = signal<string>('');
+  readonly selectedBranch = signal<string>('');
+  readonly selectedDateFilter = signal<'TODAS' | 'HOY' | 'PROXIMAS' | 'SIN_CITA'>('TODAS');
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
+  readonly formatBranchName = formatBranchName;
+
+  readonly counts = computed(() => {
+    const all = this.items();
+    return {
+      TODOS: all.length,
+      PENDIENTE: all.filter((r) => r.estado === 'PENDIENTE').length,
+      CONFIRMADA: all.filter((r) => r.estado === 'CONFIRMADA').length,
+      PREPARANDO: all.filter((r) => r.estado === 'PREPARANDO').length,
+      LISTA: all.filter((r) => r.estado === 'LISTA').length,
+      CLIENTE_PRESENTE: all.filter((r) => r.estado === 'CLIENTE_PRESENTE').length,
+      CONVERTIDA: all.filter((r) => r.estado === 'CONVERTIDA').length,
+      CANCELADA: all.filter((r) => r.estado === 'CANCELADA' || r.estado === 'EXPIRADA').length,
+    };
+  });
+
+  readonly filteredItems = computed(() => {
+    let result = this.items();
+    const tab = this.activeTab();
+    if (tab === 'PENDIENTE') {
+      result = result.filter((r) => r.estado === 'PENDIENTE');
+    } else if (tab === 'CONFIRMADA') {
+      result = result.filter((r) => r.estado === 'CONFIRMADA');
+    } else if (tab === 'PREPARANDO') {
+      result = result.filter((r) => r.estado === 'PREPARANDO');
+    } else if (tab === 'LISTA') {
+      result = result.filter((r) => r.estado === 'LISTA');
+    } else if (tab === 'CLIENTE_PRESENTE') {
+      result = result.filter((r) => r.estado === 'CLIENTE_PRESENTE');
+    } else if (tab === 'CONVERTIDA') {
+      result = result.filter((r) => r.estado === 'CONVERTIDA');
+    } else if (tab === 'CANCELADA') {
+      result = result.filter((r) => r.estado === 'CANCELADA' || r.estado === 'EXPIRADA');
+    }
+
+    const branch = this.selectedBranch();
+    if (branch) {
+      result = result.filter((r) => r.id_sucursal === Number(branch));
+    }
+
+    const dateFilter = this.selectedDateFilter();
+    if (dateFilter === 'HOY') {
+      result = result.filter((r) => this.isToday(r.fecha_cita));
+    } else if (dateFilter === 'PROXIMAS') {
+      const now = new Date();
+      result = result.filter((r) => r.fecha_cita && new Date(r.fecha_cita) >= now);
+    } else if (dateFilter === 'SIN_CITA') {
+      result = result.filter((r) => !r.fecha_cita);
+    }
+
+    const search = this.searchTerm().trim().toLowerCase();
+    if (search) {
+      result = result.filter((r) => {
+        const idMatch = String(r.id_reserva).includes(search) || `#${r.id_reserva}`.includes(search);
+        const branchMatch = r.sucursal.toLowerCase().includes(search);
+        const itemsMatch = r.items.some(
+          (i) =>
+            i.producto.toLowerCase().includes(search) ||
+            i.color.toLowerCase().includes(search) ||
+            i.talla.toLowerCase().includes(search) ||
+            i.sku.toLowerCase().includes(search),
+        );
+        const addressMatch = (r.direccion_sucursal || '').toLowerCase().includes(search);
+        return idMatch || branchMatch || itemsMatch || addressMatch;
+      });
+    }
+
+    return result;
+  });
+
   constructor() {
     this.load();
+    this.catalog.branches().subscribe({
+      next: (branches) => this.branches.set(branches),
+      error: () => {},
+    });
   }
+
   load(): void {
     this.loading.set(true);
     this.commerce
@@ -292,22 +610,100 @@ export class ReservationsAdmin {
           this.error.set(this.errors.message(error, 'No pudimos cargar las reservas.')),
       });
   }
-  nextReservationStates(state: string): string[] {
-    return (
-      (
-        {
-          PENDIENTE: ['CONFIRMADA', 'CANCELADA'],
-          CONFIRMADA: ['PREPARANDO', 'CANCELADA'],
-          PREPARANDO: ['LISTA', 'CANCELADA'],
-          LISTA: ['CLIENTE_PRESENTE', 'CANCELADA'],
-          CLIENTE_PRESENTE: ['CONVERTIDA', 'CANCELADA'],
-        } as Record<string, string[]>
-      )[state] ?? []
+
+  primaryAction(item: Reservation): { targetState: string; label: string } | null {
+    switch (item.estado) {
+      case 'PENDIENTE':
+        return { targetState: 'CONFIRMADA', label: 'Confirmar cita ✓' };
+      case 'CONFIRMADA':
+        return { targetState: 'PREPARANDO', label: 'Apartar prendas 👕' };
+      case 'PREPARANDO':
+        return { targetState: 'LISTA', label: 'Lista en probador 🛍️' };
+      case 'LISTA':
+        return { targetState: 'CLIENTE_PRESENTE', label: 'Cliente en tienda 👤' };
+      case 'CLIENTE_PRESENTE':
+        return { targetState: 'CONVERTIDA', label: 'Concretar venta 💳' };
+      default:
+        return null;
+    }
+  }
+
+  canCancel(item: Reservation): boolean {
+    return ['PENDIENTE', 'CONFIRMADA', 'PREPARANDO', 'LISTA', 'CLIENTE_PRESENTE'].includes(
+      item.estado,
     );
   }
-  stateLabel(state: string): string {
-    return state.toLowerCase().replaceAll('_', ' ');
+
+  confirmCancel(item: Reservation): void {
+    if (
+      confirm(
+        `¿Estás seguro de cancelar la Reserva #${item.id_reserva}? Las prendas reservadas volverán al stock disponible.`,
+      )
+    ) {
+      this.update(item.id_reserva, 'CANCELADA');
+    }
   }
+
+  totalEstimated(item: Reservation): number {
+    return item.items.reduce((acc, line) => acc + Number(line.subtotal || 0), 0);
+  }
+
+  isToday(dateStr: string | null): boolean {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const today = new Date();
+    return (
+      d.getDate() === today.getDate() &&
+      d.getMonth() === today.getMonth() &&
+      d.getFullYear() === today.getFullYear()
+    );
+  }
+
+  statusLabel(state: string): string {
+    switch (state) {
+      case 'PENDIENTE':
+        return 'Por confirmar';
+      case 'CONFIRMADA':
+        return 'Confirmada';
+      case 'PREPARANDO':
+        return 'Apartando';
+      case 'LISTA':
+        return 'Lista en probador';
+      case 'CLIENTE_PRESENTE':
+        return 'Cliente en tienda';
+      case 'CONVERTIDA':
+        return 'Venta concretada';
+      case 'CANCELADA':
+        return 'Cancelada';
+      case 'EXPIRADA':
+        return 'Expirada';
+      default:
+        return state;
+    }
+  }
+
+  statusBadgeClass(state: string): string {
+    switch (state) {
+      case 'PENDIENTE':
+        return 'order-badge--pending';
+      case 'CONFIRMADA':
+        return 'order-badge--ready';
+      case 'PREPARANDO':
+        return 'order-badge--preparing';
+      case 'LISTA':
+        return 'order-badge--completed';
+      case 'CLIENTE_PRESENTE':
+        return 'order-badge--ready';
+      case 'CONVERTIDA':
+        return 'order-badge--completed';
+      case 'CANCELADA':
+      case 'EXPIRADA':
+        return 'order-badge--cancelled';
+      default:
+        return 'order-badge--default';
+    }
+  }
+
   update(id: number, state: string): void {
     this.saving.set(true);
     this.commerce
