@@ -183,12 +183,17 @@ class CheckoutCreate(BaseModel):
 class SaleResponse(ORMResponse):
     id_venta: int
     id_cliente: int | None
+    cliente_nombre: str | None = None
+    cliente_correo: str | None = None
+    cliente_telefono: str | None = None
     id_sucursal: int
     sucursal: str
     id_empleado: int | None
+    empleado_nombre: str | None = None
     id_reserva: int | None
     canal_venta: str
     modalidad_entrega: DeliveryMode
+    metodo_pago: str | None = None
     estado: str
     subtotal: Decimal
     costo_envio: Decimal

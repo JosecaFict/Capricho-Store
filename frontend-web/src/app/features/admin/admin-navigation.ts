@@ -58,11 +58,6 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
         permissions: ['proveedores.ver', 'proveedores.gestionar'],
       },
       { label: 'Recepciones', path: '/admin/recepciones', permissions: ['recepcion.registrar'] },
-      {
-        label: 'Historial de compras',
-        path: '/admin/compras-proveedores',
-        permissions: ['proveedores.ver'],
-      },
     ],
   },
   {
@@ -78,6 +73,21 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
       { label: 'Reservas', path: '/admin/reservas', permissions: ['reservas.ver'] },
       { label: 'Clientes', path: '/admin/clientes', permissions: ['ventas.ver'] },
       { label: 'Devoluciones', path: '/admin/devoluciones', permissions: ['ventas.ver'] },
+    ],
+  },
+  {
+    label: 'Historiales',
+    items: [
+      {
+        label: 'Historial de ventas',
+        path: '/admin/historial-ventas',
+        permissions: ['ventas.ver'],
+      },
+      {
+        label: 'Historial de compras',
+        path: '/admin/compras-proveedores',
+        permissions: ['proveedores.ver'],
+      },
     ],
   },
   {

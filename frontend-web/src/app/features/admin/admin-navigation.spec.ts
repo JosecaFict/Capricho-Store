@@ -15,6 +15,7 @@ describe('admin navigation permissions', () => {
       'Pedidos',
       'Clientes',
       'Devoluciones',
+      'Historial de ventas',
     ]);
   });
 

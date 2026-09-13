@@ -176,5 +176,10 @@ export class CommerceService {
       responseType: 'blob',
     });
   }
+  adminSales(params?: Params) {
+    return this.http.get<Sale[]>(`${API_BASE_URL}/sales`, {
+      params: this.params(params),
+    });
+  }
 }
 

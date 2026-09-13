@@ -7,7 +7,8 @@ import { Branch, Product } from '../../core/models/catalog.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
-import { PosSalesAdmin } from './commerce-admin';
+import { Sale } from '../../core/models/commerce.model';
+import { PosSalesAdmin, SalesHistoryAdmin } from './commerce-admin';
 
 const mockBranches: Branch[] = [
   { id_sucursal: 1, nombre: 'Sucursal Central', direccion: 'Av. Principal 100' },
@@ -275,3 +276,185 @@ describe('PosSalesAdmin', () => {
     expect(catalog.products).toHaveBeenCalledWith(expect.objectContaining({ sucursal: 2 }));
   });
 });
+
+const mockSales: Sale[] = [
+  {
+    id_venta: 101,
+    id_cliente: 1,
+    cliente_nombre: 'María López',
+    cliente_correo: 'maria@gmail.com',
+    cliente_telefono: '77123456',
+    id_sucursal: 1,
+    sucursal: 'Sucursal Central',
+    id_empleado: 5,
+    empleado_nombre: 'Carlos Cajero',
+    id_reserva: null,
+    canal_venta: 'PRESENCIAL',
+    modalidad_entrega: 'MOSTRADOR',
+    estado: 'COMPLETADA',
+    subtotal: '200.00',
+    costo_envio: '0.00',
+    total: '200.00',
+    fecha_venta: '2026-09-13T10:30:00Z',
+    metodo_pago: '💵 Efectivo',
+    items: [
+      {
+        id_detalle: 1,
+        id_variante: 101,
+        sku: 'POL-OVR-NEG-M',
+        producto: 'Polera Oversize Basic',
+        color: 'Negro',
+        talla: 'M',
+        cantidad: 1,
+        precio_unitario: '200.00',
+        subtotal: '200.00',
+        stock_disponible: 5,
+        activo: true,
+        imagen_url: null,
+      },
+    ],
+  },
+  {
+    id_venta: 102,
+    id_cliente: 2,
+    cliente_nombre: 'Juan Pérez',
+    cliente_correo: 'juan@gmail.com',
+    cliente_telefono: '70011223',
+    id_sucursal: 2,
+    sucursal: 'Sucursal Equipetrol',
+    id_empleado: null,
+    empleado_nombre: null,
+    id_reserva: null,
+    canal_venta: 'WEB',
+    modalidad_entrega: 'DELIVERY',
+    estado: 'COMPLETADA',
+    subtotal: '300.00',
+    costo_envio: '25.00',
+    total: '325.00',
+    fecha_venta: '2026-09-13T11:45:00Z',
+    metodo_pago: '💳 Tarjeta (Stripe)',
+    items: [
+      {
+        id_detalle: 2,
+        id_variante: 201,
+        sku: 'JEA-BAG-AZU-32',
+        producto: 'Jean Baggy Classic',
+        color: 'Azul',
+        talla: '32',
+        cantidad: 2,
+        precio_unitario: '150.00',
+        subtotal: '300.00',
+        stock_disponible: 3,
+        activo: true,
+        imagen_url: null,
+      },
+    ],
+  },
+];
+
+describe('SalesHistoryAdmin', () => {
+  it('renders sales history, computes KPIs, filters by channel and toggles item review', () => {
+    const adminSignal = signal({
+      id_usuario: 1,
+      nombres: 'Admin',
+      apellidos: 'General',
+      correo: 'admin@capricho.bo',
+      telefono: null,
+      ci: null,
+      estado: 'ACTIVO' as const,
+      created_at: '2026-01-01',
+      roles: ['ADMIN'],
+      permisos: ['ventas.ver', 'ventas.sucursales_todas'],
+      id_sucursal: null,
+      sucursal: null,
+    });
+
+    const catalog = {
+      branches: vi.fn(() => of(mockBranches)),
+    };
+
+    const commerce = {
+      adminSales: vi.fn(() => of(mockSales)),
+      saleInvoice: vi.fn(() => of(new Blob(['dummy pdf'], { type: 'application/pdf' }))),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [SalesHistoryAdmin],
+      providers: [
+        { provide: AuthService, useValue: { currentUser: adminSignal.asReadonly() } },
+        { provide: CatalogService, useValue: catalog },
+        { provide: CommerceService, useValue: commerce },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SalesHistoryAdmin);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const element = fixture.nativeElement as HTMLElement;
+
+    // 1. Initial load verification
+    expect(commerce.adminSales).toHaveBeenCalled();
+    expect(component.sales().length).toBe(2);
+    expect(component.filteredSales().length).toBe(2);
+
+    // 2. KPI metrics calculation
+    const kpis = component.kpis();
+    expect(kpis.totalCount).toBe(2);
+    expect(kpis.totalAmount).toBe(525); // 200 + 325
+    expect(kpis.posCount).toBe(1);
+    expect(kpis.posAmount).toBe(200);
+    expect(kpis.webCount).toBe(1);
+    expect(kpis.webAmount).toBe(325);
+    expect(kpis.avgTicket).toBe(262.5);
+
+    // Counts badge
+    expect(component.counts()).toEqual({
+      todas: 2,
+      presencial: 1,
+      web: 1,
+    });
+
+    // 3. Channel filter: PRESENCIAL
+    component.channelTab.set('PRESENCIAL');
+    expect(component.filteredSales().length).toBe(1);
+    expect(component.filteredSales()[0].id_venta).toBe(101);
+    expect(component.filteredSales()[0].canal_venta).toBe('PRESENCIAL');
+
+    // 4. Channel filter: WEB
+    component.channelTab.set('WEB');
+    expect(component.filteredSales().length).toBe(1);
+    expect(component.filteredSales()[0].id_venta).toBe(102);
+    expect(component.filteredSales()[0].canal_venta).toBe('WEB');
+
+    // Reset to TODAS
+    component.channelTab.set('TODAS');
+
+    // 5. Search filter
+    component.searchQuery.set('María');
+    expect(component.filteredSales().length).toBe(1);
+    expect(component.filteredSales()[0].cliente_nombre).toBe('María López');
+
+    component.searchQuery.set('Stripe');
+    expect(component.filteredSales().length).toBe(1);
+    expect(component.filteredSales()[0].id_venta).toBe(102);
+
+    component.searchQuery.set('');
+
+    // 6. Expand review panel
+    expect(component.isExpanded(101)).toBe(false);
+    component.toggleExpanded(101);
+    expect(component.isExpanded(101)).toBe(true);
+    expect(component.lineUnits(mockSales[0])).toBe(1);
+    expect(component.lineUnits(mockSales[1])).toBe(2);
+
+    // Toggle back
+    component.toggleExpanded(101);
+    expect(component.isExpanded(101)).toBe(false);
+
+    // 7. Invoice download trigger
+    component.downloadInvoice(101);
+    expect(commerce.saleInvoice).toHaveBeenCalledWith(101);
+  });
+});
+

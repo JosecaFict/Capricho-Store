@@ -248,13 +248,35 @@ class CommerceRepository:
             ).all()
         )
 
-    async def sales(self, *, branch_id: int | None = None) -> list[Venta]:
+    async def sales(
+        self,
+        *,
+        branch_id: int | None = None,
+        channel: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> list[Venta]:
         statement = select(Venta)
         if branch_id:
             statement = statement.where(Venta.id_sucursal == branch_id)
+        if channel:
+            statement = statement.where(Venta.canal_venta == channel)
+        if date_from:
+            statement = statement.where(Venta.fecha_venta >= date_from)
+        if date_to:
+            statement = statement.where(Venta.fecha_venta <= date_to)
         return list(
             (await self.session.scalars(statement.order_by(Venta.fecha_venta.desc()))).all()
         )
+
+    async def sale_payment(self, sale_id: int) -> tuple[Pago, MetodoPago] | None:
+        statement = (
+            select(Pago, MetodoPago)
+            .join(MetodoPago, MetodoPago.id_metodo_pago == Pago.id_metodo_pago)
+            .where(Pago.id_venta == sale_id)
+            .order_by(Pago.fecha_creacion.desc())
+        )
+        return (await self.session.execute(statement)).first()
 
     async def customer_orders(self, customer_id: int) -> list[Pedido]:
         statement = (

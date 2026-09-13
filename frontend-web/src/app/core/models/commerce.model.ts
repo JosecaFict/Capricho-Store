@@ -62,9 +62,11 @@ export interface Sale {
   cliente_correo?: string | null;
   cliente_telefono?: string | null;
   id_empleado: number | null;
+  empleado_nombre?: string | null;
   id_reserva: number | null;
   canal_venta: string;
   modalidad_entrega: string;
+  metodo_pago?: string | null;
   estado: string;
   subtotal: string;
   costo_envio: string;

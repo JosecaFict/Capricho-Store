@@ -1167,15 +1167,52 @@ class CommerceService:
         for response, detail in zip(items, details, strict=True):
             response.precio_unitario = detail.precio_unitario
             response.subtotal = detail.subtotal
+
+        cliente_nombre = None
+        cliente_correo = None
+        cliente_telefono = None
+        if sale.id_cliente:
+            customer = await self.repository.get(Cliente, sale.id_cliente)
+            if customer:
+                user = await self.repository.get(Usuario, customer.id_usuario)
+                if user:
+                    cliente_nombre = f"{user.nombres} {user.apellidos or ''}".strip()
+                    cliente_correo = (
+                        user.correo if not user.correo.endswith("@pos.caprichostore.com") else None
+                    )
+                    cliente_telefono = user.telefono
+
+        empleado_nombre = None
+        if sale.id_empleado:
+            employee = await self.repository.get(Empleado, sale.id_empleado)
+            if employee:
+                user = await self.repository.get(Usuario, employee.id_usuario)
+                if user:
+                    empleado_nombre = f"{user.nombres} {user.apellidos or ''}".strip()
+
+        metodo_pago = None
+        try:
+            payment_row = await self.repository.sale_payment(sale.id_venta)
+            if payment_row and isinstance(payment_row, (tuple, list)) and len(payment_row) >= 2:
+                _pago, metodo = payment_row
+                metodo_pago = getattr(metodo, "nombre", None) or getattr(metodo, "codigo", None)
+        except Exception:
+            metodo_pago = None
+
         return SaleResponse(
             id_venta=sale.id_venta,
             id_cliente=sale.id_cliente,
+            cliente_nombre=cliente_nombre,
+            cliente_correo=cliente_correo,
+            cliente_telefono=cliente_telefono,
             id_sucursal=sale.id_sucursal,
             sucursal=branch.nombre,
             id_empleado=sale.id_empleado,
+            empleado_nombre=empleado_nombre,
             id_reserva=sale.id_reserva,
             canal_venta=sale.canal_venta,
             modalidad_entrega=sale.modalidad_entrega,
+            metodo_pago=metodo_pago,
             estado=sale.estado,
             subtotal=sale.subtotal,
             costo_envio=sale.costo_envio,
@@ -1185,13 +1222,25 @@ class CommerceService:
         )
 
     async def list_sales(
-        self, user_id: int, *, branch_id: int | None = None, all_branches: bool = False
+        self,
+        user_id: int,
+        *,
+        branch_id: int | None = None,
+        all_branches: bool = False,
+        channel: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
     ) -> list[SaleResponse]:
         if not all_branches:
             branch_id = (await self._employee(user_id)).id_sucursal
         return [
             await self._sale_response(item)
-            for item in await self.repository.sales(branch_id=branch_id)
+            for item in await self.repository.sales(
+                branch_id=branch_id,
+                channel=channel,
+                date_from=date_from,
+                date_to=date_to,
+            )
         ]
 
     async def list_customer_sales(self, user_id: int) -> list[SaleResponse]:

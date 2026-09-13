@@ -182,6 +182,12 @@ export const routes: Routes = [
           import('./features/admin/commerce-admin').then((m) => m.SupplierHistoryAdmin),
       },
       {
+        path: 'historial-ventas',
+        canActivate: [requireAnyPermission('ventas.ver')],
+        loadComponent: () =>
+          import('./features/admin/commerce-admin').then((m) => m.SalesHistoryAdmin),
+      },
+      {
         path: 'ventas',
         canActivate: [requireAllPermissions('ventas.crear', 'pagos.registrar')],
         loadComponent: () => import('./features/admin/commerce-admin').then((m) => m.PosSalesAdmin),

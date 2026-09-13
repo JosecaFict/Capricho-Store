@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
@@ -2620,5 +2620,537 @@ export class SupplierHistoryAdmin {
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos cargar el historial.')),
       });
+  }
+}
+
+@Component({
+  selector: 'app-sales-history-admin',
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, DatePipe, BolivianosPipe, StatusPanel],
+  template: `
+    <section class="admin-page sales-history-page">
+      <header class="admin-page-heading">
+        <div>
+          <p class="eyebrow">Historiales</p>
+          <h1>Historial de ventas</h1>
+          <p>Registro consolidado de ventas en mostrador (POS) y ventas de la tienda online (Stripe).</p>
+        </div>
+        <div class="sales-history-top-actions">
+          <button type="button" class="button button--quiet" (click)="loadSales()">
+            🔄 Actualizar
+          </button>
+        </div>
+      </header>
+
+      @if (error()) {
+        <div class="admin-notice admin-notice--error" role="alert">
+          <span>{{ error() }}</span>
+          <button type="button" class="pos-notice-close" (click)="error.set('')" aria-label="Cerrar">✕</button>
+        </div>
+      }
+
+      <!-- KPIs de Resumen -->
+      <div class="sales-kpi-grid">
+        <div class="sales-kpi-card sales-kpi-card--total">
+          <div class="kpi-icon">💰</div>
+          <div class="kpi-info">
+            <span class="kpi-label">Total facturado</span>
+            <strong class="kpi-value">{{ kpis().totalAmount | bolivianos }}</strong>
+            <small class="kpi-sub">{{ kpis().totalCount }} ventas realizadas</small>
+          </div>
+        </div>
+
+        <div class="sales-kpi-card sales-kpi-card--pos">
+          <div class="kpi-icon">🏢</div>
+          <div class="kpi-info">
+            <span class="kpi-label">Ventas presenciales (POS)</span>
+            <strong class="kpi-value">{{ kpis().posAmount | bolivianos }}</strong>
+            <small class="kpi-sub">{{ kpis().posCount }} transacciones en mostrador</small>
+          </div>
+        </div>
+
+        <div class="sales-kpi-card sales-kpi-card--web">
+          <div class="kpi-icon">🌐</div>
+          <div class="kpi-info">
+            <span class="kpi-label">Ventas online (Web)</span>
+            <strong class="kpi-value">{{ kpis().webAmount | bolivianos }}</strong>
+            <small class="kpi-sub">{{ kpis().webCount }} pedidos Stripe</small>
+          </div>
+        </div>
+
+        <div class="sales-kpi-card sales-kpi-card--avg">
+          <div class="kpi-icon">📊</div>
+          <div class="kpi-info">
+            <span class="kpi-label">Ticket promedio</span>
+            <strong class="kpi-value">{{ kpis().avgTicket | bolivianos }}</strong>
+            <small class="kpi-sub">Por venta concretada</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros -->
+      <div class="sales-filterbar">
+        <div class="sales-tabs" role="tablist">
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="channelTab() === 'TODAS'"
+            (click)="channelTab.set('TODAS')"
+          >
+            Todas <span class="sales-tab-badge">{{ counts().todas }}</span>
+          </button>
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="channelTab() === 'PRESENCIAL'"
+            (click)="channelTab.set('PRESENCIAL')"
+          >
+            🏢 Presencial <span class="sales-tab-badge">{{ counts().presencial }}</span>
+          </button>
+          <button
+            type="button"
+            class="sales-tab"
+            [class.sales-tab--active]="channelTab() === 'WEB'"
+            (click)="channelTab.set('WEB')"
+          >
+            🌐 Web <span class="sales-tab-badge">{{ counts().web }}</span>
+          </button>
+        </div>
+
+        <div class="sales-filter-controls">
+          @if (canSelectBranch()) {
+            <label class="field sales-field-compact">
+              <span>Sucursal</span>
+              <select [value]="selectedBranchId() ?? ''" (change)="onBranchChange($any($event.target).value)">
+                <option value="">Todas las sucursales</option>
+                @for (branch of branches(); track branch.id_sucursal) {
+                  <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          <div class="sales-date-presets">
+            <button
+              type="button"
+              class="date-preset-btn"
+              [class.date-preset-btn--active]="datePreset() === 'TODOS'"
+              (click)="datePreset.set('TODOS')"
+            >
+              Todo
+            </button>
+            <button
+              type="button"
+              class="date-preset-btn"
+              [class.date-preset-btn--active]="datePreset() === 'HOY'"
+              (click)="datePreset.set('HOY')"
+            >
+              Hoy
+            </button>
+            <button
+              type="button"
+              class="date-preset-btn"
+              [class.date-preset-btn--active]="datePreset() === 'SEMANA'"
+              (click)="datePreset.set('SEMANA')"
+            >
+              Esta semana
+            </button>
+            <button
+              type="button"
+              class="date-preset-btn"
+              [class.date-preset-btn--active]="datePreset() === 'MES'"
+              (click)="datePreset.set('MES')"
+            >
+              Este mes
+            </button>
+          </div>
+
+          <div class="sales-search-box">
+            <span>🔍</span>
+            <input
+              type="text"
+              placeholder="Buscar venta #, cliente, CI, cajero..."
+              [value]="searchQuery()"
+              (input)="searchQuery.set($any($event.target).value)"
+            />
+            @if (searchQuery()) {
+              <button type="button" class="sales-search-clear" (click)="searchQuery.set('')">✕</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="admin-skeleton-table"><span></span><span></span></div>
+      } @else if (filteredSales().length === 0) {
+        <app-status-panel
+          title="Sin ventas encontradas"
+          message="No existen ventas registradas que coincidan con los filtros o búsqueda seleccionados."
+        />
+      } @else {
+        <div class="admin-table-wrap sales-table-wrap">
+          <table class="sales-table">
+            <thead>
+              <tr>
+                <th>Venta / Fecha</th>
+                <th>Canal & Entrega</th>
+                <th>Cliente / Facturado a</th>
+                <th>Sucursal & Atendido por</th>
+                <th class="num-col">Prendas</th>
+                <th>Método de pago</th>
+                <th class="num-col">Total</th>
+                <th class="actions-col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (sale of filteredSales(); track sale.id_venta) {
+                <tr class="sale-row" [class.sale-row--expanded]="isExpanded(sale.id_venta)">
+                  <td>
+                    <div class="sale-ident-cell">
+                      <strong class="sale-num-badge">#{{ sale.id_venta }}</strong>
+                      <small class="sale-date-text">{{ sale.fecha_venta | date: 'medium' }}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="sale-channel-cell">
+                      <span
+                        class="sale-channel-chip"
+                        [class.sale-channel-chip--pos]="sale.canal_venta === 'PRESENCIAL'"
+                        [class.sale-channel-chip--web]="sale.canal_venta !== 'PRESENCIAL'"
+                      >
+                        @if (sale.canal_venta === 'PRESENCIAL') {
+                          🏢 Presencial
+                        } @else {
+                          🌐 Web (Online)
+                        }
+                      </span>
+                      <small class="sale-mode-sub">
+                        {{ formatDeliveryMode(sale.modalidad_entrega) }}
+                      </small>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="sale-customer-cell">
+                      <strong class="sale-customer-name">
+                        {{ sale.cliente_nombre || 'Consumidor Final' }}
+                      </strong>
+                      @if (sale.cliente_correo || sale.cliente_telefono) {
+                        <small class="sale-customer-sub">
+                          {{ sale.cliente_correo || sale.cliente_telefono }}
+                        </small>
+                      }
+                    </div>
+                  </td>
+                  <td>
+                    <div class="sale-branch-cell">
+                      <span class="sale-branch-name">{{ sale.sucursal }}</span>
+                      <small class="sale-cashier-text">
+                        {{ sale.empleado_nombre ? 'Por: ' + sale.empleado_nombre : (sale.canal_venta === 'PRESENCIAL' ? 'Cajero' : 'Tienda Online (Stripe)') }}
+                      </small>
+                    </div>
+                  </td>
+                  <td class="num-col">
+                    <span class="sale-items-count">{{ lineUnits(sale) }}</span>
+                  </td>
+                  <td>
+                    <span class="sale-payment-method">{{ formatPaymentMethod(sale) }}</span>
+                  </td>
+                  <td class="num-col">
+                    <strong class="sale-total-amount">{{ sale.total | bolivianos }}</strong>
+                  </td>
+                  <td class="actions-col">
+                    <div class="sale-actions-wrap">
+                      <button
+                        type="button"
+                        class="button--review"
+                        [class.button--review-active]="isExpanded(sale.id_venta)"
+                        (click)="toggleExpanded(sale.id_venta)"
+                      >
+                        @if (isExpanded(sale.id_venta)) {
+                          ▲ Ocultar
+                        } @else {
+                          ▼ Revisar
+                        }
+                      </button>
+                      <button
+                        type="button"
+                        class="button button--quiet button--invoice"
+                        (click)="downloadInvoice(sale.id_venta)"
+                        title="Descargar o imprimir Factura PDF"
+                      >
+                        📄 Factura
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                @if (isExpanded(sale.id_venta)) {
+                  <tr class="sale-expanded-row">
+                    <td colspan="8">
+                      <div class="sale-detail-panel">
+                        <header class="sale-detail-header">
+                          <div class="sale-detail-title">
+                            <span class="detail-icon">🧾</span>
+                            <div>
+                              <h4>Detalle de Venta #{{ sale.id_venta }}</h4>
+                              <p>Prendas adquiridas, precios unitarios y desglose contable de la transacción.</p>
+                            </div>
+                          </div>
+                          <div class="sale-detail-actions">
+                            <button
+                              type="button"
+                              class="button button--primary button--small"
+                              (click)="downloadInvoice(sale.id_venta)"
+                            >
+                              🖨️ Imprimir / Descargar Factura PDF
+                            </button>
+                          </div>
+                        </header>
+
+                        <div class="sale-items-table-wrap">
+                          <table class="sale-items-table">
+                            <thead>
+                              <tr>
+                                <th>Producto</th>
+                                <th>Color</th>
+                                <th>Talla</th>
+                                <th class="num-col">Cantidad</th>
+                                <th class="num-col">Precio Unitario</th>
+                                <th class="num-col">Subtotal</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (line of sale.items; track line.id_detalle) {
+                                <tr>
+                                  <td>
+                                    <strong class="line-prod-title">{{ line.producto }}</strong>
+                                  </td>
+                                  <td>{{ line.color }}</td>
+                                  <td><span class="line-size-badge">{{ line.talla }}</span></td>
+                                  <td class="num-col">{{ line.cantidad }}</td>
+                                  <td class="num-col">{{ line.precio_unitario | bolivianos }}</td>
+                                  <td class="num-col"><strong>{{ line.subtotal | bolivianos }}</strong></td>
+                                </tr>
+                              }
+                            </tbody>
+                            <tfoot>
+                              <tr>
+                                <td colspan="4"></td>
+                                <td class="num-col">Subtotal prendas:</td>
+                                <td class="num-col">{{ sale.subtotal | bolivianos }}</td>
+                              </tr>
+                              @if (parseAmount(sale.costo_envio) > 0) {
+                                <tr>
+                                  <td colspan="4"></td>
+                                  <td class="num-col">Costo de envío:</td>
+                                  <td class="num-col">+ {{ sale.costo_envio | bolivianos }}</td>
+                                </tr>
+                              }
+                              <tr class="total-row">
+                                <td colspan="4"></td>
+                                <td class="num-col"><strong>Total Cobrado:</strong></td>
+                                <td class="num-col"><strong>{{ sale.total | bolivianos }}</strong></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  `,
+})
+export class SalesHistoryAdmin {
+  private readonly commerce = inject(CommerceService);
+  private readonly catalog = inject(CatalogService);
+  private readonly auth = inject(AuthService);
+  private readonly errors = inject(ApiErrorService);
+
+  readonly sales = signal<Sale[]>([]);
+  readonly branches = signal<Branch[]>([]);
+  readonly loading = signal(true);
+  readonly error = signal('');
+
+  readonly channelTab = signal<'TODAS' | 'PRESENCIAL' | 'WEB'>('TODAS');
+  readonly selectedBranchId = signal<number | null>(null);
+  readonly datePreset = signal<'TODOS' | 'HOY' | 'SEMANA' | 'MES'>('TODOS');
+  readonly searchQuery = signal('');
+  readonly expandedSaleId = signal<number | null>(null);
+
+  readonly currentUser = this.auth.currentUser;
+
+  readonly canSelectBranch = computed(() => {
+    const u = this.currentUser();
+    if (!u) return false;
+    return u.roles.includes('ADMIN') || !u.id_sucursal;
+  });
+
+  readonly counts = computed(() => {
+    const all = this.sales();
+    return {
+      todas: all.length,
+      presencial: all.filter((s) => s.canal_venta === 'PRESENCIAL').length,
+      web: all.filter((s) => s.canal_venta !== 'PRESENCIAL').length,
+    };
+  });
+
+  readonly filteredSales = computed(() => {
+    let result = this.sales();
+    const tab = this.channelTab();
+    if (tab === 'PRESENCIAL') {
+      result = result.filter((s) => s.canal_venta === 'PRESENCIAL');
+    } else if (tab === 'WEB') {
+      result = result.filter((s) => s.canal_venta !== 'PRESENCIAL');
+    }
+
+    const branchId = this.selectedBranchId();
+    if (branchId) {
+      result = result.filter((s) => s.id_sucursal === branchId);
+    }
+
+    const preset = this.datePreset();
+    if (preset !== 'TODOS') {
+      const now = new Date();
+      if (preset === 'HOY') {
+        const todayStr = now.toISOString().slice(0, 10);
+        result = result.filter((s) => s.fecha_venta?.slice(0, 10) === todayStr);
+      } else if (preset === 'SEMANA') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        result = result.filter((s) => new Date(s.fecha_venta) >= weekAgo);
+      } else if (preset === 'MES') {
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        result = result.filter((s) => new Date(s.fecha_venta) >= monthAgo);
+      }
+    }
+
+    const query = this.searchQuery().trim().toLowerCase();
+    if (query) {
+      result = result.filter((s) => {
+        const idMatch = String(s.id_venta).includes(query) || `#${s.id_venta}`.includes(query);
+        const customerMatch =
+          (s.cliente_nombre || '').toLowerCase().includes(query) ||
+          (s.cliente_correo || '').toLowerCase().includes(query) ||
+          (s.cliente_telefono || '').toLowerCase().includes(query);
+        const branchMatch = (s.sucursal || '').toLowerCase().includes(query);
+        const employeeMatch = (s.empleado_nombre || '').toLowerCase().includes(query);
+        const methodMatch = (s.metodo_pago || '').toLowerCase().includes(query);
+        return idMatch || customerMatch || branchMatch || employeeMatch || methodMatch;
+      });
+    }
+
+    return result;
+  });
+
+  readonly kpis = computed(() => {
+    const list = this.filteredSales();
+    const totalAmount = list.reduce((sum, s) => sum + Number(s.total || 0), 0);
+    const totalCount = list.length;
+
+    const posList = list.filter((s) => s.canal_venta === 'PRESENCIAL');
+    const posCount = posList.length;
+    const posAmount = posList.reduce((sum, s) => sum + Number(s.total || 0), 0);
+
+    const webList = list.filter((s) => s.canal_venta !== 'PRESENCIAL');
+    const webCount = webList.length;
+    const webAmount = webList.reduce((sum, s) => sum + Number(s.total || 0), 0);
+
+    const avgTicket = totalCount > 0 ? totalAmount / totalCount : 0;
+
+    return {
+      totalAmount,
+      totalCount,
+      posCount,
+      posAmount,
+      webCount,
+      webAmount,
+      avgTicket,
+    };
+  });
+
+  constructor() {
+    this.loadBranches();
+    this.loadSales();
+  }
+
+  loadBranches(): void {
+    this.catalog.branches().subscribe({
+      next: (b) => this.branches.set(b),
+      error: () => {},
+    });
+  }
+
+  loadSales(): void {
+    this.loading.set(true);
+    this.commerce
+      .adminSales()
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe({
+        next: (data) => this.sales.set(data),
+        error: (err) =>
+          this.error.set(this.errors.message(err, 'No se pudo cargar el historial de ventas.')),
+      });
+  }
+
+  onBranchChange(val: string): void {
+    this.selectedBranchId.set(val ? Number(val) : null);
+  }
+
+  toggleExpanded(saleId: number): void {
+    this.expandedSaleId.set(this.expandedSaleId() === saleId ? null : saleId);
+  }
+
+  isExpanded(saleId: number): boolean {
+    return this.expandedSaleId() === saleId;
+  }
+
+  lineUnits(sale: Sale): number {
+    return (sale.items ?? []).reduce((acc, item) => acc + (item.cantidad || 0), 0);
+  }
+
+  formatDeliveryMode(mode: string): string {
+    switch (mode) {
+      case 'MOSTRADOR':
+        return 'Venta en mostrador';
+      case 'DELIVERY':
+        return 'Envío por delivery';
+      case 'RETIRO_SUCURSAL':
+        return 'Retiro en sucursal';
+      default:
+        return mode;
+    }
+  }
+
+  formatPaymentMethod(sale: Sale): string {
+    if (sale.metodo_pago) {
+      return sale.metodo_pago;
+    }
+    return sale.canal_venta === 'PRESENCIAL' ? '💵 Efectivo' : '💳 Tarjeta (Stripe)';
+  }
+
+  parseAmount(val: string | number | null | undefined): number {
+    return Number(val || 0);
+  }
+
+  downloadInvoice(saleId: number): void {
+    this.commerce.saleInvoice(saleId).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.download = `Factura_Venta_${saleId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      },
+      error: (err) =>
+        this.error.set(this.errors.message(err, 'No se pudo descargar la factura.')),
+    });
   }
 }

@@ -164,11 +164,17 @@ async def list_sales(
     principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
     service: Service,
     sucursal: int | None = Query(default=None, gt=0),
+    canal: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
 ):
     return await service.list_sales(
         principal.user.id_usuario,
         branch_id=sucursal,
         all_branches="ADMIN" in principal.roles,
+        channel=canal,
+        date_from=(datetime.combine(fecha_desde, time.min, tzinfo=UTC) if fecha_desde else None),
+        date_to=(datetime.combine(fecha_hasta, time.max, tzinfo=UTC) if fecha_hasta else None),
     )
 
 
