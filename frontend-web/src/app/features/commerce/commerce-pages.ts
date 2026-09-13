@@ -210,6 +210,9 @@ export class CartPage {
             '. Enviamos el comprobante oficial de Stripe directamente a tu correo electrónico y puedes seguir el pedido desde tu cuenta.'
           "
         />
+        <p class="stripe-checkout-note" style="text-align: center; margin-top: 0.75rem; font-weight: 500;">
+          ¿Realizaste esta compra desde la app móvil? Ya puedes cerrar esta ventana y regresar a la aplicación.
+        </p>
         <div class="commerce-empty-action" style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
           @if (order.receipt_url) {
             <a

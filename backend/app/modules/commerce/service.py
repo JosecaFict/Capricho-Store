@@ -1058,21 +1058,24 @@ class CommerceService:
             receipt_url=receipt_url,
         )
 
-    async def _reconcile_pending_stripe_orders(self, customer_id: int) -> None:
+    async def _reconcile_pending_stripe_orders(self, customer_id: int | None = None) -> None:
         if self.stripe_gateway is None:
             return
-        session_ids = await self.repository.customer_pending_stripe_sessions(customer_id)
-        for sid in session_ids:
-            try:
-                remote = await self.stripe_gateway.retrieve_session(
-                    sid, expand=["payment_intent.latest_charge"]
-                )
-                if remote.get("payment_status") == "paid":
-                    await self._complete_stripe_checkout(remote)
-                elif remote.get("status") == "expired":
-                    await self._cancel_stripe_checkout(sid)
-            except Exception:
-                continue
+        try:
+            session_ids = await self.repository.pending_stripe_sessions(customer_id)
+            for sid in session_ids:
+                try:
+                    remote = await self.stripe_gateway.retrieve_session(
+                        sid, expand=["payment_intent.latest_charge"]
+                    )
+                    if remote.get("payment_status") == "paid":
+                        await self._complete_stripe_checkout(remote)
+                    elif remote.get("status") == "expired":
+                        await self._cancel_stripe_checkout(sid)
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
     async def cancel_stripe_checkout(self, user_id: int, session_id: str) -> None:
         if self.stripe_gateway is None:
@@ -1227,6 +1230,7 @@ class CommerceService:
         all_branches: bool = False,
     ) -> list[OrderResponse]:
         if operational:
+            await self._reconcile_pending_stripe_orders()
             if not all_branches:
                 branch_id = (await self._employee(user_id)).id_sucursal
             rows = await self.repository.orders(state=state, branch_id=branch_id)
