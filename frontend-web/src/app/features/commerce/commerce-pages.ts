@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
@@ -20,6 +20,19 @@ import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
 import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
+
+export function formatBranchName(rawName?: string | null, id?: number | null): string {
+  if (!rawName) return id ? `Sucursal #${id}` : 'Sucursal asignada';
+  let name = rawName.trim();
+  name = name.replace(/^capricho\s+store\s*[-–]?\s*/i, '');
+  if (name === name.toUpperCase()) {
+    name = name
+      .split(' ')
+      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ''))
+      .join(' ');
+  }
+  return `Capricho Store – ${name}`;
+}
 
 @Component({
   selector: 'app-cart-page',
@@ -64,7 +77,7 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
       } @else if (cart(); as current) {
         @if (current.sucursal) {
           <div class="notice notice--info" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-            <span>Prendas preparadas en: <strong>Capricho Store {{ current.sucursal }}</strong></span>
+            <span>Prendas preparadas en: <strong>{{ formatBranchName(current.sucursal, current.id_sucursal) }}</strong></span>
             <button class="text-button" type="button" [disabled]="saving()" (click)="clear()">Vaciar carrito</button>
           </div>
         }
@@ -143,6 +156,7 @@ export class CartPage {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
+  readonly formatBranchName = formatBranchName;
 
   constructor() {
     this.load();
@@ -547,110 +561,212 @@ export class CheckoutPage {
 
 @Component({
   selector: 'app-reservations-page',
-  imports: [ReactiveFormsModule, DatePipe, RouterLink, StatusPanel],
+  imports: [ReactiveFormsModule, DatePipe, RouterLink, StatusPanel, BolivianosPipe],
   template: `
     <section class="commerce-page page-shell">
       <header class="commerce-heading">
         <div>
           <h1>Reservas</h1>
-          <p>Aparta las prendas de tu carrito para probarlas en una sucursal.</p>
+          <p>Aparta las prendas de tu carrito para visitarnos y probártelas en tienda.</p>
         </div>
       </header>
       @if (error()) {
         <p class="notice notice--error" role="alert">{{ error() }}</p>
       }
       @if (cart()?.items?.length) {
-        <form class="reservation-create" [formGroup]="form" (ngSubmit)="create()">
-          <div>
-            <h2>Nueva reserva</h2>
-            <p>{{ cart()!.items.length }} variantes serán apartadas sin pago.</p>
-          </div>
-          @if (cart()?.id_sucursal) {
-            <div class="field">
-              <span>Sucursal</span>
-              <input
-                type="text"
-                [value]="cart()?.sucursal ? ('Capricho Store ' + cart()?.sucursal) : ('Sucursal #' + cart()?.id_sucursal)"
-                readonly
-                disabled
-              />
-              <small>Fijada según las prendas en tu carrito.</small>
+        <div class="reservation-workspace">
+          <!-- Left Column: Booking Form Card -->
+          <div class="reservation-form-card">
+            <div class="reservation-card-header">
+              <span class="reservation-badge">Apartado sin pago</span>
+              <h2>Nueva reserva</h2>
+              <p>Programa tu visita para apartar las prendas y probártelas en tienda.</p>
             </div>
-          } @else {
-            <label class="field"
-              ><span>Sucursal</span
-              ><select formControlName="id_sucursal">
-                <option value="">Selecciona</option>
-                @for (branch of branches(); track branch.id_sucursal) {
-                  <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
-                }
-              </select></label
-            >
-          }
-          <label class="field"
-            ><span>Fecha y hora de prueba</span
-            ><input type="datetime-local" formControlName="fecha_cita"
-          /></label>
-          <button
-            class="button button--primary"
-            type="submit"
-            [disabled]="saving() || form.invalid"
-          >
-            {{ saving() ? 'Reservando…' : 'Confirmar reserva' }}
-          </button>
-        </form>
+
+            <form class="reservation-fields" [formGroup]="form" (ngSubmit)="create()">
+              @if (cart()?.id_sucursal) {
+                <div class="reservation-branch-box">
+                  <div class="branch-box-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                      <polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                  </div>
+                  <div class="branch-box-content">
+                    <span class="branch-box-label">Sucursal asignada</span>
+                    <strong class="branch-box-name">{{ formatBranchName(cart()?.sucursal, cart()?.id_sucursal) }}</strong>
+                    @if (selectedBranch()?.direccion) {
+                      <span class="branch-box-address">{{ selectedBranch()?.direccion }}</span>
+                    }
+                    <span class="branch-box-hint">Fijada según el stock de las prendas en tu carrito.</span>
+                  </div>
+                </div>
+              } @else {
+                <label class="field">
+                  <span>Sucursal</span>
+                  <select formControlName="id_sucursal">
+                    <option value="">Selecciona una sucursal</option>
+                    @for (branch of branches(); track branch.id_sucursal) {
+                      <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
+                    }
+                  </select>
+                </label>
+              }
+
+              <label class="field">
+                <span class="field-title-with-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  Fecha y hora de visita
+                </span>
+                <input
+                  type="datetime-local"
+                  formControlName="fecha_cita"
+                  [min]="minDateTime"
+                  class="reservation-date-input"
+                />
+                <small class="field-help">Selecciona el día y horario en que pasarás por la tienda.</small>
+              </label>
+
+              <div class="reservation-policy-note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <span>Tus prendas se apartarán por 48 horas tras la fecha de tu visita. No necesitas pagar nada por adelantado.</span>
+              </div>
+
+              <button
+                class="button button--primary reservation-submit-btn"
+                type="submit"
+                [disabled]="saving() || form.invalid"
+              >
+                {{ saving() ? 'Apartando prendas…' : 'Confirmar reserva' }}
+              </button>
+            </form>
+          </div>
+
+          <!-- Right Column: Reserved Items Preview Summary -->
+          <aside class="reservation-summary-card">
+            <div class="summary-card-header">
+              <h3>Prendas a reservar</h3>
+              <span class="items-count-chip">
+                {{ cart()!.items.length }} {{ cart()!.items.length === 1 ? 'variante' : 'variantes' }}
+              </span>
+            </div>
+
+            <div class="reservation-items-list">
+              @for (item of cart()!.items; track item.id_detalle) {
+                <div class="reservation-item-row">
+                  <img
+                    [src]="item.imagen_url || '/images/catalogo-prendas-oficiales.jpg'"
+                    [alt]="item.producto"
+                    class="reservation-item-thumb"
+                  />
+                  <div class="reservation-item-info">
+                    <h4>{{ item.producto }}</h4>
+                    <div class="item-variants-tags">
+                      <span class="tag-variant">Talla {{ item.talla }}</span>
+                      <span class="tag-variant">{{ item.color }}</span>
+                      <span class="tag-qty">Cant: {{ item.cantidad }}</span>
+                    </div>
+                    <span class="item-price">{{ item.subtotal | bolivianos }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <div class="summary-card-footer">
+              <div class="summary-total-row">
+                <span>Total prendas</span>
+                <strong>{{ cart()!.total | bolivianos }}</strong>
+              </div>
+              <p class="summary-disclaimer">Pago presencial al momento de retirar en sucursal.</p>
+            </div>
+          </aside>
+        </div>
       } @else if (!loading()) {
         <p class="notice notice--warning">
-          Tu carrito está vacío. <a routerLink="/catalogo">Elige prendas del catálogo</a>.
+          Tu carrito está vacío. <a routerLink="/catalogo">Elige prendas del catálogo</a> para reservar.
         </p>
       }
+
       <section class="history-section">
-        <h2>Tus reservas</h2>
+        <div class="section-title-bar">
+          <h2>Tus reservas</h2>
+          @if (reservations().length) {
+            <span class="badge">{{ reservations().length }}</span>
+          }
+        </div>
         @if (loading()) {
           <div class="commerce-skeleton"><span></span></div>
         } @else if (!reservations().length) {
           <app-status-panel
             title="Aún no tienes reservas"
-            message="Cuando apartes prendas, podrás seguir su preparación aquí."
+            message="Cuando apartes prendas, podrás consultar su preparación y horario de visita aquí."
           />
         } @else {
-          <div class="record-list">
+          <div class="reservations-grid">
             @for (reservation of reservations(); track reservation.id_reserva) {
-              <article>
-                <header>
+              <article class="reservation-card">
+                <header class="reservation-card__header">
                   <div>
-                    <h3>Reserva #{{ reservation.id_reserva }}</h3>
-                    <p>
-                      {{ reservation.sucursal }} / {{ reservation.fecha_reserva | date: 'medium' }}
+                    <span class="res-num-tag">Reserva #{{ reservation.id_reserva }}</span>
+                    <p class="res-branch">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                      </svg>
+                      {{ formatBranchName(reservation.sucursal, reservation.id_sucursal) }}
                     </p>
                   </div>
                   <span class="status-chip">{{ reservation.estado }}</span>
                 </header>
-                <p>
-                  Prueba:
-                  {{
-                    reservation.fecha_cita
-                      ? (reservation.fecha_cita | date: 'medium')
-                      : 'Sin horario solicitado'
-                  }}
-                </p>
-                <ul>
-                  @for (item of reservation.items; track item.id_detalle) {
-                    <li>
-                      {{ item.producto }} / {{ item.color }} / {{ item.talla }} ×
-                      {{ item.cantidad }}
-                    </li>
+
+                <div class="reservation-card__body">
+                  <div class="res-appointment-info">
+                    <span class="label">Cita programada:</span>
+                    <strong class="value">
+                      {{
+                        reservation.fecha_cita
+                          ? (reservation.fecha_cita | date: 'dd/MM/yyyy HH:mm')
+                          : 'Sin horario registrado'
+                      }}
+                    </strong>
+                  </div>
+                  @if (reservation.direccion_sucursal) {
+                    <div class="res-address-info">
+                      <span class="label">Ubicación:</span>
+                      <span>{{ reservation.direccion_sucursal }}</span>
+                    </div>
                   }
-                </ul>
+                  <div class="res-items-summary">
+                    <span class="label">Prendas reservadas:</span>
+                    <ul class="res-items-chips">
+                      @for (item of reservation.items; track item.id_detalle) {
+                        <li>
+                          {{ item.producto }} ({{ item.color }}, {{ item.talla }}) × {{ item.cantidad }}
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                </div>
+
                 @if (canCancel(reservation)) {
-                  <button
-                    class="button button--quiet"
-                    type="button"
-                    [disabled]="saving()"
-                    (click)="cancel(reservation.id_reserva)"
-                  >
-                    Cancelar reserva
-                  </button>
+                  <footer class="reservation-card__footer">
+                    <button
+                      class="button button--quiet res-cancel-btn"
+                      type="button"
+                      [disabled]="saving()"
+                      (click)="cancel(reservation.id_reserva)"
+                    >
+                      Cancelar reserva
+                    </button>
+                  </footer>
                 }
               </article>
             }
@@ -671,6 +787,20 @@ export class ReservationsPage {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
+  readonly formatBranchName = formatBranchName;
+
+  readonly selectedBranch = computed(() => {
+    const branchId = this.cart()?.id_sucursal;
+    if (!branchId) return null;
+    return this.branches().find((b) => b.id_sucursal === branchId) ?? null;
+  });
+
+  get minDateTime(): string {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  }
+
   readonly form = this.fb.nonNullable.group({
     id_sucursal: ['', Validators.required],
     fecha_cita: ['', Validators.required],
