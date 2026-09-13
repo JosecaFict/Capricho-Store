@@ -7,6 +7,7 @@ import 'package:capricho_store/shared/widgets/adaptive/adaptive_image.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 final orderDetailProvider =
@@ -26,6 +27,17 @@ class OrderDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          tooltip: 'Volver',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/pedidos');
+            }
+          },
+        ),
         title: Text('Pedido #$orderId'),
         shape: const Border(
           bottom: BorderSide(color: AppColors.line, width: 1),

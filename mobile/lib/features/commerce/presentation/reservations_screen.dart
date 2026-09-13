@@ -20,6 +20,17 @@ class ReservationsScreen extends ConsumerWidget {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            tooltip: 'Volver',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/cuenta');
+              }
+            },
+          ),
           title: const Text('Mis Reservas de Prendas'),
           shape: const Border(
             bottom: BorderSide(color: AppColors.line, width: 1),

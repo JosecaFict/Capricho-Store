@@ -16,11 +16,27 @@ class OrdersScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          tooltip: 'Volver',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/inicio');
+            }
+          },
+        ),
         title: const Text('Mis Pedidos'),
         shape: const Border(
           bottom: BorderSide(color: AppColors.line, width: 1),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Ir a Inicio',
+            icon: const Icon(Icons.home_outlined),
+            onPressed: () => context.go('/inicio'),
+          ),
           IconButton(
             tooltip: 'Actualizar',
             icon: const Icon(Icons.refresh_rounded),

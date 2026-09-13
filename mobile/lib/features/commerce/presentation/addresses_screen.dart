@@ -6,6 +6,7 @@ import 'package:capricho_store/shared/widgets/message_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class AddressesScreen extends ConsumerWidget {
   const AddressesScreen({super.key});
@@ -16,6 +17,17 @@ class AddressesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          tooltip: 'Volver',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/cuenta');
+            }
+          },
+        ),
         title: const Text('Mis Direcciones'),
         shape: const Border(
           bottom: BorderSide(color: AppColors.line, width: 1),
@@ -218,8 +230,8 @@ class AddressesScreen extends ConsumerWidget {
     final streetController = TextEditingController();
     final zoneController = TextEditingController(text: 'Centro');
     final refController = TextEditingController();
-    final latController = TextEditingController(text: '-17.7833');
-    final lngController = TextEditingController(text: '-63.1821');
+    double selectedLat = -17.7833;
+    double selectedLng = -63.1821;
     bool isMain = true;
     String? selectedZone = 'Centro';
 
@@ -236,7 +248,7 @@ class AddressesScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
@@ -252,177 +264,172 @@ class AddressesScreen extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                TextField(
-                  controller: aliasController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre / Alias (opcional)',
-                    hintText: 'Ej. Casa, Oficina, Depto',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: streetController,
-                  decoration: const InputDecoration(
-                    labelText: 'Calle y número *',
-                    hintText: 'Ej. Av. San Martín #450',
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Zonas rápidas de Santa Cruz (asigna GPS):',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.inkSoft),
-                ),
-                const SizedBox(height: 6),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: sczZones.map((z) {
-                      final isSelected = selectedZone == z['name'];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: ChoiceChip(
-                          label: Text(z['name'] as String, style: const TextStyle(fontSize: 12)),
-                          selected: isSelected,
-                          selectedColor: AppColors.cobaltLight,
-                          onSelected: (val) {
-                            if (val) {
-                              setModalState(() {
-                                selectedZone = z['name'] as String;
-                                zoneController.text = z['name'] as String;
-                                latController.text = (z['lat'] as double).toStringAsFixed(4);
-                                lngController.text = (z['lng'] as double).toStringAsFixed(4);
-                              });
-                            }
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: zoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Zona / Barrio *',
-                    hintText: 'Ej. Equipetrol',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: refController,
-                  decoration: const InputDecoration(
-                    labelText: 'Referencia',
-                    hintText: 'Ej. Portón blanco, frente al parque',
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Mapa de ubicación (arrastra para ajustar el pin):',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.inkSoft),
-                ),
-                const SizedBox(height: 8),
-                LocationMapPreview(
-                  latitude: double.tryParse(latController.text.trim()) ?? -17.7833,
-                  longitude: double.tryParse(lngController.text.trim()) ?? -63.1821,
-                  zone: selectedZone ?? zoneController.text,
-                  onLocationChanged: (coords) {
-                    setModalState(() {
-                      latController.text = coords.lat.toStringAsFixed(4);
-                      lngController.text = coords.lng.toStringAsFixed(4);
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: latController,
-                        keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Latitud GPS *',
-                          prefixIcon: Icon(Icons.my_location_rounded, size: 16),
-                        ),
-                      ),
+                  TextField(
+                    controller: aliasController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre / Alias (opcional)',
+                      hintText: 'Ej. Casa, Oficina, Depto',
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: lngController,
-                        keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Longitud GPS *',
-                          prefixIcon: Icon(Icons.location_searching_rounded, size: 16),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: streetController,
+                    decoration: const InputDecoration(
+                      labelText: 'Calle y número *',
+                      hintText: 'Ej. Av. San Martín #450',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Zonas rápidas de Santa Cruz (asigna GPS):',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.inkSoft),
+                  ),
+                  const SizedBox(height: 6),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: sczZones.map((z) {
+                        final isSelected = selectedZone == z['name'];
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(z['name'] as String, style: const TextStyle(fontSize: 12)),
+                            selected: isSelected,
+                            selectedColor: AppColors.cobaltLight,
+                            onSelected: (val) {
+                              if (val) {
+                                setModalState(() {
+                                  selectedZone = z['name'] as String;
+                                  zoneController.text = z['name'] as String;
+                                  selectedLat = z['lat'] as double;
+                                  selectedLng = z['lng'] as double;
+                                });
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: zoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'Zona / Barrio *',
+                      hintText: 'Ej. Equipetrol',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: refController,
+                    decoration: const InputDecoration(
+                      labelText: 'Referencia',
+                      hintText: 'Ej. Portón blanco, frente al parque',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Mapa de ubicación (arrastra para ajustar el pin):',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.inkSoft),
+                  ),
+                  const SizedBox(height: 8),
+                  LocationMapPreview(
+                    latitude: selectedLat,
+                    longitude: selectedLng,
+                    zone: selectedZone ?? zoneController.text,
+                    height: 200,
+                    onLocationChanged: (coords) {
+                      setModalState(() {
+                        selectedLat = coords.lat;
+                        selectedLng = coords.lng;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isMain,
+                        onChanged: (val) => setModalState(() => isMain = val ?? true),
+                        activeColor: AppColors.cobalt,
+                      ),
+                      const Expanded(
+                        child: Text(
+                          'Marcar como dirección predeterminada',
+                          style: TextStyle(fontSize: 13, color: AppColors.ink),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: isMain,
-                      onChanged: (val) => setModalState(() => isMain = val ?? true),
-                      activeColor: AppColors.cobalt,
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Marcar como dirección predeterminada',
-                        style: TextStyle(fontSize: 13, color: AppColors.ink),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (streetController.text.trim().isEmpty ||
-                    zoneController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Por favor completa la calle y la zona')),
-                  );
-                  return;
-                }
-                HapticFeedback.selectionClick();
-                final lat = double.tryParse(latController.text.trim()) ?? -17.7833;
-                final lng = double.tryParse(lngController.text.trim()) ?? -63.1821;
-                try {
-                  await ref.read(addressesProvider.notifier).addAddress(
-                        cityId: 1,
-                        alias: aliasController.text.trim().isNotEmpty
-                            ? aliasController.text.trim()
-                            : null,
-                        zone: zoneController.text.trim(),
-                        address: streetController.text.trim(),
-                        reference: refController.text.trim().isNotEmpty
-                            ? refController.text.trim()
-                            : null,
-                        latitude: lat,
-                        longitude: lng,
-                        isMain: isMain,
-                      );
-                  if (ctx.mounted) {
-                    Navigator.of(ctx).pop();
-                  }
-                } catch (e) {
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error al guardar: $e')),
-                    );
-                  }
-                }
-              },
-              style: FilledButton.styleFrom(backgroundColor: AppColors.cobalt),
-              child: const Text('Guardar'),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Cancelar'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    onPressed: () async {
+                      if (streetController.text.trim().isEmpty ||
+                          zoneController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Por favor completa la calle y la zona')),
+                        );
+                        return;
+                      }
+                      HapticFeedback.selectionClick();
+                      try {
+                        await ref.read(addressesProvider.notifier).addAddress(
+                              cityId: 1,
+                              alias: aliasController.text.trim().isNotEmpty
+                                  ? aliasController.text.trim()
+                                  : null,
+                              zone: zoneController.text.trim(),
+                              address: streetController.text.trim(),
+                              reference: refController.text.trim().isNotEmpty
+                                  ? refController.text.trim()
+                                  : null,
+                              latitude: selectedLat,
+                              longitude: selectedLng,
+                              isMain: isMain,
+                            );
+                        if (ctx.mounted) {
+                          Navigator.of(ctx).pop();
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error al guardar: $e')),
+                          );
+                        }
+                      }
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.cobalt,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Guardar'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
