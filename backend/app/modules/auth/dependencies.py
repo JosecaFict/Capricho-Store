@@ -101,11 +101,17 @@ async def get_current_principal(
     ],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> CurrentPrincipal:
-    if credentials is None or credentials.scheme.lower() != "bearer":
+    raw_token: str | None = None
+    if credentials is not None and credentials.scheme.lower() == "bearer":
+        raw_token = credentials.credentials
+    elif "token" in request.query_params:
+        raw_token = request.query_params["token"]
+
+    if not raw_token:
         raise InvalidCredentialsError
 
     try:
-        claims = decode_access_token(credentials.credentials)
+        claims = decode_access_token(raw_token)
     except ValueError as exc:
         raise InvalidCredentialsError from exc
 

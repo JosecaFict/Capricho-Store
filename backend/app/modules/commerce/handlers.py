@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.modules.commerce.exceptions import (
     CommerceConflictError,
+    CommerceForbiddenError,
     CommerceNotFoundError,
     InvalidCommerceOperationError,
     PaymentGatewayError,
@@ -11,6 +12,10 @@ from app.modules.commerce.exceptions import (
 
 async def not_found_handler(_: Request, exc: CommerceNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": exc.detail})
+
+
+async def forbidden_handler(_: Request, exc: CommerceForbiddenError) -> JSONResponse:
+    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": exc.detail})
 
 
 async def conflict_handler(_: Request, exc: CommerceConflictError) -> JSONResponse:
@@ -30,6 +35,7 @@ async def gateway_handler(_: Request, exc: PaymentGatewayError) -> JSONResponse:
 
 def register_commerce_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(CommerceNotFoundError, not_found_handler)
+    app.add_exception_handler(CommerceForbiddenError, forbidden_handler)
     app.add_exception_handler(CommerceConflictError, conflict_handler)
     app.add_exception_handler(InvalidCommerceOperationError, invalid_handler)
     app.add_exception_handler(PaymentGatewayError, gateway_handler)

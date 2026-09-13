@@ -8,6 +8,10 @@ class CommerceNotFoundError(CommerceDomainError):
     pass
 
 
+class CommerceForbiddenError(CommerceDomainError):
+    pass
+
+
 class CommerceConflictError(CommerceDomainError):
     pass
 

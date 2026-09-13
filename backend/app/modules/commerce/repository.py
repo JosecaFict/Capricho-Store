@@ -9,6 +9,7 @@ from app.modules.catalog.models import (
     HistorialPrecio,
     ImagenProducto,
     InventarioSucursal,
+    Marca,
     Producto,
     Talla,
     VarianteProducto,
@@ -213,6 +214,28 @@ class CommerceRepository:
                 )
             ).all()
         )
+
+    async def sale_invoice_items(self, sale_id: int):
+        statement = (
+            select(
+                DetalleVenta.cantidad,
+                DetalleVenta.precio_unitario,
+                DetalleVenta.subtotal,
+                Producto.nombre.label("producto"),
+                Marca.nombre.label("marca"),
+                Color.nombre.label("color"),
+                Talla.codigo.label("talla"),
+            )
+            .select_from(DetalleVenta)
+            .join(VarianteProducto, VarianteProducto.id_variante == DetalleVenta.id_variante)
+            .join(Producto, Producto.id_producto == VarianteProducto.id_producto)
+            .outerjoin(Marca, Marca.id_marca == Producto.id_marca)
+            .join(Color, Color.id_color == VarianteProducto.id_color)
+            .join(Talla, Talla.id_talla == VarianteProducto.id_talla)
+            .where(DetalleVenta.id_venta == sale_id)
+            .order_by(DetalleVenta.id_detalle_venta)
+        )
+        return (await self.session.execute(statement)).mappings().all()
 
     async def customer_sales(self, customer_id: int) -> list[Venta]:
         return list(

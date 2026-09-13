@@ -257,6 +257,18 @@ class CommerceApi {
     }
   }
 
+  Future<List<int>> getOrderInvoicePdf(int orderId) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        '/orders/$orderId/invoice',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return response.data ?? [];
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   // -------------------------------------------------------------
   // NOTIFICACIONES OPERATIVAS
   // -------------------------------------------------------------

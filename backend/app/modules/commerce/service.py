@@ -4,8 +4,6 @@ from decimal import Decimal
 from math import asin, ceil, cos, radians, sin, sqrt
 from urllib.parse import urlparse
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.openrouteservice import OpenRouteServiceClient
@@ -14,9 +12,16 @@ from app.modules.auth.models import Cliente, Sucursal, Usuario
 from app.modules.catalog.models import InventarioSucursal
 from app.modules.commerce.exceptions import (
     CommerceConflictError,
+    CommerceForbiddenError,
     CommerceNotFoundError,
     InvalidCommerceOperationError,
     PaymentGatewayError,
+)
+from app.modules.commerce.invoice_mailer import InvoiceMailer
+from app.modules.commerce.invoice_service import (
+    InvoiceData,
+    InvoiceItem,
+    generate_invoice_pdf,
 )
 from app.modules.commerce.models import (
     Carrito,
@@ -27,6 +32,7 @@ from app.modules.commerce.models import (
     DetalleVenta,
     Devolucion,
     DireccionCliente,
+    MetodoPago,
     Notificacion,
     Pago,
     Pedido,
@@ -63,6 +69,8 @@ from app.modules.commerce.schemas import (
 )
 from app.modules.inventory.models import MovimientoInventario, MovimientoLote
 
+logger = logging.getLogger(__name__)
+
 RESERVATION_TRANSITIONS = {
     "PENDIENTE": {"CONFIRMADA", "CANCELADA", "EXPIRADA"},
     "CONFIRMADA": {"PREPARANDO", "CANCELADA", "EXPIRADA"},
@@ -92,6 +100,7 @@ class CommerceService:
         *,
         stripe_gateway: StripeCheckoutGateway | None = None,
         route_client: OpenRouteServiceClient | None = None,
+        invoice_mailer: InvoiceMailer | None = None,
         public_web_url: str = "http://localhost:4200",
         checkout_expire_minutes: int = 30,
     ) -> None:
@@ -99,6 +108,7 @@ class CommerceService:
         self.repository = repository
         self.stripe_gateway = stripe_gateway
         self.route_client = route_client
+        self.invoice_mailer = invoice_mailer or InvoiceMailer()
         self.public_web_url = public_web_url.rstrip("/")
         self.checkout_expire_minutes = checkout_expire_minutes
 
@@ -1004,6 +1014,8 @@ class CommerceService:
                     "Compra confirmada",
                     f"Stripe confirmó el pago de tu pedido #{order.id_pedido}.",
                 )
+        if sale.modalidad_entrega == "DELIVERY":
+            await self._dispatch_order_invoice_email(order, sale)
         await self.session.commit()
 
     async def _restore_checkout_cart(self, transaction: TransaccionPasarela) -> None:
@@ -1281,6 +1293,145 @@ class CommerceService:
             receipt_url=receipt_url,
         )
 
+    async def _assemble_invoice(self, order: Pedido, sale: Venta) -> tuple[InvoiceData, bytes]:
+        branch = await self.repository.get(Sucursal, sale.id_sucursal)
+        address = (
+            await self.repository.get(DireccionCliente, order.id_direccion)
+            if order.id_direccion
+            else None
+        )
+        customer = await self.repository.get(Cliente, sale.id_cliente) if sale.id_cliente else None
+        c_user = (
+            await self.repository.get(Usuario, customer.id_usuario)
+            if customer and customer.id_usuario
+            else None
+        )
+        payment = await self.repository.payment_by_sale(order.id_venta)
+        tx = (
+            await self.repository.gateway_transaction_by_payment(payment.id_pago)
+            if payment
+            else None
+        )
+
+        sucursal_nombre = branch.nombre if branch else "Sucursal Central"
+        sucursal_direccion = (
+            branch.direccion if branch and branch.direccion else "Santa Cruz, Bolivia"
+        )
+        sucursal_telefono = branch.telefono if branch and branch.telefono else "+591 70000000"
+
+        cliente_nombre = (
+            f"{c_user.nombres} {c_user.apellidos}".strip()
+            if c_user
+            else "Consumidor Final"
+        )
+        cliente_doc = c_user.ci if c_user and c_user.ci else "S/N"
+        cliente_correo = c_user.correo if c_user else ""
+        cliente_telefono = c_user.telefono if c_user and c_user.telefono else ""
+
+        if sale.modalidad_entrega == "DELIVERY":
+            destino_parts = []
+            if address:
+                destino_parts.append(address.direccion)
+                if address.zona:
+                    destino_parts.append(f"Zona {address.zona}")
+                if address.referencia:
+                    destino_parts.append(f"(Ref: {address.referencia})")
+            destino_entrega = ", ".join(destino_parts) if destino_parts else "Entrega a domicilio"
+        else:
+            destino_entrega = f"Retiro en sucursal: {sucursal_nombre}"
+
+        if tx and tx.proveedor == "STRIPE":
+            ext_id = tx.external_payment_id or "Stripe"
+            metodo_pago = f"Tarjeta Crédito / Débito (Stripe - Ref: {ext_id})"
+        elif payment:
+            metodo_pago = "Efectivo / En Sucursal"
+        else:
+            metodo_pago = "Pendiente de pago"
+
+        raw_items = await self.repository.sale_invoice_items(sale.id_venta)
+        invoice_items = [
+            InvoiceItem(
+                marca=row["marca"] or "Capricho",
+                producto=row["producto"],
+                color=row["color"],
+                talla=row["talla"],
+                cantidad=row["cantidad"],
+                precio_unitario=Decimal(str(row["precio_unitario"])),
+                subtotal=Decimal(str(row["subtotal"])),
+            )
+            for row in raw_items
+        ]
+
+        data = InvoiceData(
+            numero_factura=f"FAC-{order.id_pedido:06d}",
+            fecha_emision=order.fecha_creacion,
+            estado_pago=sale.estado,
+            tienda_nombre="CAPRICHO STORE",
+            tienda_nit="102938475",
+            sucursal_nombre=sucursal_nombre,
+            sucursal_direccion=sucursal_direccion,
+            sucursal_telefono=sucursal_telefono,
+            cliente_nombre=cliente_nombre,
+            cliente_doc=cliente_doc,
+            cliente_correo=cliente_correo,
+            cliente_telefono=cliente_telefono,
+            modalidad_entrega=sale.modalidad_entrega,
+            destino_entrega=destino_entrega,
+            subtotal=sale.subtotal,
+            descuento=sale.descuento_total,
+            costo_envio=sale.costo_envio,
+            total=sale.total,
+            metodo_pago=metodo_pago,
+            items=invoice_items,
+        )
+
+        pdf_bytes = generate_invoice_pdf(data)
+        return data, pdf_bytes
+
+    async def _dispatch_order_invoice_email(self, order: Pedido, sale: Venta) -> None:
+        try:
+            invoice_data, pdf_bytes = await self._assemble_invoice(order, sale)
+            if not invoice_data.cliente_correo:
+                logger.info(
+                    "Pedido #%s no tiene correo de cliente; se omite el despacho de factura.",
+                    order.id_pedido,
+                )
+                return
+            mailer = self.invoice_mailer or InvoiceMailer()
+            await mailer.send_invoice_email(
+                recipient_email=invoice_data.cliente_correo,
+                recipient_name=invoice_data.cliente_nombre,
+                order_id=order.id_pedido,
+                total_bob=f"{invoice_data.total:.2f}",
+                delivery_mode=sale.modalidad_entrega,
+                pdf_bytes=pdf_bytes,
+            )
+        except Exception as exc:
+            logger.warning(
+                "No se pudo despachar el correo de factura para el pedido #%s: %s",
+                order.id_pedido,
+                exc,
+            )
+
+    async def get_order_invoice_pdf(self, user_id: int, order_id: int) -> bytes:
+        order = await self.repository.get(Pedido, order_id)
+        if order is None:
+            raise CommerceNotFoundError("El pedido no existe")
+        sale = await self.repository.get(Venta, order.id_venta)
+        if sale is None:
+            raise CommerceNotFoundError("La venta asociada no existe")
+
+        customer = await self.repository.customer_by_user(user_id)
+        is_owner = customer is not None and sale.id_cliente == customer.id_cliente
+
+        if not is_owner:
+            employee = await self.repository.employee_by_user(user_id)
+            if employee is None or employee.estado_laboral != "ACTIVO":
+                raise CommerceForbiddenError("No tienes permiso para ver esta factura")
+
+        _, pdf_bytes = await self._assemble_invoice(order, sale)
+        return pdf_bytes
+
     async def list_orders(
         self,
         user_id: int,
@@ -1348,6 +1499,8 @@ class CommerceService:
             order.fecha_preparacion = datetime.now(UTC)
         if payload.estado in {"ENTREGADO", "RETIRADO", "CANCELADO"}:
             order.fecha_finalizacion = datetime.now(UTC)
+        if payload.estado == "RETIRADO":
+            await self._dispatch_order_invoice_email(order, sale)
         if payload.estado == "CANCELADO":
             await self._restore_sale_stock(
                 sale,

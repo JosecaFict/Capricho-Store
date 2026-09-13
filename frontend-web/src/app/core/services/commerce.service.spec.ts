@@ -73,4 +73,19 @@ describe('CommerceService', () => {
     expect(request.request.params.get('page_size')).toBe('25');
     request.flush({ items: [], total: 0, page: 2, page_size: 25 });
   });
+
+  it('downloads the official PDF invoice for an order', () => {
+    let receivedBlob: Blob | null = null;
+    service.orderInvoice(12).subscribe((blob) => {
+      receivedBlob = blob;
+    });
+
+    const request = http.expectOne(`${API_BASE_URL}/orders/12/invoice`);
+    expect(request.request.method).toBe('GET');
+    expect(request.request.responseType).toBe('blob');
+    const mockBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+    request.flush(mockBlob);
+
+    expect(receivedBlob).toBeTruthy();
+  });
 });

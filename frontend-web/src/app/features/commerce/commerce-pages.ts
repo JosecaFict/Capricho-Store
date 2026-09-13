@@ -235,6 +235,14 @@ export class CartPage {
           ¿Realizaste esta compra desde la app móvil? Ya puedes cerrar esta ventana y regresar a la aplicación.
         </p>
         <div class="commerce-empty-action" style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+          <button
+            class="button button--secondary"
+            type="button"
+            [disabled]="downloadingInvoice()"
+            (click)="downloadOrderInvoice(order.id_pedido)"
+          >
+            {{ downloadingInvoice() ? 'Generando Factura…' : '📄 Descargar Factura PDF' }}
+          </button>
           @if (order.receipt_url) {
             <a
               class="button button--secondary"
@@ -565,6 +573,7 @@ export class CheckoutPage {
   readonly loading = signal(true);
   readonly submitting = signal(false);
   readonly quoting = signal(false);
+  readonly downloadingInvoice = signal(false);
   readonly error = signal('');
 
   // Inline address creation modal state
@@ -824,6 +833,27 @@ export class CheckoutPage {
           this.error.set(
             this.errors.message(error, 'No pudimos confirmar el estado del pago con Stripe.'),
           ),
+      });
+  }
+
+  downloadOrderInvoice(orderId: number): void {
+    this.downloadingInvoice.set(true);
+    this.commerce
+      .orderInvoice(orderId)
+      .pipe(finalize(() => this.downloadingInvoice.set(false)))
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `factura_pedido_${orderId}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          a.remove();
+        },
+        error: (error) =>
+          this.error.set(this.errors.message(error, 'No pudimos descargar la factura.')),
       });
   }
 
@@ -1240,8 +1270,16 @@ export class ReservationsPage {
                 <dd>{{ order.total | bolivianos }}</dd>
               </div>
             </dl>
-            @if (order.receipt_url) {
-              <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line-subtle, #f0ede8);">
+            <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line-subtle, #f0ede8); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              <button
+                class="button button--small"
+                type="button"
+                [disabled]="downloadingId() === order.id_pedido"
+                (click)="downloadInvoice(order.id_pedido)"
+              >
+                {{ downloadingId() === order.id_pedido ? 'Generando PDF…' : '📄 Descargar Factura PDF' }}
+              </button>
+              @if (order.receipt_url) {
                 <a
                   class="button button--quiet button--small"
                   [href]="order.receipt_url"
@@ -1250,8 +1288,8 @@ export class ReservationsPage {
                 >
                   Comprobante Stripe ↗
                 </a>
-              </div>
-            }
+              }
+            </div>
           </article>
         }
       </div>
@@ -1263,6 +1301,7 @@ export class OrdersPage {
   private readonly errors = inject(ApiErrorService);
   readonly orders = signal<Order[]>([]);
   readonly loading = signal(true);
+  readonly downloadingId = signal<number | null>(null);
   readonly error = signal('');
   constructor() {
     this.load();
@@ -1275,6 +1314,27 @@ export class OrdersPage {
       .subscribe({
         next: (items) => this.orders.set(items),
         error: (error) => this.error.set(this.errors.message(error, 'Intenta nuevamente.')),
+      });
+  }
+
+  downloadInvoice(orderId: number): void {
+    this.downloadingId.set(orderId);
+    this.commerce
+      .orderInvoice(orderId)
+      .pipe(finalize(() => this.downloadingId.set(null)))
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `factura_pedido_${orderId}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          a.remove();
+        },
+        error: (error) =>
+          this.error.set(this.errors.message(error, 'No pudimos descargar la factura.')),
       });
   }
 }

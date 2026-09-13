@@ -1,3 +1,5 @@
+import 'package:capricho_store/core/config/environment.dart';
+import 'package:capricho_store/core/network/api_client.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/commerce/data/commerce_api.dart';
 import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
@@ -36,12 +38,12 @@ class OrderDetailScreen extends ConsumerWidget {
           message: err.toString().replaceAll('ApiException: ', ''),
           onRetry: () => ref.refresh(orderDetailProvider(orderId)),
         ),
-        data: (order) => _buildContent(context, order),
+        data: (order) => _buildContent(context, ref, order),
       ),
     );
   }
 
-  Widget _buildContent(BuildContext context, Order order) {
+  Widget _buildContent(BuildContext context, WidgetRef ref, Order order) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -221,9 +223,28 @@ class OrderDetailScreen extends ConsumerWidget {
           ),
         ),
 
-        // Botón de recibo de Stripe
+        // Acciones: Factura oficial y Recibo de Stripe
+        const SizedBox(height: 20),
+        FilledButton.icon(
+          onPressed: () => _openInvoicePdf(context, ref, order.idPedido),
+          icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 20),
+          label: const Text(
+            'Descargar Factura Oficial (PDF)',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.cobaltDark,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
         if (order.receiptUrl != null && order.receiptUrl!.isNotEmpty) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: () => launchUrl(
               Uri.parse(order.receiptUrl!),
@@ -248,6 +269,31 @@ class OrderDetailScreen extends ConsumerWidget {
         ],
       ],
     );
+  }
+
+  Future<void> _openInvoicePdf(
+      BuildContext context, WidgetRef ref, int orderId) async {
+    try {
+      final storage = ref.read(tokenStorageProvider);
+      final token = await storage.read();
+      final uri = Uri.parse(
+          '${Environment.apiBaseUrl}/orders/$orderId/invoice${token != null ? '?token=$token' : ''}');
+
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('No pudimos abrir el visor de facturas.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al abrir la factura: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildTrackingCard(Order order) {

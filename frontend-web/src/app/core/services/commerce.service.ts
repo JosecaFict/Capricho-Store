@@ -94,6 +94,11 @@ export class CommerceService {
   orders() {
     return this.http.get<Order[]>(`${API_BASE_URL}/orders`);
   }
+  orderInvoice(orderId: number) {
+    return this.http.get(`${API_BASE_URL}/orders/${orderId}/invoice`, {
+      responseType: 'blob',
+    });
+  }
   purchaseHistory() {
     return this.http.get<Sale[]>(`${API_BASE_URL}/history/purchases`);
   }
