@@ -110,39 +110,6 @@ interface SaleLine {
         }
       </div>
 
-      <!-- Lector rápido de código de barras o SKU -->
-      <div class="admin-panel pos-scanner-panel">
-        <div class="pos-scanner-header">
-          <span class="pos-scanner-title">⚡ Lector rápido de Códigos de Barras / SKU</span>
-          <span class="pos-scanner-hint">Pistola lectora o ingreso manual</span>
-        </div>
-        <div class="pos-scanner-row">
-          <div class="pos-scanner-input-wrap">
-            <span class="pos-scanner-icon">🏷️</span>
-            <input
-              type="text"
-              placeholder="Escanear código de barras o ingresar SKU (ej. POL-OVR-NEG-M) y presionar Enter…"
-              [value]="barcodeQuery()"
-              (input)="barcodeQuery.set($any($event.target).value)"
-              (keydown.enter)="$event.preventDefault(); onBarcodeScan(barcodeQuery())"
-            />
-          </div>
-          <button
-            type="button"
-            class="button button--secondary pos-scan-btn"
-            [disabled]="!barcodeQuery().trim()"
-            (click)="onBarcodeScan(barcodeQuery())"
-          >
-            Buscar prenda
-          </button>
-        </div>
-        @if (barcodeMatchNotice()) {
-          <div class="pos-scanner-match">
-            <span>{{ barcodeMatchNotice() }}</span>
-          </div>
-        }
-      </div>
-
       <!-- Selector Cascada de Prendas: Marca -> Modelo -> Talla -> Color -> Cantidad -->
       <div class="admin-panel pos-cascade-panel">
         <div class="pos-cascade-header">
@@ -422,10 +389,6 @@ export class PosSalesAdmin {
   readonly selectedVariantId = signal<number | null>(null);
   readonly quantity = signal<number>(1);
 
-  // Quick scanner signals
-  readonly barcodeQuery = signal<string>('');
-  readonly barcodeMatchNotice = signal<string>('');
-
   readonly currentUser = this.auth.currentUser;
 
   readonly canSelectBranch = computed(() => {
@@ -606,7 +569,6 @@ export class PosSalesAdmin {
     this.selectedSize.set('');
     this.selectedVariantId.set(null);
     this.quantity.set(1);
-    this.barcodeMatchNotice.set('');
   }
 
   onProductChange(productIdStr: string): void {
@@ -615,7 +577,6 @@ export class PosSalesAdmin {
     this.selectedSize.set('');
     this.selectedVariantId.set(null);
     this.quantity.set(1);
-    this.barcodeMatchNotice.set('');
 
     if (prodId) {
       const prod = this.products().find((p) => p.id_producto === prodId);
@@ -634,7 +595,6 @@ export class PosSalesAdmin {
     this.selectedSize.set(size);
     this.selectedVariantId.set(null);
     this.quantity.set(1);
-    this.barcodeMatchNotice.set('');
 
     const prod = this.selectedProduct();
     if (prod) {
@@ -649,7 +609,6 @@ export class PosSalesAdmin {
     const variantId = variantIdStr ? Number(variantIdStr) : null;
     this.selectedVariantId.set(variantId);
     this.quantity.set(1);
-    this.barcodeMatchNotice.set('');
   }
 
   onQuantityInput(val: string): void {
@@ -677,43 +636,12 @@ export class PosSalesAdmin {
     }
   }
 
-  onBarcodeScan(raw: string): void {
-    const query = (raw || '').trim().toLowerCase();
-    if (!query) return;
-
-    for (const product of this.products()) {
-      for (const variant of product.variantes) {
-        if (
-          variant.activo &&
-          ((variant.codigo_barras && variant.codigo_barras.toLowerCase() === query) ||
-            (variant.sku && variant.sku.toLowerCase() === query))
-        ) {
-          this.selectedBrandId.set(product.id_marca);
-          this.selectedProductId.set(product.id_producto);
-          this.selectedSize.set(variant.talla);
-          this.selectedVariantId.set(variant.id_variante);
-          this.quantity.set(1);
-          this.barcodeMatchNotice.set(
-            `✓ Prenda identificada: ${product.nombre} (Talla ${variant.talla} / ${variant.color})`,
-          );
-          this.error.set('');
-          this.barcodeQuery.set('');
-          return;
-        }
-      }
-    }
-
-    this.barcodeMatchNotice.set('');
-    this.error.set(`No se encontró ninguna prenda con el código o SKU "${raw}".`);
-  }
-
   clearSelection(): void {
     this.selectedBrandId.set(null);
     this.selectedProductId.set(null);
     this.selectedSize.set('');
     this.selectedVariantId.set(null);
     this.quantity.set(1);
-    this.barcodeMatchNotice.set('');
   }
 
   addLine(): void {
@@ -746,7 +674,6 @@ export class PosSalesAdmin {
 
     this.selectedVariantId.set(null);
     this.quantity.set(1);
-    this.barcodeMatchNotice.set('');
     this.error.set('');
   }
 

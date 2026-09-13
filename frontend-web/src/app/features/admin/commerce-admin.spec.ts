@@ -228,7 +228,7 @@ describe('PosSalesAdmin', () => {
     expect(component.lines().length).toBe(0);
   });
 
-  it('allows administrators to select branch and quickly scan barcodes/SKUs', () => {
+  it('allows administrators to select branch and switch between branches', () => {
     const adminSignal = signal({
       id_usuario: 1,
       nombres: 'Admin',
@@ -268,19 +268,9 @@ describe('PosSalesAdmin', () => {
     expect(component.canSelectBranch()).toBe(true);
     expect(element.querySelector('.pos-branch-admin-banner select')).not.toBeNull();
 
-    // 2. Barcode scanner quick match: 'POL-OVR-NEG-M'
-    component.onBarcodeScan('POL-OVR-NEG-M');
-    expect(component.selectedBrandId()).toBe(1);
-    expect(component.selectedProductId()).toBe(10);
-    expect(component.selectedSize()).toBe('M');
-    expect(component.selectedVariantId()).toBe(101);
-    expect(component.barcodeMatchNotice()).toContain('Polera Oversize Basic');
-
-    // 3. Barcode digits scan: '7779876543210'
-    component.onBarcodeScan('7779876543210');
-    expect(component.selectedBrandId()).toBe(2);
-    expect(component.selectedProductId()).toBe(20);
-    expect(component.selectedSize()).toBe('32');
-    expect(component.selectedVariantId()).toBe(201);
+    // 2. Admin switches branch
+    component.onBranchChange('2');
+    expect(component.selectedBranchId()).toBe(2);
+    expect(catalog.products).toHaveBeenCalledWith(expect.objectContaining({ sucursal: 2 }));
   });
 });
