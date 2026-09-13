@@ -913,8 +913,10 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
         }
       } catch (e) {
         if (!mounted) return;
+        debugPrint('[StripePoller] Error: $e');
         setState(() {
-          _statusMessage = 'Confirmando estado con Stripe...';
+          final errStr = e.toString().replaceAll('ApiException: ', '').trim();
+          _statusMessage = errStr.isNotEmpty ? errStr : 'Confirmando estado con Stripe...';
         });
       }
     });

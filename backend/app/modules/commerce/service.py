@@ -1026,15 +1026,17 @@ class CommerceService:
             raise PaymentGatewayError("Stripe todavía no está configurado en el servidor")
         transaction, payment, sale, order = await self._stripe_transaction(session_id)
         if user_id is not None:
-            customer = await self._customer(user_id)
-            if sale.id_cliente != customer.id_cliente:
-                raise CommerceNotFoundError("La sesión de pago no existe")
+            customer = await self.repository.customer_by_user(user_id)
+            if customer and sale.id_cliente and sale.id_cliente != customer.id_cliente:
+                employee = await self.repository.employee_by_user(user_id)
+                if employee is None:
+                    raise CommerceNotFoundError("La sesión de pago no existe")
         try:
             remote = await self.stripe_gateway.retrieve_session(
                 session_id, expand=["payment_intent.latest_charge"]
             )
         except Exception as exc:
-            raise PaymentGatewayError("No pudimos consultar el estado del pago en Stripe") from exc
+            raise PaymentGatewayError(f"No pudimos consultar el estado del pago en Stripe: {exc}") from exc
         if remote.get("payment_status") == "paid":
             await self._complete_stripe_checkout(remote)
         elif remote.get("status") == "expired":
