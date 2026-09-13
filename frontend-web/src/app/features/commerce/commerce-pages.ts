@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -18,6 +18,7 @@ import {
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
+import { AddressMapPickerComponent } from '../../shared/components/address-map-picker/address-map-picker.component';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
 import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
 
@@ -196,7 +197,13 @@ export class CartPage {
 
 @Component({
   selector: 'app-checkout-page',
-  imports: [ReactiveFormsModule, RouterLink, BolivianosPipe, StatusPanel],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    BolivianosPipe,
+    StatusPanel,
+    AddressMapPickerComponent,
+  ],
   template: `
     <section class="commerce-page page-shell">
       <a class="back-link" routerLink="/carrito">Volver al carrito</a>
@@ -263,7 +270,7 @@ export class CartPage {
                   type="radio"
                   formControlName="modalidad_entrega"
                   value="RETIRO_SUCURSAL"
-                  (change)="quote.set(null)"
+                  (change)="onDeliveryModeChange()"
                 /><span
                   ><strong>Retiro en sucursal</strong
                   ><small>Te avisaremos cuando esté listo.</small></span
@@ -274,12 +281,13 @@ export class CartPage {
                   type="radio"
                   formControlName="modalidad_entrega"
                   value="DELIVERY"
-                  (change)="quote.set(null)"
+                  (change)="onDeliveryModeChange()"
                 /><span
-                  ><strong>Delivery</strong><small>Requiere dirección con coordenadas.</small></span
+                  ><strong>Delivery</strong><small>Envío con OpenRouteService a tu ubicación.</small></span
                 ></label
               >
             </fieldset>
+
             @if (cart()?.id_sucursal) {
               <div class="field">
                 <span>Sucursal que prepara el pedido</span>
@@ -294,7 +302,7 @@ export class CartPage {
             } @else {
               <label class="field"
                 ><span>Sucursal que prepara el pedido</span
-                ><select formControlName="id_sucursal" (change)="quote.set(null)">
+                ><select formControlName="id_sucursal" (change)="onBranchChange()">
                   <option value="">Selecciona una sucursal</option>
                   @for (branch of branches(); track branch.id_sucursal) {
                     <option [value]="branch.id_sucursal">
@@ -304,42 +312,100 @@ export class CartPage {
                 </select></label
               >
             }
+
             @if (form.controls.modalidad_entrega.value === 'DELIVERY') {
-              <label class="field"
-                ><span>Dirección de entrega</span
-                ><select formControlName="id_direccion" (change)="quote.set(null)">
-                  <option value="">Selecciona una dirección</option>
-                  @for (address of addresses(); track address.id_direccion) {
-                    <option [value]="address.id_direccion">
-                      {{ address.alias || address.direccion }} / {{ address.ciudad }}
-                    </option>
-                  }
-                </select></label
-              >
-              @if (!addresses().length) {
-                <p class="notice notice--warning">
-                  Primero registra una dirección con coordenadas desde tu cuenta.
-                </p>
-              }
-              <button
-                class="button button--secondary"
-                type="button"
-                [disabled]="quoting() || !canQuote()"
-                (click)="requestQuote()"
-              >
-                {{ quoting() ? 'Cotizando…' : 'Cotizar envío' }}
-              </button>
-              @if (quote(); as currentQuote) {
-                <div class="shipping-quote">
-                  <span>Distancia estimada {{ currentQuote.distancia_km }} km</span
-                  ><strong>{{ currentQuote.costo_estimado | bolivianos }}</strong
-                  ><small
-                    >Estimación en línea recta. Google Routes se integrará en otra etapa.</small
+              <div class="field" style="margin-bottom: 0.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                  <span>Dirección de entrega</span>
+                  <button
+                    type="button"
+                    class="text-button"
+                    style="font-size: 0.85rem; padding: 0; min-height: auto;"
+                    (click)="openAddressModal()"
                   >
+                    + Agregar nueva dirección
+                  </button>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: stretch;">
+                  <select
+                    formControlName="id_direccion"
+                    (change)="onAddressChange()"
+                    style="flex: 1;"
+                  >
+                    <option value="">Selecciona una dirección guardada</option>
+                    @for (address of addresses(); track address.id_direccion) {
+                      <option [value]="address.id_direccion">
+                        {{ address.alias ? (address.alias + ' – ') : '' }}{{ address.direccion }} ({{ address.ciudad }})
+                      </option>
+                    }
+                  </select>
+                  <button
+                    type="button"
+                    class="button button--secondary"
+                    style="padding: 0.5rem 0.85rem; font-size: 0.85rem; min-height: 48px;"
+                    (click)="openAddressModal()"
+                    title="Registrar nueva dirección con mapa y GPS"
+                  >
+                    📍 Nueva
+                  </button>
+                </div>
+              </div>
+
+              @if (!addresses().length) {
+                <div
+                  class="notice notice--warning"
+                  style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;"
+                >
+                  <span>No tienes direcciones guardadas para delivery.</span>
+                  <button
+                    type="button"
+                    class="button button--primary"
+                    style="min-height: 38px; padding: 0.4rem 0.85rem; font-size: 0.85rem;"
+                    (click)="openAddressModal()"
+                  >
+                    📍 Ubicar mi casa en el mapa
+                  </button>
+                </div>
+              }
+
+              @if (addresses().length && form.controls.id_direccion.value) {
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  [disabled]="quoting() || !canQuote()"
+                  (click)="requestQuote()"
+                >
+                  {{ quoting() ? 'Calculando tarifa OpenRouteService…' : 'Recalcular costo de envío' }}
+                </button>
+              }
+
+              @if (quote(); as currentQuote) {
+                <div
+                  class="shipping-quote"
+                  style="display: flex; flex-direction: column; gap: 0.35rem; background: rgba(37, 99, 235, 0.04); border: 1px solid rgba(37, 99, 235, 0.25); border-radius: 8px; padding: 0.85rem; margin-top: 0.5rem;"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 700; color: #1e40af;">
+                      🚚 Envío por Delivery (OpenRouteService)
+                    </span>
+                    <strong style="font-size: 1.15rem; color: #0f172a;">
+                      {{ currentQuote.costo_estimado | bolivianos }}
+                    </strong>
+                  </div>
+                  <div style="font-size: 0.84rem; color: #475569; display: flex; flex-wrap: wrap; gap: 0.85rem;">
+                    <span>Distancia en ruta: <strong>{{ currentQuote.distancia_km }} km</strong></span>
+                    @if (currentQuote.duracion_estimada_min) {
+                      <span>Tiempo estimado: <strong>~{{ currentQuote.duracion_estimada_min }} min</strong></span>
+                    }
+                  </div>
+                  <small style="color: #64748b; font-size: 0.76rem; margin-top: 0.2rem;">
+                    Tarifa aplicada: Bs 5,00 base (hasta 1 km) + Bs 2,50 por cada km adicional.
+                  </small>
                 </div>
               }
             }
           </div>
+
           <aside class="commerce-summary">
             <h2>Tu pedido</h2>
             @for (item of current.items; track item.id_detalle) {
@@ -349,12 +415,21 @@ export class CartPage {
               </div>
             }
             <div class="commerce-summary__total">
-              <span>Total productos</span><strong>{{ current.total | bolivianos }}</strong>
+              <span>Subtotal prendas</span><strong>{{ current.total | bolivianos }}</strong>
             </div>
             @if (quote(); as currentQuote) {
               <div>
-                <span>Envío estimado</span
+                <span>Envío delivery ({{ currentQuote.distancia_km }} km)</span
                 ><strong>{{ currentQuote.costo_estimado | bolivianos }}</strong>
+              </div>
+              <div
+                class="commerce-summary__total"
+                style="border-top: 2px solid var(--line-subtle, #cbd5e1); padding-top: 0.5rem; margin-top: 0.25rem;"
+              >
+                <span style="font-weight: 700; font-size: 1.1rem;">Total a pagar</span>
+                <strong style="color: #2563eb; font-size: 1.3rem;">
+                  {{ calculateTotal(current.total, currentQuote.costo_estimado) | bolivianos }}
+                </strong>
               </div>
             }
             <button
@@ -369,6 +444,104 @@ export class CartPage {
             </p>
           </aside>
         </form>
+
+        @if (showAddressModal()) {
+          <div class="admin-modal-backdrop" (click)="closeAddressModal()">
+            <div
+              class="admin-modal-card"
+              (click)="$event.stopPropagation()"
+              style="max-width: 640px; width: 95%; max-height: 90vh;"
+            >
+              <header class="admin-modal-header">
+                <div>
+                  <span class="admin-modal-kicker">Entrega a domicilio</span>
+                  <h2 class="admin-modal-title">📍 Nueva dirección de entrega</h2>
+                  <p class="admin-modal-subtitle">
+                    Ubica tu casa o negocio en el mapa con el PIN o el GPS para calcular la ruta exacta.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="admin-modal-close"
+                  (click)="closeAddressModal()"
+                  aria-label="Cerrar modal"
+                >
+                  ✕
+                </button>
+              </header>
+              <div class="admin-modal-body" style="padding: 1.25rem; overflow-y: auto;">
+                @if (addressModalError()) {
+                  <p class="notice notice--error" style="margin-top: 0;">{{ addressModalError() }}</p>
+                }
+                <form [formGroup]="newAddressForm" (ngSubmit)="saveNewAddress()">
+                  <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0; margin-bottom: 0.75rem;">
+                    <label class="field" style="margin-bottom: 0;">
+                      <label>Nombre / Alias <span>(ej. Casa, Trabajo)</span></label>
+                      <input formControlName="alias" placeholder="Casa" />
+                    </label>
+                    <label class="field" style="margin-bottom: 0;">
+                      <label>Ciudad</label>
+                      <select formControlName="id_ciudad">
+                        <option value="">Selecciona ciudad</option>
+                        @for (city of cities(); track city.id_ciudad) {
+                          <option [value]="city.id_ciudad">{{ city.nombre }}</option>
+                        }
+                      </select>
+                    </label>
+                  </div>
+
+                  <label class="field" style="margin-bottom: 0.75rem;">
+                    <label>Dirección escrita <span>(Calle / Avenida y Nro.)</span></label>
+                    <input
+                      formControlName="direccion"
+                      placeholder="Ej: Av. San Martín #450, Barrio Equipetrol"
+                    />
+                  </label>
+
+                  <label class="field" style="margin-bottom: 0.75rem;">
+                    <label>Referencia de llegada <span>(opcional)</span></label>
+                    <input
+                      formControlName="referencia"
+                      placeholder="Ej: Portón blanco frente a farmacia, timbre 2B"
+                    />
+                  </label>
+
+                  <div class="field" style="margin-bottom: 0.75rem;">
+                    <label>
+                      Ubicación exacta en el mapa <span>(arrastra el PIN 📍 o usa GPS)</span>
+                    </label>
+                    <app-address-map-picker
+                      [lat]="modalLatNum()"
+                      [lng]="modalLngNum()"
+                      (locationSelected)="onModalLocationSelected($event)"
+                    />
+                  </div>
+
+                  <div
+                    class="admin-modal-footer"
+                    style="display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--line, #e2e8f0); margin-top: 0.5rem;"
+                  >
+                    <button
+                      type="button"
+                      class="button button--secondary"
+                      (click)="closeAddressModal()"
+                      [disabled]="savingAddress()"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      class="button button--primary"
+                      [disabled]="savingAddress() || newAddressForm.invalid"
+                    >
+                      {{ savingAddress() ? 'Guardando dirección…' : 'Guardar y usar para este pedido' }}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        }
       }
     </section>
   `,
@@ -379,9 +552,11 @@ export class CheckoutPage {
   private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
   private readonly route = inject(ActivatedRoute);
+
   readonly cart = signal<Cart | null>(null);
   readonly branches = signal<Branch[]>([]);
   readonly addresses = signal<Address[]>([]);
+  readonly cities = signal<Array<{ id_ciudad: number; nombre: string }>>([]);
   readonly quote = signal<ShippingQuote | null>(null);
   readonly completed = signal<Order | null>(null);
   readonly paymentStatus = signal<StripeCheckoutStatus | null>(null);
@@ -391,11 +566,28 @@ export class CheckoutPage {
   readonly submitting = signal(false);
   readonly quoting = signal(false);
   readonly error = signal('');
+
+  // Inline address creation modal state
+  readonly showAddressModal = signal(false);
+  readonly savingAddress = signal(false);
+  readonly addressModalError = signal('');
+
   readonly form = this.fb.nonNullable.group({
     modalidad_entrega: ['RETIRO_SUCURSAL', Validators.required],
     id_sucursal: ['', Validators.required],
     id_direccion: [''],
   });
+
+  readonly newAddressForm = this.fb.nonNullable.group({
+    alias: ['Casa'],
+    id_ciudad: ['', Validators.required],
+    direccion: ['', [Validators.required, Validators.minLength(3)]],
+    referencia: [''],
+    latitud: ['-17.7833', Validators.required],
+    longitud: ['-63.1821', Validators.required],
+    es_principal: [true],
+  });
+
   constructor() {
     const sessionId = this.route.snapshot.queryParamMap.get('session_id') ?? '';
     if (sessionId) {
@@ -409,6 +601,7 @@ export class CheckoutPage {
     }
     this.load();
   }
+
   load(): void {
     this.loading.set(true);
     this.error.set('');
@@ -416,20 +609,34 @@ export class CheckoutPage {
       cart: this.commerce.cart(),
       branches: this.catalog.branches(),
       addresses: this.commerce.addresses(),
+      cities: this.catalog.cities(),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
-        next: ({ cart, branches, addresses }) => {
+        next: ({ cart, branches, addresses, cities }) => {
           this.cart.set(cart);
           this.branches.set(branches);
           this.addresses.set(addresses);
+          this.cities.set(cities);
           if (cart.id_sucursal) {
             this.form.controls.id_sucursal.setValue(String(cart.id_sucursal));
+          }
+          if (
+            this.form.controls.modalidad_entrega.value === 'DELIVERY' &&
+            !this.form.controls.id_direccion.value &&
+            addresses.length > 0
+          ) {
+            const preferred = addresses.find((a) => a.es_principal) || addresses[0];
+            this.form.controls.id_direccion.setValue(String(preferred.id_direccion));
+            if (this.canQuote()) {
+              this.requestQuote();
+            }
           }
         },
         error: (error) => this.error.set(this.errors.message(error, 'Intenta nuevamente.')),
       });
   }
+
   retry(): void {
     if (this.paymentSessionId()) {
       this.verifyPayment();
@@ -437,12 +644,46 @@ export class CheckoutPage {
       this.load();
     }
   }
+
   canQuote(): boolean {
     return !!this.form.controls.id_sucursal.value && !!this.form.controls.id_direccion.value;
   }
+
   needsQuote(): boolean {
     return this.form.controls.modalidad_entrega.value === 'DELIVERY' && !this.quote();
   }
+
+  onDeliveryModeChange(): void {
+    this.quote.set(null);
+    if (this.form.controls.modalidad_entrega.value === 'DELIVERY') {
+      if (!this.form.controls.id_direccion.value && this.addresses().length > 0) {
+        const preferred = this.addresses().find((a) => a.es_principal) || this.addresses()[0];
+        this.form.controls.id_direccion.setValue(String(preferred.id_direccion));
+      }
+      if (this.canQuote()) {
+        this.requestQuote();
+      }
+    }
+  }
+
+  onBranchChange(): void {
+    this.quote.set(null);
+    if (this.form.controls.modalidad_entrega.value === 'DELIVERY' && this.canQuote()) {
+      this.requestQuote();
+    }
+  }
+
+  onAddressChange(): void {
+    this.quote.set(null);
+    if (this.canQuote()) {
+      this.requestQuote();
+    }
+  }
+
+  calculateTotal(itemsTotal: string | number, shippingCost: string | number): number {
+    return Number(itemsTotal || 0) + Number(shippingCost || 0);
+  }
+
   requestQuote(): void {
     if (!this.canQuote()) return;
     this.quoting.set(true);
@@ -459,6 +700,81 @@ export class CheckoutPage {
           this.error.set(this.errors.message(error, 'No pudimos calcular el envío.')),
       });
   }
+
+  openAddressModal(): void {
+    this.addressModalError.set('');
+    const defaultCityId = this.cities()[0]?.id_ciudad;
+    this.newAddressForm.reset({
+      alias: 'Casa',
+      id_ciudad: defaultCityId ? String(defaultCityId) : '',
+      direccion: '',
+      referencia: '',
+      latitud: '-17.7833',
+      longitud: '-63.1821',
+      es_principal: true,
+    });
+    this.showAddressModal.set(true);
+  }
+
+  closeAddressModal(): void {
+    if (this.savingAddress()) return;
+    this.showAddressModal.set(false);
+  }
+
+  modalLatNum(): number | null {
+    const val = parseFloat(this.newAddressForm.controls.latitud.value);
+    return isNaN(val) ? null : val;
+  }
+
+  modalLngNum(): number | null {
+    const val = parseFloat(this.newAddressForm.controls.longitud.value);
+    return isNaN(val) ? null : val;
+  }
+
+  onModalLocationSelected(evt: { lat: number; lng: number; addressText?: string }): void {
+    this.newAddressForm.controls.latitud.setValue(String(evt.lat));
+    this.newAddressForm.controls.longitud.setValue(String(evt.lng));
+    if (evt.addressText && !this.newAddressForm.controls.direccion.value.trim()) {
+      this.newAddressForm.controls.direccion.setValue(evt.addressText);
+    }
+  }
+
+  saveNewAddress(): void {
+    if (this.newAddressForm.invalid) return;
+    this.savingAddress.set(true);
+    this.addressModalError.set('');
+
+    const raw = this.newAddressForm.getRawValue();
+    const payload = {
+      alias: raw.alias || 'Dirección',
+      id_ciudad: Number(raw.id_ciudad),
+      direccion: raw.direccion,
+      referencia: raw.referencia || null,
+      latitud: Number(raw.latitud),
+      longitud: Number(raw.longitud),
+      es_principal: raw.es_principal,
+    };
+
+    this.commerce
+      .createAddress(payload)
+      .pipe(finalize(() => this.savingAddress.set(false)))
+      .subscribe({
+        next: (savedAddress) => {
+          this.addresses.update((items) => [savedAddress, ...items]);
+          this.form.controls.id_direccion.setValue(String(savedAddress.id_direccion));
+          this.closeAddressModal();
+          if (this.canQuote()) {
+            this.requestQuote();
+          }
+        },
+        error: (err) => {
+          this.addressModalError.set(
+            this.errors.message(err, 'No pudimos guardar la dirección. Revisa los datos.'),
+          );
+        },
+      });
+  }
+
   submit(): void {
     if (this.form.invalid || this.needsQuote()) return;
     this.submitting.set(true);
@@ -966,12 +1282,12 @@ export class OrdersPage {
 
 @Component({
   selector: 'app-addresses-page',
-  imports: [ReactiveFormsModule, StatusPanel],
+  imports: [ReactiveFormsModule, StatusPanel, AddressMapPickerComponent, DecimalPipe],
   template: `<section class="commerce-page page-shell">
     <header class="commerce-heading">
       <div>
         <h1>Direcciones</h1>
-        <p>Guarda ubicaciones para futuros pedidos con delivery.</p>
+        <p>Guarda tus ubicaciones exactas con mapa y GPS para pedidos con delivery.</p>
       </div>
     </header>
     @if (error()) {
@@ -979,7 +1295,7 @@ export class OrdersPage {
     }
     <form class="address-form" [formGroup]="form" (ngSubmit)="save()">
       <label class="field"
-        ><span>Nombre</span><input formControlName="alias" placeholder="Casa" /></label
+        ><span>Nombre / Alias</span><input formControlName="alias" placeholder="Casa" /></label
       ><label class="field"
         ><span>Ciudad</span
         ><select formControlName="id_ciudad">
@@ -989,14 +1305,18 @@ export class OrdersPage {
           }
         </select></label
       ><label class="field field--wide"
-        ><span>Dirección</span><input formControlName="direccion" /></label
-      ><label class="field"
-        ><span>Latitud</span
-        ><input type="number" step="0.000001" formControlName="latitud" /></label
-      ><label class="field"
-        ><span>Longitud</span
-        ><input type="number" step="0.000001" formControlName="longitud" /></label
-      ><label class="check-field field--wide"
+        ><span>Dirección escrita (Calle / Avenida y Nro.)</span><input formControlName="direccion" placeholder="Ej: Av. San Martín #450" /></label
+      ><div class="field field--wide" style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
+        <span style="font-weight: 700; margin-bottom: 0.35rem; display: block;">
+          Ubicación en el mapa (PIN arrastrable 📍 y botón GPS)
+        </span>
+        <app-address-map-picker
+          [lat]="currentLatNum()"
+          [lng]="currentLngNum()"
+          (locationSelected)="onLocationSelected($event)"
+        />
+      </div>
+      <label class="check-field field--wide"
         ><input type="checkbox" formControlName="es_principal" /> Dirección principal</label
       ><button class="button button--primary" type="submit" [disabled]="saving() || form.invalid">
         {{ saving() ? 'Guardando…' : editingId() ? 'Actualizar dirección' : 'Guardar dirección' }}
@@ -1020,6 +1340,11 @@ export class OrdersPage {
                 <div>
                   <h3>{{ address.alias || 'Dirección' }}</h3>
                   <p>{{ address.direccion }}, {{ address.ciudad }}</p>
+                  @if (address.latitud && address.longitud) {
+                    <small style="color: #64748b; font-size: 0.75rem;">
+                      📍 Coordenadas: {{ address.latitud | number: '1.4-4' }}, {{ address.longitud | number: '1.4-4' }}
+                    </small>
+                  }
                 </div>
                 @if (address.es_principal) {
                   <span class="status-chip">Principal</span>
@@ -1061,11 +1386,36 @@ export class AddressesPage {
         next: (data) => {
           this.addresses.set(data.addresses);
           this.cities.set(data.cities);
+          if (data.cities.length > 0 && !this.form.controls.id_ciudad.value) {
+            this.form.controls.id_ciudad.setValue(String(data.cities[0].id_ciudad));
+          }
         },
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos cargar las direcciones.')),
       });
   }
+
+  currentLatNum(): number | null {
+    const val = parseFloat(this.form.controls.latitud.value);
+    return isNaN(val) ? null : val;
+  }
+
+  currentLngNum(): number | null {
+    const val = parseFloat(this.form.controls.longitud.value);
+    return isNaN(val) ? null : val;
+  }
+
+  onLocationSelected(evt: { lat: number; lng: number; addressText?: string }): void {
+    this.form.controls.latitud.setValue(String(evt.lat));
+    this.form.controls.longitud.setValue(String(evt.lng));
+    if (evt.addressText && !this.form.controls.direccion.value.trim()) {
+      this.form.controls.direccion.setValue(evt.addressText);
+    }
+    if (!this.form.controls.id_ciudad.value && this.cities().length > 0) {
+      this.form.controls.id_ciudad.setValue(String(this.cities()[0].id_ciudad));
+    }
+  }
+
   save(): void {
     if (this.form.invalid) return;
     this.saving.set(true);
@@ -1106,9 +1456,10 @@ export class AddressesPage {
   }
   cancelEdit(): void {
     this.editingId.set(null);
+    const defaultCity = this.cities()[0]?.id_ciudad;
     this.form.reset({
       alias: '',
-      id_ciudad: '',
+      id_ciudad: defaultCity ? String(defaultCity) : '',
       direccion: '',
       latitud: '',
       longitud: '',
