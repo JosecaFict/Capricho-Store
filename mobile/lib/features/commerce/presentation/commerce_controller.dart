@@ -190,8 +190,8 @@ class AddressesController extends AsyncNotifier<List<Address>> {
       zone: zone,
       address: address,
       reference: reference,
-      latitude: latitude,
-      longitude: longitude,
+      latitude: latitude ?? -17.7833,
+      longitude: longitude ?? -63.1821,
       isMain: isMain,
     );
     await refresh();

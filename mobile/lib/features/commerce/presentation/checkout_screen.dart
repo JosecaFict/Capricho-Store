@@ -102,74 +102,170 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _showNewAddressDialog() async {
-    final cityController = TextEditingController(text: '1');
     final streetController = TextEditingController();
-    final zoneController = TextEditingController();
+    final zoneController = TextEditingController(text: 'Centro');
     final refController = TextEditingController();
+    final latController = TextEditingController(text: '-17.7833');
+    final lngController = TextEditingController(text: '-63.1821');
+    String? selectedZone = 'Centro';
 
-    final created = await showDialog<bool>(
+    const sczZones = [
+      {'name': 'Centro', 'lat': -17.7833, 'lng': -63.1821},
+      {'name': 'Equipetrol', 'lat': -17.7680, 'lng': -63.1950},
+      {'name': 'Urbarí', 'lat': -17.7950, 'lng': -63.1980},
+      {'name': 'Las Palmas', 'lat': -17.8050, 'lng': -63.2080},
+      {'name': 'Norte / Banzer', 'lat': -17.7400, 'lng': -63.1800},
+      {'name': 'Plan 3000', 'lat': -17.8250, 'lng': -63.1350},
+    ];
+
+    await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nueva dirección de entrega'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
             children: [
-              TextField(
-                controller: streetController,
-                decoration: const InputDecoration(
-                  labelText: 'Calle y número *',
-                  hintText: 'Ej. Av. Ballivián #450',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: zoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Zona / Barrio *',
-                  hintText: 'Ej. Calacoto',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: refController,
-                decoration: const InputDecoration(
-                  labelText: 'Referencia (opcional)',
-                  hintText: 'Ej. Frente a la plaza, portón negro',
-                ),
-              ),
+              Icon(Icons.add_location_alt_rounded, color: AppColors.cobalt),
+              SizedBox(width: 8),
+              Text('Dirección de entrega', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: streetController,
+                  decoration: const InputDecoration(
+                    labelText: 'Calle y número *',
+                    hintText: 'Ej. Av. San Martín #450',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Zonas rápidas de Santa Cruz (GPS):',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.inkSoft),
+                ),
+                const SizedBox(height: 6),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: sczZones.map((z) {
+                      final isSelected = selectedZone == z['name'];
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(z['name'] as String, style: const TextStyle(fontSize: 12)),
+                          selected: isSelected,
+                          selectedColor: AppColors.cobaltLight,
+                          onSelected: (val) {
+                            if (val) {
+                              setModalState(() {
+                                selectedZone = z['name'] as String;
+                                zoneController.text = z['name'] as String;
+                                latController.text = (z['lat'] as double).toStringAsFixed(4);
+                                lngController.text = (z['lng'] as double).toStringAsFixed(4);
+                              });
+                            }
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: zoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Zona / Barrio *',
+                    hintText: 'Ej. Centro',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: refController,
+                  decoration: const InputDecoration(
+                    labelText: 'Referencia (opcional)',
+                    hintText: 'Ej. Frente a la plaza, portón blanco',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: latController,
+                        keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Latitud GPS *',
+                          prefixIcon: Icon(Icons.my_location_rounded, size: 16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: lngController,
+                        keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Longitud GPS *',
+                          prefixIcon: Icon(Icons.location_searching_rounded, size: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          FilledButton(
-            onPressed: () async {
-              if (streetController.text.trim().isEmpty ||
-                  zoneController.text.trim().isEmpty) {
-                return;
-              }
-              try {
-                final newAddr = await ref.read(addressesProvider.notifier).addAddress(
-                      cityId: int.tryParse(cityController.text) ?? 1,
-                      zone: zoneController.text.trim(),
-                      address: streetController.text.trim(),
-                      reference: refController.text.trim(),
-                      isMain: true,
-                    );
-                if (ctx.mounted) {
-                  Navigator.of(ctx).pop(true);
-                  setState(() => _selectedAddress = newAddr);
-                  _requestQuote(newAddr);
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (streetController.text.trim().isEmpty ||
+                    zoneController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Por favor completa la calle y la zona')),
+                  );
+                  return;
                 }
-              } catch (_) {}
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
+                HapticFeedback.selectionClick();
+                final lat = double.tryParse(latController.text.trim()) ?? -17.7833;
+                final lng = double.tryParse(lngController.text.trim()) ?? -63.1821;
+                try {
+                  final newAddr = await ref.read(addressesProvider.notifier).addAddress(
+                        cityId: 1,
+                        zone: zoneController.text.trim(),
+                        address: streetController.text.trim(),
+                        reference: refController.text.trim().isNotEmpty
+                            ? refController.text.trim()
+                            : null,
+                        latitude: lat,
+                        longitude: lng,
+                        isMain: true,
+                      );
+                  if (ctx.mounted) {
+                    Navigator.of(ctx).pop(true);
+                    setState(() => _selectedAddress = newAddr);
+                    _requestQuote(newAddr);
+                  }
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al crear dirección: $e')),
+                    );
+                  }
+                }
+              },
+              style: FilledButton.styleFrom(backgroundColor: AppColors.cobalt),
+              child: const Text('Guardar y cotizar'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -708,9 +804,37 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     .map(
                       (addr) => DropdownMenuItem(
                         value: addr,
-                        child: Text(
-                          addr.displayName,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.location_on_rounded,
+                              size: 16,
+                              color: addr.latitud != null ? AppColors.cobalt : AppColors.inkSoft,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                addr.displayName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (addr.latitud != null && addr.longitud != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'GPS OK',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.cobaltDark,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     )

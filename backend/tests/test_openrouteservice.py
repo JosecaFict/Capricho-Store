@@ -140,3 +140,36 @@ async def test_quote_shipping_rounds_additional_km_upward() -> None:
     quote3 = await service.quote_shipping(1, ShippingQuoteCreate(id_sucursal=1, id_direccion=1))
     assert quote3.costo_estimado == Decimal("5.00")
 
+
+async def test_quote_shipping_uses_fallback_coordinates_when_missing() -> None:
+    session = AsyncMock()
+    repository = AsyncMock()
+    route_client = AsyncMock()
+
+    customer = Cliente(id_cliente=1, id_usuario=1, estado="ACTIVO")
+    branch = Sucursal(id_sucursal=1, nombre="Central", activo=True, latitud=None, longitud=None)
+    address = DireccionCliente(id_direccion=1, id_cliente=1, activo=True, latitud=None, longitud=None)
+    rate = TarifaEnvio(id_tarifa=1, tarifa_base=Decimal("15.00"), distancia_base_km=Decimal("5.00"), costo_km_adicional=Decimal("2.50"), activo=True)
+
+    repository.customer_by_user.return_value = customer
+    repository.get.side_effect = lambda model, identity: branch if model is Sucursal else address
+    repository.active_rate.return_value = rate
+    repository.add.side_effect = lambda entity: entity
+
+    # Route client returns a route based on fallback coordinates
+    route_client.calculate_route.return_value = RouteEstimate(distance_km=Decimal("4.00"), duration_min=12, provider="OPEN_ROUTE_SERVICE")
+
+    service = CommerceService(session, repository, route_client=route_client)
+    quote = await service.quote_shipping(1, ShippingQuoteCreate(id_sucursal=1, id_direccion=1))
+
+    assert quote.costo_estimado == Decimal("15.00")
+    assert quote.distancia_km == Decimal("4.00")
+    # Verify calculate_route was called with default fallback coordinates (-17.7833, -63.1821)
+    route_client.calculate_route.assert_awaited_once_with(
+        start_lat=-17.7833,
+        start_lng=-63.1821,
+        end_lat=-17.7833,
+        end_lng=-63.1821,
+    )
+
+

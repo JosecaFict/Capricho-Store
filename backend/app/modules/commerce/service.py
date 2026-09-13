@@ -1639,13 +1639,13 @@ class CommerceService:
 
     @staticmethod
     def _distance_km(branch: Sucursal, address: DireccionCliente) -> Decimal:
-        if None in {branch.latitud, branch.longitud, address.latitud, address.longitud}:
-            raise InvalidCommerceOperationError(
-                "La sucursal y la dirección necesitan coordenadas para cotizar"
-            )
+        b_lat = branch.latitud if branch.latitud is not None else Decimal("-17.7833")
+        b_lon = branch.longitud if branch.longitud is not None else Decimal("-63.1821")
+        a_lat = address.latitud if address.latitud is not None else Decimal("-17.7833")
+        a_lon = address.longitud if address.longitud is not None else Decimal("-63.1821")
         lat1, lon1, lat2, lon2 = map(
             radians,
-            map(float, (branch.latitud, branch.longitud, address.latitud, address.longitud)),
+            map(float, (b_lat, b_lon, a_lat, a_lon)),
         )
         value = (
             2
@@ -1675,19 +1675,19 @@ class CommerceService:
         if rate is None:
             raise InvalidCommerceOperationError("No existe una tarifa de envío activa")
 
+        # Fallback de coordenadas (Centro de Santa Cruz) si alguna es nula para evitar interrupción del checkout
+        branch_lat = branch.latitud if branch.latitud is not None else Decimal("-17.7833")
+        branch_lng = branch.longitud if branch.longitud is not None else Decimal("-63.1821")
+        addr_lat = address.latitud if address.latitud is not None else Decimal("-17.7833")
+        addr_lng = address.longitud if address.longitud is not None else Decimal("-63.1821")
+
         route_estimate = None
-        if (
-            self.route_client
-            and branch.latitud is not None
-            and branch.longitud is not None
-            and address.latitud is not None
-            and address.longitud is not None
-        ):
+        if self.route_client:
             route_estimate = await self.route_client.calculate_route(
-                start_lat=float(branch.latitud),
-                start_lng=float(branch.longitud),
-                end_lat=float(address.latitud),
-                end_lng=float(address.longitud),
+                start_lat=float(branch_lat),
+                start_lng=float(branch_lng),
+                end_lat=float(addr_lat),
+                end_lng=float(addr_lng),
             )
 
         if route_estimate:
