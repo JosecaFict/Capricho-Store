@@ -1,7 +1,8 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
+import { AuthService } from '../../core/auth/auth.service';
 import { Branch, Product, ProductVariant } from '../../core/models/catalog.model';
 import { Order, Reservation, ReturnRequest, Sale } from '../../core/models/commerce.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
@@ -20,103 +21,378 @@ interface SaleLine {
 
 @Component({
   selector: 'app-pos-sales-admin',
-  imports: [ReactiveFormsModule, BolivianosPipe],
+  imports: [ReactiveFormsModule, FormsModule, BolivianosPipe],
   template: `
-    <section>
+    <section class="pos-sales-page">
       <header class="admin-page-heading">
         <div>
-          <h1>Venta presencial</h1>
-          <p>Registra una venta en efectivo con stock y costo FIFO reales.</p>
+          <p class="eyebrow">Punto de Venta</p>
+          <h1>Venta Presencial (POS)</h1>
+          <p>Registra ventas en mostrador con deducción automática de inventario físico y costeo FIFO.</p>
         </div>
       </header>
+
       @if (error()) {
-        <p class="admin-notice admin-notice--error" role="alert">{{ error() }}</p>
-      }
-      @if (completed(); as sale) {
-        <div class="admin-complete-state">
-          <strong>Venta #{{ sale.id_venta }} registrada</strong>
-          <p>Total {{ sale.total | bolivianos }}. El inventario fue actualizado.</p>
+        <div class="admin-notice admin-notice--error" role="alert">
+          <span>{{ error() }}</span>
+          <button type="button" class="pos-notice-close" (click)="error.set('')" aria-label="Cerrar">✕</button>
         </div>
       }
-      <form class="pos-builder" [formGroup]="form" (ngSubmit)="addLine()">
-        <label class="field"
-          ><span>Sucursal</span
-          ><select formControlName="branch">
-            <option value="">Selecciona</option>
-            @for (branch of branches(); track branch.id_sucursal) {
-              <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
-            }
-          </select></label
-        >
-        <label class="field pos-search"
-          ><span>Buscar producto o SKU</span
-          ><input formControlName="search" (input)="search.set(form.controls.search.value)"
-        /></label>
-        <label class="field"
-          ><span>Variante</span
-          ><select formControlName="variant">
-            <option value="">Selecciona</option>
-            @for (entry of filteredVariants(); track entry.variant.id_variante) {
-              <option [value]="entry.variant.id_variante">
-                {{ entry.product.nombre }} / {{ entry.variant.color }} / {{ entry.variant.talla }} /
-                {{ entry.variant.sku }}
-              </option>
-            }
-          </select></label
-        >
-        <label class="field"
-          ><span>Cantidad</span><input type="number" min="1" formControlName="quantity"
-        /></label>
-        <button
-          class="button button--secondary"
-          type="submit"
-          [disabled]="form.controls.variant.invalid || form.controls.quantity.invalid"
-        >
-          Agregar a venta
-        </button>
-      </form>
-      @if (lines().length) {
-        <div class="admin-panel pos-ticket">
-          <table>
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Variante</th>
-                <th>Cantidad</th>
-                <th>Precio</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (line of lines(); track line.variant.id_variante) {
-                <tr>
-                  <td>{{ line.product.nombre }}</td>
-                  <td>{{ line.variant.color }} / {{ line.variant.talla }}</td>
-                  <td>{{ line.quantity }}</td>
-                  <td>{{ line.product.precio_actual | bolivianos }}</td>
-                  <td>
-                    <button
-                      class="text-button"
-                      type="button"
-                      (click)="removeLine(line.variant.id_variante)"
-                    >
-                      Quitar
-                    </button>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-          <footer>
-            <strong>Total estimado {{ estimatedTotal() | bolivianos }}</strong
-            ><button
-              class="button button--primary"
-              type="button"
-              [disabled]="saving() || !form.controls.branch.value"
-              (click)="confirm()"
-            >
-              {{ saving() ? 'Registrando…' : 'Cobrar en efectivo' }}
+
+      @if (completed(); as sale) {
+        <div class="admin-panel pos-success-panel">
+          <div class="pos-success-badge">✓ Cobro Exitoso</div>
+          <h2>Venta #{{ sale.id_venta }} Completada</h2>
+          <p class="pos-success-lead">
+            Total cobrado en efectivo: <strong>{{ sale.total | bolivianos }}</strong> en <strong>{{ sale.sucursal }}</strong>.
+          </p>
+          <div class="pos-success-details">
+            <div class="pos-success-metric">
+              <span>Canal de venta</span>
+              <strong>Presencial / Mostrador</strong>
+            </div>
+            <div class="pos-success-metric">
+              <span>Modalidad de entrega</span>
+              <strong>Directa</strong>
+            </div>
+            <div class="pos-success-metric">
+              <span>Prendas vendidas</span>
+              <strong>{{ sale.items.length }} ítem(s)</strong>
+            </div>
+            <div class="pos-success-metric">
+              <span>Fecha y hora</span>
+              <strong>{{ sale.fecha_venta }}</strong>
+            </div>
+          </div>
+          <div class="pos-success-actions">
+            <button type="button" class="button button--secondary" (click)="printTicket()">
+              🖨️ Imprimir comprobante
             </button>
+            <button type="button" class="button button--primary" (click)="resetPos()">
+              + Iniciar nueva venta
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- Control de Sucursal: Basado en rol (Cajero fijo vs Admin selector) -->
+      <div class="pos-branch-card admin-panel">
+        @if (!canSelectBranch()) {
+          <div class="pos-branch-assigned-banner">
+            <div class="pos-branch-assigned-icon">📍</div>
+            <div class="pos-branch-assigned-text">
+              <span class="pos-branch-assigned-label">Sucursal asignada a tu usuario</span>
+              <strong class="pos-branch-assigned-name">{{ assignedBranchName() }}</strong>
+            </div>
+            <span class="pos-status-badge pos-status-badge--locked">
+              <span class="pos-dot-pulse"></span>
+              Caja Asignada (Fija)
+            </span>
+          </div>
+        } @else {
+          <div class="pos-branch-admin-banner">
+            <label class="field pos-branch-select-field">
+              <span>📍 Sucursal de atención (Administración general)</span>
+              <select [value]="selectedBranchId() ?? ''" (change)="onBranchChange($any($event.target).value)">
+                <option value="">-- Selecciona sucursal para la venta --</option>
+                @for (branch of branches(); track branch.id_sucursal) {
+                  <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
+                }
+              </select>
+            </label>
+            @if (selectedBranchId()) {
+              <span class="pos-status-badge pos-status-badge--active">
+                <span class="pos-dot-pulse"></span>
+                Sucursal activa
+              </span>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Lector rápido de código de barras o SKU -->
+      <div class="admin-panel pos-scanner-panel">
+        <div class="pos-scanner-header">
+          <span class="pos-scanner-title">⚡ Lector rápido de Códigos de Barras / SKU</span>
+          <span class="pos-scanner-hint">Pistola lectora o ingreso manual</span>
+        </div>
+        <div class="pos-scanner-row">
+          <div class="pos-scanner-input-wrap">
+            <span class="pos-scanner-icon">🏷️</span>
+            <input
+              type="text"
+              placeholder="Escanear código de barras o ingresar SKU (ej. POL-OVR-NEG-M) y presionar Enter…"
+              [value]="barcodeQuery()"
+              (input)="barcodeQuery.set($any($event.target).value)"
+              (keydown.enter)="$event.preventDefault(); onBarcodeScan(barcodeQuery())"
+            />
+          </div>
+          <button
+            type="button"
+            class="button button--secondary pos-scan-btn"
+            [disabled]="!barcodeQuery().trim()"
+            (click)="onBarcodeScan(barcodeQuery())"
+          >
+            Buscar prenda
+          </button>
+        </div>
+        @if (barcodeMatchNotice()) {
+          <div class="pos-scanner-match">
+            <span>{{ barcodeMatchNotice() }}</span>
+          </div>
+        }
+      </div>
+
+      <!-- Selector Cascada de Prendas: Marca -> Modelo -> Talla -> Color -> Cantidad -->
+      <div class="admin-panel pos-cascade-panel">
+        <div class="pos-cascade-header">
+          <div>
+            <h2>Selección guiada de prenda</h2>
+            <p>Selecciona ordenadamente para consultar existencias físicas de la sucursal.</p>
+          </div>
+          @if (selectedBrandId() || selectedProductId()) {
+            <button type="button" class="text-button" (click)="clearSelection()">
+              Limpiar selección
+            </button>
+          }
+        </div>
+
+        <div class="pos-cascade-grid">
+          <!-- 1. Marca -->
+          <label class="field pos-cascade-field">
+            <span class="pos-step-num">1. Marca</span>
+            <select [value]="selectedBrandId() ?? ''" (change)="onBrandChange($any($event.target).value)">
+              <option value="">-- Seleccionar Marca --</option>
+              @for (b of brands(); track b.id) {
+                <option [value]="b.id">{{ b.nombre }}</option>
+              }
+            </select>
+          </label>
+
+          <!-- 2. Modelo / Prenda -->
+          <label class="field pos-cascade-field">
+            <span class="pos-step-num">2. Modelo / Prenda</span>
+            <select
+              [disabled]="!selectedBrandId()"
+              [value]="selectedProductId() ?? ''"
+              (change)="onProductChange($any($event.target).value)"
+            >
+              <option value="">{{ selectedBrandId() ? '-- Seleccionar Prenda --' : 'Primero elige marca' }}</option>
+              @for (p of productsForBrand(); track p.id_producto) {
+                <option [value]="p.id_producto">{{ p.nombre }} ({{ p.precio_actual | bolivianos }})</option>
+              }
+            </select>
+          </label>
+
+          <!-- 3. Talla -->
+          <label class="field pos-cascade-field">
+            <span class="pos-step-num">3. Talla</span>
+            <select
+              [disabled]="!selectedProductId()"
+              [value]="selectedSize()"
+              (change)="onSizeChange($any($event.target).value)"
+            >
+              <option value="">{{ selectedProductId() ? '-- Talla --' : 'Elige prenda' }}</option>
+              @for (t of availableSizes(); track t) {
+                <option [value]="t">Talla {{ t }}</option>
+              }
+            </select>
+          </label>
+
+          <!-- 4. Color y Stock -->
+          <label class="field pos-cascade-field">
+            <span class="pos-step-num">4. Color y Existencias</span>
+            <select
+              [disabled]="!selectedSize()"
+              [value]="selectedVariantId() ?? ''"
+              (change)="onVariantChange($any($event.target).value)"
+            >
+              <option value="">{{ selectedSize() ? '-- Color --' : 'Elige talla' }}</option>
+              @for (v of availableVariantsForSize(); track v.id_variante) {
+                <option [value]="v.id_variante" [disabled]="(v.stock_disponible ?? 0) <= 0">
+                  {{ v.color }} — {{ (v.stock_disponible ?? 0) > 0 ? (v.stock_disponible + ' disponibles') : 'AGOTADO' }}
+                </option>
+              }
+            </select>
+          </label>
+        </div>
+
+        <!-- Previsualización de Prenda Seleccionada y Cantidad -->
+        @if (selectedVariant(); as v) {
+          <div class="pos-selection-preview">
+            <div class="pos-preview-media">
+              @if (selectedProduct()?.imagen_principal?.secure_url) {
+                <img [src]="selectedProduct()?.imagen_principal?.secure_url" [alt]="selectedProduct()?.nombre" class="pos-preview-img" />
+              } @else {
+                <div class="pos-preview-placeholder">👗</div>
+              }
+              <div class="pos-preview-meta">
+                <strong>{{ selectedProduct()?.nombre }}</strong>
+                <span class="pos-preview-sub">
+                  Marca: <em>{{ selectedProduct()?.marca }}</em> · Talla: <strong>{{ v.talla }}</strong> · Color: <strong>{{ v.color }}</strong>
+                </span>
+                <div class="pos-preview-badges">
+                  <span class="pos-sku-badge">{{ v.sku }}</span>
+                  @if ((v.stock_disponible ?? 0) > 0) {
+                    <span class="pos-stock-badge pos-stock-badge--ok">
+                      ✓ {{ v.stock_disponible }} unidad(es) disponible(s) en sucursal
+                    </span>
+                  } @else {
+                    <span class="pos-stock-badge pos-stock-badge--empty">
+                      ✕ Sin existencias en esta sucursal
+                    </span>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div class="pos-preview-action">
+              <div class="pos-stepper-box">
+                <span class="pos-stepper-label">5. Cantidad</span>
+                <div class="pos-stepper">
+                  <button type="button" class="pos-stepper-btn" (click)="decrementQty()" [disabled]="quantity() <= 1">−</button>
+                  <input
+                    type="number"
+                    min="1"
+                    [max]="selectedStock() || 1"
+                    [value]="quantity()"
+                    (input)="onQuantityInput($any($event.target).value)"
+                  />
+                  <button
+                    type="button"
+                    class="pos-stepper-btn"
+                    (click)="incrementQty()"
+                    [disabled]="quantity() >= selectedStock()"
+                  >+</button>
+                </div>
+              </div>
+
+              <div class="pos-subtotal-box">
+                <span class="pos-subtotal-label">Subtotal prenda</span>
+                <strong class="pos-subtotal-val">{{ currentItemSubtotal() | bolivianos }}</strong>
+              </div>
+
+              <button
+                type="button"
+                class="button button--primary pos-add-btn"
+                [disabled]="!canAddCurrentVariant()"
+                (click)="addLine()"
+              >
+                + Agregar a venta
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Ticket de Venta / Carrito POS -->
+      @if (lines().length) {
+        <div class="admin-panel pos-ticket-panel">
+          <div class="pos-ticket-header">
+            <div class="pos-ticket-title-wrap">
+              <h2>🧾 Comprobante / Ticket de Venta</h2>
+              <span class="pos-ticket-badge">{{ lines().length }} ítem(s) agregado(s)</span>
+            </div>
+            <button type="button" class="text-button text-button--danger" (click)="clearTicket()">
+              Vaciar ticket
+            </button>
+          </div>
+
+          <div class="pos-ticket-table-wrap">
+            <table class="pos-ticket-table">
+              <thead>
+                <tr>
+                  <th>Prenda</th>
+                  <th>Talla & Color</th>
+                  <th>SKU</th>
+                  <th>Precio Unitario</th>
+                  <th>Cantidad</th>
+                  <th>Subtotal</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of lines(); track line.variant.id_variante) {
+                  <tr>
+                    <td class="pos-col-product">
+                      <div class="pos-table-product">
+                        @if (line.product.imagen_principal?.secure_url) {
+                          <img [src]="line.product.imagen_principal?.secure_url" [alt]="line.product.nombre" class="pos-table-thumb" />
+                        } @else {
+                          <div class="pos-table-thumb-empty">👗</div>
+                        }
+                        <div>
+                          <strong>{{ line.product.nombre }}</strong>
+                          <small class="pos-table-brand">{{ line.product.marca }}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="pos-variant-tags">
+                        <span class="pos-pill pos-pill--size">Talla {{ line.variant.talla }}</span>
+                        <span class="pos-pill pos-pill--color">
+                          @if (line.variant.codigo_hex) {
+                            <span class="pos-color-dot" [style.background-color]="line.variant.codigo_hex"></span>
+                          }
+                          {{ line.variant.color }}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <code class="pos-table-sku">{{ line.variant.sku }}</code>
+                    </td>
+                    <td class="pos-col-price">
+                      {{ line.product.precio_actual | bolivianos }}
+                    </td>
+                    <td class="pos-col-qty">
+                      <div class="pos-table-stepper">
+                        <button type="button" (click)="updateLineQty(line.variant.id_variante, -1)">−</button>
+                        <span>{{ line.quantity }}</span>
+                        <button
+                          type="button"
+                          (click)="updateLineQty(line.variant.id_variante, 1)"
+                          [disabled]="line.quantity >= (line.variant.stock_disponible ?? 999)"
+                        >+</button>
+                      </div>
+                    </td>
+                    <td class="pos-col-subtotal">
+                      <strong>{{ lineSubtotal(line) | bolivianos }}</strong>
+                    </td>
+                    <td class="pos-col-remove">
+                      <button
+                        class="pos-remove-btn"
+                        type="button"
+                        title="Quitar prenda del ticket"
+                        (click)="removeLine(line.variant.id_variante)"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <footer class="pos-ticket-footer">
+            <div class="pos-ticket-total-wrap">
+              <span class="pos-ticket-total-label">Total a cobrar en efectivo:</span>
+              <strong class="pos-ticket-total-value">{{ estimatedTotal() | bolivianos }}</strong>
+            </div>
+            <div class="pos-ticket-action-wrap">
+              <button
+                class="button button--primary button--lg pos-checkout-btn"
+                type="button"
+                [disabled]="saving() || !selectedBranchId()"
+                (click)="confirm()"
+              >
+                @if (saving()) {
+                  Procesando cobro…
+                } @else {
+                  💵 Cobrar {{ estimatedTotal() | bolivianos }} en Efectivo
+                }
+              </button>
+            </div>
           </footer>
         </div>
       }
@@ -124,81 +400,399 @@ interface SaleLine {
   `,
 })
 export class PosSalesAdmin {
-  private readonly fb = inject(FormBuilder);
   private readonly commerce = inject(CommerceService);
   private readonly catalog = inject(CatalogService);
+  private readonly auth = inject(AuthService);
   private readonly errors = inject(ApiErrorService);
+
   readonly branches = signal<Branch[]>([]);
   readonly products = signal<Product[]>([]);
   readonly lines = signal<SaleLine[]>([]);
-  readonly search = signal('');
   readonly saving = signal(false);
   readonly error = signal('');
   readonly completed = signal<Sale | null>(null);
-  readonly form = this.fb.nonNullable.group({
-    branch: ['', Validators.required],
-    search: [''],
-    variant: ['', Validators.required],
-    quantity: [1, [Validators.required, Validators.min(1)]],
+
+  // Branch signals
+  readonly selectedBranchId = signal<number | null>(null);
+
+  // Cascading selector signals
+  readonly selectedBrandId = signal<number | null>(null);
+  readonly selectedProductId = signal<number | null>(null);
+  readonly selectedSize = signal<string>('');
+  readonly selectedVariantId = signal<number | null>(null);
+  readonly quantity = signal<number>(1);
+
+  // Quick scanner signals
+  readonly barcodeQuery = signal<string>('');
+  readonly barcodeMatchNotice = signal<string>('');
+
+  readonly currentUser = this.auth.currentUser;
+
+  readonly canSelectBranch = computed(() => {
+    const u = this.currentUser();
+    if (!u) return false;
+    return u.roles.includes('ADMIN') || !u.id_sucursal;
   });
-  readonly filteredVariants = computed(() => {
-    const term = this.search().trim().toLowerCase();
-    return this.products().flatMap((product) =>
-      product.variantes
-        .filter(
-          (variant) =>
-            variant.activo &&
-            (!term ||
-              `${product.nombre} ${variant.sku} ${variant.color} ${variant.talla}`
-                .toLowerCase()
-                .includes(term)),
-        )
-        .map((variant) => ({ product, variant })),
+
+  readonly assignedBranchName = computed(() => {
+    const u = this.currentUser();
+    if (u?.sucursal) return u.sucursal;
+    if (u?.id_sucursal) {
+      const b = this.branches().find((br) => br.id_sucursal === u.id_sucursal);
+      return b ? b.nombre : `Sucursal #${u.id_sucursal}`;
+    }
+    return 'Sucursal asignada';
+  });
+
+  readonly brands = computed(() => {
+    const map = new Map<number, string>();
+    for (const p of this.products()) {
+      if (p.id_marca && p.marca) {
+        map.set(p.id_marca, p.marca);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  });
+
+  readonly productsForBrand = computed(() => {
+    const brandId = this.selectedBrandId();
+    if (!brandId) return [];
+    return this.products().filter((p) => p.id_marca === brandId);
+  });
+
+  readonly selectedProduct = computed(() => {
+    const prodId = this.selectedProductId();
+    if (!prodId) return null;
+    return this.products().find((p) => p.id_producto === prodId) ?? null;
+  });
+
+  readonly availableSizes = computed(() => {
+    const prod = this.selectedProduct();
+    if (!prod) return [];
+    const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+    const unique = Array.from(
+      new Set(prod.variantes.filter((v) => v.activo).map((v) => v.talla)),
     );
+    return unique.sort((a, b) => {
+      const ia = sizeOrder.indexOf(a);
+      const ib = sizeOrder.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      return a.localeCompare(b);
+    });
   });
+
+  readonly availableVariantsForSize = computed(() => {
+    const prod = this.selectedProduct();
+    const size = this.selectedSize();
+    if (!prod || !size) return [];
+    return prod.variantes.filter((v) => v.activo && v.talla === size);
+  });
+
+  readonly selectedVariant = computed(() => {
+    const variantId = this.selectedVariantId();
+    if (!variantId) return null;
+    const prod = this.selectedProduct();
+    if (prod) {
+      const found = prod.variantes.find((v) => v.id_variante === variantId);
+      if (found) return found;
+    }
+    for (const p of this.products()) {
+      const found = p.variantes.find((v) => v.id_variante === variantId);
+      if (found) return found;
+    }
+    return null;
+  });
+
+  readonly selectedStock = computed(() => {
+    const v = this.selectedVariant();
+    if (!v) return 0;
+    return v.stock_disponible ?? 0;
+  });
+
+  readonly canAddCurrentVariant = computed(() => {
+    const v = this.selectedVariant();
+    if (!v) return false;
+    const stock = v.stock_disponible ?? 0;
+    const qty = this.quantity();
+    return stock > 0 && qty > 0 && qty <= stock;
+  });
+
+  readonly currentItemSubtotal = computed(() => {
+    const p = this.selectedProduct();
+    if (!p || !this.selectedVariantId()) return 0;
+    return Number(p.precio_actual || 0) * this.quantity();
+  });
+
   readonly estimatedTotal = computed(() =>
     this.lines().reduce(
       (total, item) => total + Number(item.product.precio_actual || 0) * item.quantity,
       0,
     ),
   );
+
   constructor() {
-    forkJoin({
-      branches: this.catalog.branches(),
-      products: this.catalog.products({ page_size: 100, activo: true }),
-    }).subscribe({
-      next: (data) => {
-        this.branches.set(data.branches);
-        this.products.set(data.products.items);
+    this.catalog.branches().subscribe({
+      next: (branches) => {
+        this.branches.set(branches);
+        this.initBranchContext();
       },
       error: (error) => this.error.set(this.errors.message(error, 'No pudimos preparar la venta.')),
     });
-  }
-  addLine(): void {
-    const variantId = Number(this.form.controls.variant.value);
-    const entry = this.filteredVariants().find((item) => item.variant.id_variante === variantId);
-    if (!entry) return;
-    const quantity = this.form.controls.quantity.value;
-    this.lines.update((items) => {
-      const current = items.find((item) => item.variant.id_variante === variantId);
-      return current
-        ? items.map((item) =>
-            item === current ? { ...item, quantity: item.quantity + quantity } : item,
-          )
-        : [...items, { ...entry, quantity }];
+
+    effect(() => {
+      const user = this.auth.currentUser();
+      if (user && this.branches().length && !this.selectedBranchId()) {
+        this.initBranchContext();
+      }
     });
-    this.form.controls.variant.reset('');
-    this.form.controls.quantity.reset(1);
   }
+
+  private initBranchContext(): void {
+    const user = this.currentUser();
+    const branches = this.branches();
+    if (!branches.length) return;
+
+    const canSelect = !user?.id_sucursal || user.roles.includes('ADMIN');
+
+    if (!canSelect && user?.id_sucursal) {
+      this.selectedBranchId.set(user.id_sucursal);
+      this.loadProducts(user.id_sucursal);
+    } else {
+      const defaultBranchId = this.selectedBranchId() || user?.id_sucursal || branches[0]?.id_sucursal || null;
+      if (defaultBranchId) {
+        this.selectedBranchId.set(defaultBranchId);
+        this.loadProducts(defaultBranchId);
+      } else {
+        this.loadProducts();
+      }
+    }
+  }
+
+  private loadProducts(branchId?: number): void {
+    const filters: { page_size: number; activo: boolean; sucursal?: number } = {
+      page_size: 100,
+      activo: true,
+    };
+    if (branchId) {
+      filters.sucursal = branchId;
+    }
+    this.catalog.products(filters).subscribe({
+      next: (data) => {
+        this.products.set(data.items);
+      },
+      error: (error) => this.error.set(this.errors.message(error, 'No pudimos cargar las existencias.')),
+    });
+  }
+
+  onBranchChange(branchIdStr: string): void {
+    const branchId = branchIdStr ? Number(branchIdStr) : null;
+    this.selectedBranchId.set(branchId);
+    if (this.lines().length > 0) {
+      this.lines.set([]);
+      this.error.set('La sucursal cambió. El ticket fue reiniciado para reflejar el stock correspondiente.');
+    }
+    this.clearSelection();
+    if (branchId) {
+      this.loadProducts(branchId);
+    }
+  }
+
+  onBrandChange(brandIdStr: string): void {
+    const brandId = brandIdStr ? Number(brandIdStr) : null;
+    this.selectedBrandId.set(brandId);
+    this.selectedProductId.set(null);
+    this.selectedSize.set('');
+    this.selectedVariantId.set(null);
+    this.quantity.set(1);
+    this.barcodeMatchNotice.set('');
+  }
+
+  onProductChange(productIdStr: string): void {
+    const prodId = productIdStr ? Number(productIdStr) : null;
+    this.selectedProductId.set(prodId);
+    this.selectedSize.set('');
+    this.selectedVariantId.set(null);
+    this.quantity.set(1);
+    this.barcodeMatchNotice.set('');
+
+    if (prodId) {
+      const prod = this.products().find((p) => p.id_producto === prodId);
+      if (prod) {
+        const uniqueSizes = Array.from(
+          new Set(prod.variantes.filter((v) => v.activo).map((v) => v.talla)),
+        );
+        if (uniqueSizes.length === 1) {
+          this.onSizeChange(uniqueSizes[0]);
+        }
+      }
+    }
+  }
+
+  onSizeChange(size: string): void {
+    this.selectedSize.set(size);
+    this.selectedVariantId.set(null);
+    this.quantity.set(1);
+    this.barcodeMatchNotice.set('');
+
+    const prod = this.selectedProduct();
+    if (prod) {
+      const matchingVariants = prod.variantes.filter((v) => v.activo && v.talla === size);
+      if (matchingVariants.length === 1) {
+        this.onVariantChange(String(matchingVariants[0].id_variante));
+      }
+    }
+  }
+
+  onVariantChange(variantIdStr: string): void {
+    const variantId = variantIdStr ? Number(variantIdStr) : null;
+    this.selectedVariantId.set(variantId);
+    this.quantity.set(1);
+    this.barcodeMatchNotice.set('');
+  }
+
+  onQuantityInput(val: string): void {
+    const parsed = parseInt(val, 10);
+    const max = this.selectedStock();
+    if (isNaN(parsed) || parsed < 1) {
+      this.quantity.set(1);
+    } else if (max > 0 && parsed > max) {
+      this.quantity.set(max);
+    } else {
+      this.quantity.set(parsed);
+    }
+  }
+
+  incrementQty(): void {
+    const max = this.selectedStock();
+    if (max > 0 && this.quantity() < max) {
+      this.quantity.update((q) => q + 1);
+    }
+  }
+
+  decrementQty(): void {
+    if (this.quantity() > 1) {
+      this.quantity.update((q) => q - 1);
+    }
+  }
+
+  onBarcodeScan(raw: string): void {
+    const query = (raw || '').trim().toLowerCase();
+    if (!query) return;
+
+    for (const product of this.products()) {
+      for (const variant of product.variantes) {
+        if (
+          variant.activo &&
+          ((variant.codigo_barras && variant.codigo_barras.toLowerCase() === query) ||
+            (variant.sku && variant.sku.toLowerCase() === query))
+        ) {
+          this.selectedBrandId.set(product.id_marca);
+          this.selectedProductId.set(product.id_producto);
+          this.selectedSize.set(variant.talla);
+          this.selectedVariantId.set(variant.id_variante);
+          this.quantity.set(1);
+          this.barcodeMatchNotice.set(
+            `✓ Prenda identificada: ${product.nombre} (Talla ${variant.talla} / ${variant.color})`,
+          );
+          this.error.set('');
+          this.barcodeQuery.set('');
+          return;
+        }
+      }
+    }
+
+    this.barcodeMatchNotice.set('');
+    this.error.set(`No se encontró ninguna prenda con el código o SKU "${raw}".`);
+  }
+
+  clearSelection(): void {
+    this.selectedBrandId.set(null);
+    this.selectedProductId.set(null);
+    this.selectedSize.set('');
+    this.selectedVariantId.set(null);
+    this.quantity.set(1);
+    this.barcodeMatchNotice.set('');
+  }
+
+  addLine(): void {
+    const prod = this.selectedProduct();
+    const variant = this.selectedVariant();
+    const qty = this.quantity();
+    if (!prod || !variant || qty <= 0) return;
+
+    const available = variant.stock_disponible ?? 0;
+    const currentLine = this.lines().find((item) => item.variant.id_variante === variant.id_variante);
+    const currentQty = currentLine ? currentLine.quantity : 0;
+
+    if (currentQty + qty > available && available > 0) {
+      this.error.set(
+        `Stock insuficiente: solo quedan ${available} unidad(es) en esta sucursal (tienes ${currentQty} en el ticket).`,
+      );
+      return;
+    }
+
+    this.lines.update((items) => {
+      const existing = items.find((item) => item.variant.id_variante === variant.id_variante);
+      return existing
+        ? items.map((item) =>
+            item.variant.id_variante === variant.id_variante
+              ? { ...item, quantity: item.quantity + qty }
+              : item,
+          )
+        : [...items, { product: prod, variant, quantity: qty }];
+    });
+
+    this.selectedVariantId.set(null);
+    this.quantity.set(1);
+    this.barcodeMatchNotice.set('');
+    this.error.set('');
+  }
+
   removeLine(id: number): void {
     this.lines.update((items) => items.filter((item) => item.variant.id_variante !== id));
   }
+
+  updateLineQty(variantId: number, delta: number): void {
+    this.lines.update((items) =>
+      items
+        .map((item) => {
+          if (item.variant.id_variante === variantId) {
+            const newQty = item.quantity + delta;
+            const max = item.variant.stock_disponible ?? 999;
+            if (newQty > max && max > 0) {
+              this.error.set(`Stock máximo disponible alcanzado (${max} unidades).`);
+              return item;
+            }
+            return newQty > 0 ? { ...item, quantity: newQty } : null;
+          }
+          return item;
+        })
+        .filter((item): item is SaleLine => item !== null),
+    );
+  }
+
+  clearTicket(): void {
+    this.lines.set([]);
+    this.error.set('');
+  }
+
+  lineSubtotal(line: SaleLine): number {
+    return Number(line.product.precio_actual || 0) * line.quantity;
+  }
+
   confirm(): void {
-    if (!this.lines().length || !this.form.controls.branch.value) return;
+    const branchId = this.selectedBranchId();
+    if (!this.lines().length || !branchId) {
+      this.error.set('Debes seleccionar una sucursal y agregar prendas al ticket.');
+      return;
+    }
     this.saving.set(true);
+    this.error.set('');
     this.commerce
       .createPosSale({
-        id_sucursal: Number(this.form.controls.branch.value),
+        id_sucursal: branchId,
         modalidad_entrega: 'ENTREGA_DIRECTA',
         registrar_efectivo: true,
         items: this.lines().map((item) => ({
@@ -211,10 +805,28 @@ export class PosSalesAdmin {
         next: (sale) => {
           this.completed.set(sale);
           this.lines.set([]);
+          this.clearSelection();
+          this.loadProducts(branchId);
         },
-        error: (error) =>
-          this.error.set(this.errors.message(error, 'No pudimos registrar la venta.')),
+        error: (error) => {
+          this.error.set(this.errors.message(error, 'No pudimos registrar la venta en caja.'));
+        },
       });
+  }
+
+  printTicket(): void {
+    window.print();
+  }
+
+  resetPos(): void {
+    this.completed.set(null);
+    this.lines.set([]);
+    this.clearSelection();
+    this.error.set('');
+    const branchId = this.selectedBranchId();
+    if (branchId) {
+      this.loadProducts(branchId);
+    }
   }
 }
 
