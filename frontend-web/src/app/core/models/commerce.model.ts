@@ -41,6 +41,10 @@ export interface Reservation {
   id_sucursal: number;
   sucursal: string;
   direccion_sucursal: string;
+  id_cliente?: number | null;
+  cliente_nombre?: string | null;
+  cliente_correo?: string | null;
+  cliente_telefono?: string | null;
   fecha_reserva: string;
   fecha_cita: string | null;
   fecha_expiracion: string | null;
@@ -69,6 +73,10 @@ export interface Sale {
 export interface Order {
   id_pedido: number;
   id_venta: number;
+  id_cliente?: number | null;
+  cliente_nombre?: string | null;
+  cliente_correo?: string | null;
+  cliente_telefono?: string | null;
   estado: string;
   modalidad_entrega: 'RETIRO_SUCURSAL' | 'DELIVERY';
   id_sucursal: number;

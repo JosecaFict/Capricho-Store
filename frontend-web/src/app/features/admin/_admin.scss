@@ -2011,6 +2011,29 @@ textarea {
   color: var(--ink-soft);
 }
 
+.order-customer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.order-customer-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #93c5fd;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.order-customer-contact {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
 /* Pastillas de modalidad */
 .order-mode-pill {
   display: inline-flex;

@@ -428,11 +428,27 @@ class CommerceService:
             await self._line(item.id_detalle_reserva, item.id_variante, item.cantidad)
             for item in details
         ]
+        cliente_nombre = None
+        cliente_correo = None
+        cliente_telefono = None
+        if reservation.id_cliente:
+            customer = await self.repository.get(Cliente, reservation.id_cliente)
+            if customer:
+                c_user = await self.repository.get(Usuario, customer.id_usuario)
+                if c_user:
+                    cliente_nombre = f"{c_user.nombres} {c_user.apellidos}".strip()
+                    cliente_correo = c_user.correo
+                    cliente_telefono = c_user.telefono
+
         return ReservationResponse(
             id_reserva=reservation.id_reserva,
             id_sucursal=reservation.id_sucursal,
             sucursal=branch.nombre,
             direccion_sucursal=branch.direccion,
+            id_cliente=reservation.id_cliente,
+            cliente_nombre=cliente_nombre,
+            cliente_correo=cliente_correo,
+            cliente_telefono=cliente_telefono,
             fecha_reserva=reservation.fecha_reserva,
             fecha_cita=reservation.fecha_cita,
             fecha_expiracion=reservation.fecha_expiracion,
@@ -1230,9 +1246,26 @@ class CommerceService:
             tx = await self.repository.gateway_transaction_by_payment(payment.id_pago)
             if tx and tx.respuesta_resumen:
                 receipt_url = tx.respuesta_resumen.get("receipt_url")
+
+        cliente_nombre = None
+        cliente_correo = None
+        cliente_telefono = None
+        if sale.id_cliente:
+            customer = await self.repository.get(Cliente, sale.id_cliente)
+            if customer:
+                c_user = await self.repository.get(Usuario, customer.id_usuario)
+                if c_user:
+                    cliente_nombre = f"{c_user.nombres} {c_user.apellidos}".strip()
+                    cliente_correo = c_user.correo
+                    cliente_telefono = c_user.telefono
+
         return OrderResponse(
             id_pedido=order.id_pedido,
             id_venta=order.id_venta,
+            id_cliente=sale.id_cliente,
+            cliente_nombre=cliente_nombre,
+            cliente_correo=cliente_correo,
+            cliente_telefono=cliente_telefono,
             estado=order.estado,
             modalidad_entrega=sale.modalidad_entrega,
             id_sucursal=sale.id_sucursal,

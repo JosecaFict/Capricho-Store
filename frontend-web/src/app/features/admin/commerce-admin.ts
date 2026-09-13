@@ -400,11 +400,21 @@ type ReservationTab =
             <tbody>
               @for (item of filteredItems(); track item.id_reserva) {
                 <tr>
-                  <!-- Reserva & Creación -->
+                  <!-- Reserva & Creación & Cliente -->
                   <td>
                     <div class="order-id-cell">
                       <span class="order-id-title">Reserva #{{ item.id_reserva }}</span>
                       <span class="order-date-text">{{ item.fecha_reserva | date: 'short' }}</span>
+                      @if (item.cliente_nombre) {
+                        <div class="order-customer-info">
+                          <span class="order-customer-name">👤 {{ item.cliente_nombre }}</span>
+                          @if (item.cliente_telefono) {
+                            <small class="order-customer-contact">📞 {{ item.cliente_telefono }}</small>
+                          } @else if (item.cliente_correo) {
+                            <small class="order-customer-contact">✉️ {{ item.cliente_correo }}</small>
+                          }
+                        </div>
+                      }
                     </div>
                   </td>
 
@@ -850,7 +860,11 @@ export class ReservationsAdmin {
             i.sku.toLowerCase().includes(search),
         );
         const addressMatch = (r.direccion_sucursal || '').toLowerCase().includes(search);
-        return idMatch || branchMatch || itemsMatch || addressMatch;
+        const customerMatch =
+          (r.cliente_nombre || '').toLowerCase().includes(search) ||
+          (r.cliente_correo || '').toLowerCase().includes(search) ||
+          (r.cliente_telefono || '').toLowerCase().includes(search);
+        return idMatch || branchMatch || itemsMatch || addressMatch || customerMatch;
       });
     }
 
@@ -1179,11 +1193,11 @@ type OrderTab = 'TODOS' | 'PENDIENTE' | 'PREPARANDO' | 'LISTO' | 'COMPLETADO' | 
       <!-- Barra de filtros y búsqueda -->
       <div class="orders-filterbar">
         <div class="orders-filter-field">
-          <label for="order-search">Buscar pedido o prenda</label>
+          <label for="order-search">Buscar pedido, prenda o cliente</label>
           <input
             id="order-search"
             type="search"
-            placeholder="Ej: #12, Polo, Verde, Central..."
+            placeholder="Ej: #12, Cliente, Polo, Verde, Central..."
             [ngModel]="searchTerm()"
             (ngModelChange)="searchTerm.set($event)"
           />
@@ -1248,11 +1262,21 @@ type OrderTab = 'TODOS' | 'PENDIENTE' | 'PREPARANDO' | 'LISTO' | 'COMPLETADO' | 
             <tbody>
               @for (item of filteredItems(); track item.id_pedido) {
                 <tr>
-                  <!-- Pedido & Fecha -->
+                  <!-- Pedido & Fecha & Cliente -->
                   <td>
                     <div class="order-id-cell">
                       <span class="order-id-title">Pedido #{{ item.id_pedido }}</span>
                       <span class="order-date-text">{{ item.fecha_creacion | date: 'short' }}</span>
+                      @if (item.cliente_nombre) {
+                        <div class="order-customer-info">
+                          <span class="order-customer-name">👤 {{ item.cliente_nombre }}</span>
+                          @if (item.cliente_telefono) {
+                            <small class="order-customer-contact">📞 {{ item.cliente_telefono }}</small>
+                          } @else if (item.cliente_correo) {
+                            <small class="order-customer-contact">✉️ {{ item.cliente_correo }}</small>
+                          }
+                        </div>
+                      }
                     </div>
                   </td>
 
@@ -1426,7 +1450,11 @@ export class OrdersAdmin {
         const addressMatch = (o.direccion_entrega || o.direccion_sucursal || '')
           .toLowerCase()
           .includes(search);
-        return idMatch || branchMatch || itemsMatch || addressMatch;
+        const customerMatch =
+          (o.cliente_nombre || '').toLowerCase().includes(search) ||
+          (o.cliente_correo || '').toLowerCase().includes(search) ||
+          (o.cliente_telefono || '').toLowerCase().includes(search);
+        return idMatch || branchMatch || itemsMatch || addressMatch || customerMatch;
       });
     }
 

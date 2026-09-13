@@ -139,6 +139,10 @@ class ReservationResponse(ORMResponse):
     id_sucursal: int
     sucursal: str
     direccion_sucursal: str
+    id_cliente: int | None = None
+    cliente_nombre: str | None = None
+    cliente_correo: str | None = None
+    cliente_telefono: str | None = None
     fecha_reserva: datetime
     fecha_cita: datetime | None
     fecha_expiracion: datetime | None
@@ -200,6 +204,10 @@ class OrderStatusUpdate(BaseModel):
 class OrderResponse(ORMResponse):
     id_pedido: int
     id_venta: int
+    id_cliente: int | None = None
+    cliente_nombre: str | None = None
+    cliente_correo: str | None = None
+    cliente_telefono: str | None = None
     estado: OrderState
     modalidad_entrega: DeliveryMode
     id_sucursal: int
