@@ -289,13 +289,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _startStripeCheckout(Cart cart) async {
+    final branchId = cart.idSucursal ?? (_shippingQuote?.idSucursal ?? 1);
+
     if (_deliveryMode == 'DELIVERY') {
       if (_selectedAddress == null) {
-        setState(() => _error = 'Por favor selecciona una dirección de entrega.');
+        const msg = 'Por favor selecciona una dirección de entrega.';
+        setState(() => _error = msg);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(msg)));
         return;
       }
       if (_shippingQuote == null) {
-        setState(() => _error = 'Falta cotizar el envío para esta dirección.');
+        const msg = 'Falta cotizar el envío para esta dirección.';
+        setState(() => _error = msg);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(msg)));
         return;
       }
     }
@@ -308,15 +314,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     HapticFeedback.mediumImpact();
 
     try {
+      debugPrint('[Checkout] Iniciando checkout en sucursal $branchId, modalidad $_deliveryMode');
       final api = ref.read(commerceApiProvider);
       final checkoutData = await api.checkout(
-        branchId: cart.idSucursal!,
+        branchId: branchId,
         deliveryMode: _deliveryMode,
-        addressId: _deliveryMode == 'DELIVERY' ? _selectedAddress!.idDireccion : null,
-        quoteId: _deliveryMode == 'DELIVERY' ? _shippingQuote!.idCotizacion : null,
+        addressId: _deliveryMode == 'DELIVERY' ? _selectedAddress?.idDireccion : null,
+        quoteId: _deliveryMode == 'DELIVERY' ? _shippingQuote?.idCotizacion : null,
         returnUrl: 'https://capricho-store.vercel.app',
       );
 
+      debugPrint('[Checkout] Sesión creada: ${checkoutData.sessionId}, url: ${checkoutData.checkoutUrl}');
       final uri = Uri.parse(checkoutData.checkoutUrl);
       bool launched = false;
       try {
@@ -324,27 +332,29 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           uri,
           mode: LaunchMode.inAppBrowserView,
         );
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[Checkout] inAppBrowserView falló ($e), reintentando con externalApplication');
         launched = false;
       }
 
       if (!launched) {
         try {
-          launched = await launchUrl(uri, mode: LaunchMode.inAppWebView);
-        } catch (_) {
+          launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } catch (e) {
+          debugPrint('[Checkout] externalApplication falló: $e');
           launched = false;
         }
       }
 
-      if (!launched) {
-        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-
       if (!launched && mounted) {
+        const msg = 'No se pudo abrir la pasarela de pago en el navegador de tu iPhone.';
         setState(() {
-          _error = 'No se pudo abrir la pasarela de pago para completar el pago de Stripe.';
+          _error = msg;
           _processingCheckout = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(msg), backgroundColor: AppColors.danger),
+        );
         return;
       }
 
@@ -353,11 +363,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         _showPaymentVerificationSheet(checkoutData.sessionId);
       }
     } catch (e) {
+      debugPrint('[Checkout] Error en api.checkout: $e');
       if (mounted) {
+        final cleanError = e.toString().replaceAll('ApiException: ', '');
         setState(() {
-          _error = e.toString().replaceAll('ApiException: ', '');
+          _error = cleanError;
           _processingCheckout = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(cleanError),
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
       }
     }
   }
