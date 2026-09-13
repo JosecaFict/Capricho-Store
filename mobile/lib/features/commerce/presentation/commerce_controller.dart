@@ -141,11 +141,7 @@ class OrdersController extends AsyncNotifier<List<Order>> {
 
   @override
   Future<List<Order>> build() async {
-    try {
-      return await _api.listOrders();
-    } catch (_) {
-      return [];
-    }
+    return await _api.listOrders();
   }
 
   Future<void> refresh() async {

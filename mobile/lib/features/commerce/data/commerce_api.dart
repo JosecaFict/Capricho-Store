@@ -9,6 +9,13 @@ final commerceApiProvider = Provider<CommerceApi>((ref) {
   return CommerceApi(dio);
 });
 
+Map<String, dynamic> _asMap(dynamic data) {
+  if (data is Map) {
+    return Map<String, dynamic>.from(data);
+  }
+  return <String, dynamic>{};
+}
+
 class CommerceApi {
   final Dio _dio;
 
@@ -20,7 +27,7 @@ class CommerceApi {
   Future<Cart> getCart() async {
     try {
       final response = await _dio.get('/cart');
-      return Cart.fromJson(response.data as Map<String, dynamic>);
+      return Cart.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -40,7 +47,7 @@ class CommerceApi {
           if (branchId != null) 'id_sucursal': branchId,
         },
       );
-      return Cart.fromJson(response.data as Map<String, dynamic>);
+      return Cart.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -55,7 +62,7 @@ class CommerceApi {
         '/cart/items/$itemId',
         data: {'cantidad': quantity},
       );
-      return Cart.fromJson(response.data as Map<String, dynamic>);
+      return Cart.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -64,7 +71,7 @@ class CommerceApi {
   Future<Cart> removeCartItem({required int itemId}) async {
     try {
       final response = await _dio.post('/cart/items/$itemId/remove');
-      return Cart.fromJson(response.data as Map<String, dynamic>);
+      return Cart.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -73,7 +80,7 @@ class CommerceApi {
   Future<Cart> clearCart() async {
     try {
       final response = await _dio.post('/cart/clear');
-      return Cart.fromJson(response.data as Map<String, dynamic>);
+      return Cart.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -85,8 +92,8 @@ class CommerceApi {
   Future<List<Address>> listAddresses() async {
     try {
       final response = await _dio.get('/addresses');
-      final list = response.data as List<dynamic>;
-      return list.map((e) => Address.fromJson(e as Map<String, dynamic>)).toList();
+      final list = (response.data as List? ?? []);
+      return list.map((e) => Address.fromJson(_asMap(e))).toList();
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -116,7 +123,7 @@ class CommerceApi {
           'es_principal': isMain,
         },
       );
-      return Address.fromJson(response.data as Map<String, dynamic>);
+      return Address.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -134,7 +141,7 @@ class CommerceApi {
           'id_direccion': addressId,
         },
       );
-      return ShippingQuote.fromJson(response.data as Map<String, dynamic>);
+      return ShippingQuote.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -161,7 +168,7 @@ class CommerceApi {
           if (returnUrl != null) 'return_url': returnUrl,
         },
       );
-      return StripeCheckoutResponse.fromJson(response.data as Map<String, dynamic>);
+      return StripeCheckoutResponse.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -170,10 +177,7 @@ class CommerceApi {
   Future<StripeCheckoutStatusResponse> getCheckoutStatus(String sessionId) async {
     try {
       final response = await _dio.get('/checkout/$sessionId/status');
-      final data = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{};
-      return StripeCheckoutStatusResponse.fromJson(data);
+      return StripeCheckoutStatusResponse.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -193,8 +197,8 @@ class CommerceApi {
   Future<List<Reservation>> listReservations() async {
     try {
       final response = await _dio.get('/reservations');
-      final list = response.data as List<dynamic>;
-      return list.map((e) => Reservation.fromJson(e as Map<String, dynamic>)).toList();
+      final list = (response.data as List? ?? []);
+      return list.map((e) => Reservation.fromJson(_asMap(e))).toList();
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -216,7 +220,7 @@ class CommerceApi {
           'items': items,
         },
       );
-      return Reservation.fromJson(response.data as Map<String, dynamic>);
+      return Reservation.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -225,7 +229,7 @@ class CommerceApi {
   Future<Reservation> cancelReservation(int reservationId) async {
     try {
       final response = await _dio.post('/reservations/$reservationId/cancel');
-      return Reservation.fromJson(response.data as Map<String, dynamic>);
+      return Reservation.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -237,8 +241,8 @@ class CommerceApi {
   Future<List<Order>> listOrders() async {
     try {
       final response = await _dio.get('/orders');
-      final list = response.data as List<dynamic>;
-      return list.map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();
+      final list = (response.data as List? ?? []);
+      return list.map((e) => Order.fromJson(_asMap(e))).toList();
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -247,7 +251,7 @@ class CommerceApi {
   Future<Order> getOrder(int orderId) async {
     try {
       final response = await _dio.get('/orders/$orderId');
-      return Order.fromJson(response.data as Map<String, dynamic>);
+      return Order.fromJson(_asMap(response.data));
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
@@ -259,8 +263,8 @@ class CommerceApi {
   Future<List<CustomerNotification>> listNotifications() async {
     try {
       final response = await _dio.get('/notifications');
-      final list = response.data as List<dynamic>;
-      return list.map((e) => CustomerNotification.fromJson(e as Map<String, dynamic>)).toList();
+      final list = (response.data as List? ?? []);
+      return list.map((e) => CustomerNotification.fromJson(_asMap(e))).toList();
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }

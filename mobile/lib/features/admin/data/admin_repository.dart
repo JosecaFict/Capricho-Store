@@ -109,7 +109,9 @@ class AdminRepository {
       final res = await _dio.get('/admin/orders', queryParameters: params);
       final list = (res.data as List? ?? []);
       return list
-          .map((e) => Order.fromJson(e as Map<String, dynamic>))
+          .map((e) => Order.fromJson(
+                e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{},
+              ))
           .toList();
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
@@ -125,7 +127,10 @@ class AdminRepository {
         '/admin/orders/$orderId/status',
         data: {'estado': estado},
       );
-      return Order.fromJson(res.data as Map<String, dynamic>);
+      final data = res.data is Map
+          ? Map<String, dynamic>.from(res.data as Map)
+          : <String, dynamic>{};
+      return Order.fromJson(data);
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }
