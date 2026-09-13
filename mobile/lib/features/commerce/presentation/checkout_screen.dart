@@ -103,12 +103,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _showNewAddressDialog() async {
+    final aliasController = TextEditingController();
     final streetController = TextEditingController();
     final zoneController = TextEditingController(text: 'Centro');
     final refController = TextEditingController();
     final latController = TextEditingController(text: '-17.7833');
     final lngController = TextEditingController(text: '-63.1821');
     String? selectedZone = 'Centro';
+    bool isSaving = false;
 
     const sczZones = [
       {'name': 'Centro', 'lat': -17.7833, 'lng': -63.1821},
@@ -136,6 +138,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                TextField(
+                  controller: aliasController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre / Alias (ej. Casa, Trabajo, Depa)',
+                    hintText: 'Ej. Casa de campo',
+                  ),
+                ),
+                const SizedBox(height: 12),
                 TextField(
                   controller: streetController,
                   decoration: const InputDecoration(
@@ -239,48 +249,75 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
+              onPressed: isSaving ? null : () => Navigator.of(ctx).pop(false),
               child: const Text('Cancelar'),
             ),
             FilledButton(
-              onPressed: () async {
-                if (streetController.text.trim().isEmpty ||
-                    zoneController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Por favor completa la calle y la zona')),
-                  );
-                  return;
-                }
-                HapticFeedback.selectionClick();
-                final lat = double.tryParse(latController.text.trim()) ?? -17.7833;
-                final lng = double.tryParse(lngController.text.trim()) ?? -63.1821;
-                try {
-                  final newAddr = await ref.read(addressesProvider.notifier).addAddress(
-                        cityId: 1,
-                        zone: zoneController.text.trim(),
-                        address: streetController.text.trim(),
-                        reference: refController.text.trim().isNotEmpty
-                            ? refController.text.trim()
-                            : null,
-                        latitude: lat,
-                        longitude: lng,
-                        isMain: true,
-                      );
-                  if (ctx.mounted) {
-                    Navigator.of(ctx).pop(true);
-                    setState(() => _selectedAddress = newAddr);
-                    _requestQuote(newAddr);
-                  }
-                } catch (e) {
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error al crear dirección: $e')),
-                    );
-                  }
-                }
-              },
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (streetController.text.trim().isEmpty ||
+                          zoneController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Por favor completa la calle y la zona')),
+                        );
+                        return;
+                      }
+                      setModalState(() => isSaving = true);
+                      HapticFeedback.selectionClick();
+                      final lat = double.tryParse(latController.text.trim()) ?? -17.7833;
+                      final lng = double.tryParse(lngController.text.trim()) ?? -63.1821;
+                      try {
+                        final newAddr = await ref.read(addressesProvider.notifier).addAddress(
+                              cityId: 1,
+                              alias: aliasController.text.trim().isNotEmpty
+                                  ? aliasController.text.trim()
+                                  : null,
+                              zone: zoneController.text.trim(),
+                              address: streetController.text.trim(),
+                              reference: refController.text.trim().isNotEmpty
+                                  ? refController.text.trim()
+                                  : null,
+                              latitude: lat,
+                              longitude: lng,
+                              isMain: true,
+                            );
+                        if (ctx.mounted) {
+                          Navigator.of(ctx).pop(true);
+                        }
+                        // Sincronizar con la lista fresca de direcciones y cotizar de inmediato
+                        final updatedList = await ref.read(addressesProvider.future);
+                        final created = updatedList.firstWhere(
+                          (a) => a.idDireccion == newAddr.idDireccion,
+                          orElse: () => newAddr,
+                        );
+                        if (mounted) {
+                          setState(() => _selectedAddress = created);
+                          await _requestQuote(created);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Dirección "${created.displayName}" agregada y seleccionada'),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setModalState(() => isSaving = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error al crear dirección: $e')),
+                          );
+                        }
+                      }
+                    },
               style: FilledButton.styleFrom(backgroundColor: AppColors.cobalt),
-              child: const Text('Guardar y cotizar'),
+              child: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Guardar y cotizar'),
             ),
           ],
         ),
@@ -835,8 +872,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   label: const Text('Registrar dirección para delivery'),
                 );
               }
-              return DropdownButtonFormField<Address>(
-                value: _selectedAddress,
+              final selected = addresses.firstWhere(
+                (a) => a.idDireccion == _selectedAddress?.idDireccion,
+                orElse: () => addresses.firstWhere(
+                  (a) => a.esPrincipal,
+                  orElse: () => addresses.first,
+                ),
+              );
+
+              // Sincronizar _selectedAddress si aún no está configurado
+              if (_selectedAddress?.idDireccion != selected.idDireccion) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    setState(() => _selectedAddress = selected);
+                    if (_shippingQuote == null && _deliveryMode == 'DELIVERY') {
+                      _requestQuote(selected);
+                    }
+                  }
+                });
+              }
+
+              return DropdownButtonFormField<int>(
+                value: selected.idDireccion,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Selecciona dirección guardada',
@@ -844,8 +901,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ),
                 items: addresses
                     .map(
-                      (addr) => DropdownMenuItem(
-                        value: addr,
+                      (addr) => DropdownMenuItem<int>(
+                        value: addr.idDireccion,
                         child: Row(
                           children: [
                             Icon(
@@ -881,8 +938,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       ),
                     )
                     .toList(),
-                onChanged: (addr) {
-                  if (addr != null) _selectAddress(addr);
+                onChanged: (int? newId) {
+                  if (newId != null) {
+                    final chosen = addresses.firstWhere((a) => a.idDireccion == newId);
+                    _selectAddress(chosen);
+                  }
                 },
               );
             },

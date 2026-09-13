@@ -232,6 +232,16 @@ class Address {
 
   String get displayName =>
       alias?.isNotEmpty == true ? alias! : (zona?.isNotEmpty == true ? '$zona, $direccion' : direccion);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Address &&
+          runtimeType == other.runtimeType &&
+          idDireccion == other.idDireccion;
+
+  @override
+  int get hashCode => idDireccion.hashCode;
 }
 
 class ShippingQuote {
