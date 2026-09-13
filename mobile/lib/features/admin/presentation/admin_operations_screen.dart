@@ -2,6 +2,7 @@ import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/admin/domain/admin_models.dart';
 import 'package:capricho_store/features/admin/domain/operational_access.dart';
 import 'package:capricho_store/features/admin/presentation/admin_controller.dart';
+import 'package:capricho_store/features/auth/domain/app_user.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
@@ -896,7 +897,7 @@ class _AdminOperationsScreenState extends ConsumerState<AdminOperationsScreen> {
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(
                 children: [
-                  Text('• ${item.cantidad}x ${item.nombrePrenda}',
+                  Text('• ${item.cantidad}x ${item.producto}',
                       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500)),
                   if (item.talla != null && item.talla!.isNotEmpty)
                     Text(' (${item.talla})', style: const TextStyle(fontSize: 12, color: AppColors.inkSoft)),
