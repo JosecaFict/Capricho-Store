@@ -236,6 +236,7 @@ class AddressesScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
@@ -244,11 +245,13 @@ class AddressesScreen extends ConsumerWidget {
               Text('Nueva dirección', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             ],
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 TextField(
                   controller: aliasController,
                   decoration: const InputDecoration(
@@ -374,7 +377,8 @@ class AddressesScreen extends ConsumerWidget {
               ],
             ),
           ),
-          actions: [
+        ),
+        actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('Cancelar'),

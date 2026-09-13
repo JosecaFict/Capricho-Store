@@ -125,6 +125,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
@@ -133,11 +134,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               Text('Dirección de entrega', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             ],
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 TextField(
                   controller: aliasController,
                   decoration: const InputDecoration(
@@ -247,7 +250,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               ],
             ),
           ),
-          actions: [
+        ),
+        actions: [
             TextButton(
               onPressed: isSaving ? null : () => Navigator.of(ctx).pop(false),
               child: const Text('Cancelar'),

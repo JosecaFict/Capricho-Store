@@ -123,6 +123,59 @@ class _LocationMapPreviewState extends State<LocationMapPreview> {
     final fracX = exactTileX - centerTileX;
     final fracY = exactTileY - centerTileY;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final halfW = (screenWidth * 0.45).clamp(140.0, 260.0);
+    final halfH = widget.height / 2.0;
+
+    final List<Widget> tileWidgets = [];
+
+    // Rejilla de teselas alrededor del centro (-2 a 2 horizontal, -1 a 1 vertical)
+    for (int dx = -2; dx <= 2; dx++) {
+      for (int dy = -1; dy <= 1; dy++) {
+        final tileX = centerTileX + dx;
+        final tileY = centerTileY + dy;
+
+        // Posición del tile respecto al centro del widget
+        final left = halfW + (dx - fracX) * tileSize;
+        final top = halfH + (dy - fracY) * tileSize;
+
+        final tileUrl =
+            'https://tile.openstreetmap.org/$_zoom/$tileX/$tileY.png';
+
+        tileWidgets.add(
+          Positioned(
+            left: left,
+            top: top,
+            width: tileSize,
+            height: tileSize,
+            child: CachedNetworkImage(
+              imageUrl: tileUrl,
+              fit: BoxFit.cover,
+              httpHeaders: const {
+                'User-Agent': 'CaprichoStoreApp/1.0 (contact@caprichostore.bo)',
+              },
+              placeholder: (_, _) => Container(
+                color: const Color(0xFFF1F5F9),
+                child: const Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  ),
+                ),
+              ),
+              errorWidget: (_, __, ___) => Container(
+                color: const Color(0xFFF1F5F9),
+                child: const Center(
+                  child: Icon(Icons.map_outlined, color: AppColors.inkSoft, size: 28),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Container(
@@ -136,66 +189,11 @@ class _LocationMapPreviewState extends State<LocationMapPreview> {
           children: [
             // Rejilla de teselas OSM con soporte para arrastre
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onPanStart: _onPanStart,
               onPanUpdate: _onPanUpdate,
               onPanEnd: _onPanEnd,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final halfW = constraints.maxWidth / 2;
-                  final halfH = constraints.maxHeight / 2;
-
-                  final List<Widget> tileWidgets = [];
-
-                  // Rejilla 3x3 de teselas alrededor del centro
-                  for (int dx = -1; dx <= 1; dx++) {
-                    for (int dy = -1; dy <= 1; dy++) {
-                      final tileX = centerTileX + dx;
-                      final tileY = centerTileY + dy;
-
-                      // Posición del tile respecto al centro del widget
-                      final left = halfW + (dx - fracX) * tileSize;
-                      final top = halfH + (dy - fracY) * tileSize;
-
-                      final tileUrl =
-                          'https://tile.openstreetmap.org/$_zoom/$tileX/$tileY.png';
-
-                      tileWidgets.add(
-                        Positioned(
-                          left: left,
-                          top: top,
-                          width: tileSize,
-                          height: tileSize,
-                          child: CachedNetworkImage(
-                            imageUrl: tileUrl,
-                            fit: BoxFit.cover,
-                            httpHeaders: const {
-                              'User-Agent': 'CaprichoStoreApp/1.0 (contact@caprichostore.bo)',
-                            },
-                            placeholder: (_, _) => Container(
-                              color: const Color(0xFFF1F5F9),
-                              child: const Center(
-                                child: SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 1.5),
-                                ),
-                              ),
-                            ),
-                            errorWidget: (_, __, ___) => Container(
-                              color: const Color(0xFFF1F5F9),
-                              child: const Center(
-                                child: Icon(Icons.map_outlined, color: AppColors.inkSoft, size: 28),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                  }
-
-                  return Stack(children: tileWidgets);
-                },
-              ),
+              child: Stack(children: tileWidgets),
             ),
 
             // Pin centrado con animación sutil al arrastrar
