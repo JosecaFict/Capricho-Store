@@ -154,7 +154,9 @@ async def create_pos_sale(
 ):
     if payload.registrar_efectivo and "pagos.registrar" not in principal.permissions:
         raise PermissionDeniedError
-    return await service.create_pos_sale(principal.user.id_usuario, payload)
+    return await service.create_pos_sale(
+        principal.user.id_usuario, payload, all_branches="ADMIN" in principal.roles
+    )
 
 
 @router.get("/sales", response_model=list[SaleResponse])

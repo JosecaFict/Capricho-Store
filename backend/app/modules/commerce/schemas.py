@@ -154,6 +154,8 @@ class SaleCreate(BaseModel):
     modalidad_entrega: DeliveryMode = "ENTREGA_DIRECTA"
     items: list[CommerceLineRequest] = Field(min_length=1)
     registrar_efectivo: bool = True
+    metodo_pago: Literal["EFECTIVO", "TARJETA", "QR"] | None = "EFECTIVO"
+    referencia_pago: str | None = None
 
 
 class CheckoutCreate(BaseModel):

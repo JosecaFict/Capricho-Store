@@ -590,6 +590,8 @@ class CommerceService:
         shipping_cost: Decimal = Decimal(0),
         cash: bool = False,
         state: str | None = None,
+        payment_method_code: str = "EFECTIVO",
+        payment_reference: str | None = None,
     ) -> Venta:
         self._validate_unique_lines(lines)
         priced: list[tuple[CommerceLineRequest, Decimal, InventarioSucursal]] = []
@@ -651,10 +653,18 @@ class CommerceService:
             )
             await self._consume_fifo(inventory, line.cantidad, movement.id_movimiento)
         if cash:
-            method = await self.repository.payment_method("EFECTIVO")
+            method_code = payment_method_code or "EFECTIVO"
+            method = await self.repository.payment_method(method_code)
             if method is None:
-                raise InvalidCommerceOperationError("El método EFECTIVO no está configurado")
-            await self.repository.add(
+                method_name = {
+                    "EFECTIVO": "Efectivo",
+                    "TARJETA": "Tarjeta (POS)",
+                    "QR": "Pago QR",
+                }.get(method_code, method_code.title())
+                method = await self.repository.add(
+                    MetodoPago(codigo=method_code, nombre=method_name, tipo=method_code, activo=True)
+                )
+            pago = await self.repository.add(
                 Pago(
                     id_venta=sale.id_venta,
                     id_metodo_pago=method.id_metodo_pago,
@@ -663,20 +673,33 @@ class CommerceService:
                     fecha_confirmacion=datetime.now(UTC),
                 )
             )
+            if payment_reference:
+                await self.repository.add(
+                    TransaccionPasarela(
+                        id_pago=pago.id_pago,
+                        proveedor=method_code,
+                        external_payment_id=payment_reference,
+                        estado="SUCCEEDED",
+                        monto=sale.total,
+                        fecha_confirmacion=datetime.now(UTC),
+                    )
+                )
         return sale
 
-    async def create_pos_sale(self, user_id: int, payload: SaleCreate) -> SaleResponse:
+    async def create_pos_sale(
+        self, user_id: int, payload: SaleCreate, *, all_branches: bool = False
+    ) -> SaleResponse:
         employee = await self._employee(user_id)
-        if employee.id_sucursal != payload.id_sucursal:
+        if not all_branches and employee.id_sucursal != payload.id_sucursal:
             raise InvalidCommerceOperationError("El cajero solo puede vender en su sucursal")
         customer_id = payload.id_cliente
         reservation = None
         if payload.id_reserva:
             reservation = await self.repository.get(Reserva, payload.id_reserva)
-            if reservation is None or reservation.id_sucursal != payload.id_sucursal:
+            if reservation is None or (not all_branches and reservation.id_sucursal != payload.id_sucursal):
                 raise InvalidCommerceOperationError("La reserva no corresponde a la sucursal")
-            if reservation.estado not in {"LISTA", "CLIENTE_PRESENTE"}:
-                raise InvalidCommerceOperationError("La reserva todavía no está lista")
+            if reservation.estado in {"CANCELADA", "CONVERTIDA", "EXPIRADA"}:
+                raise InvalidCommerceOperationError("La reserva ya fue finalizada o cancelada")
             reserved_lines = {
                 item.id_variante: item.cantidad
                 for item in await self.repository.reservation_details(reservation.id_reserva)
@@ -699,6 +722,8 @@ class CommerceService:
                 lines=payload.items,
                 reservation_id=payload.id_reserva,
                 cash=payload.registrar_efectivo,
+                payment_method_code=payload.metodo_pago or "EFECTIVO",
+                payment_reference=payload.referencia_pago,
             )
             if reservation:
                 reservation.estado = "CONVERTIDA"

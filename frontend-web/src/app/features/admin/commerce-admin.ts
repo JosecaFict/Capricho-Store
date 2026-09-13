@@ -243,6 +243,12 @@ type ReservationTab =
       @if (error()) {
         <p class="admin-notice admin-notice--error">{{ error() }}</p>
       }
+      @if (successMessage()) {
+        <div class="admin-notice admin-notice--success" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>{{ successMessage() }}</span>
+          <button type="button" (click)="successMessage.set('')" style="background: none; border: none; cursor: pointer; font-size: 1.1rem; color: inherit;" aria-label="Cerrar notificación">✕</button>
+        </div>
+      }
 
       <!-- Barra de pestañas por etapa de reserva -->
       <nav class="orders-tabs" aria-label="Etapas de reservas">
@@ -476,12 +482,23 @@ type ReservationTab =
                   <!-- Acción operativa -->
                   <td style="text-align: right;">
                     <div class="orders-action-cell" style="align-items: flex-end;">
+                      @if (canQuickCharge(item)) {
+                        <button
+                          class="order-quick-pay-btn"
+                          type="button"
+                          [disabled]="saving()"
+                          (click)="openPaymentModal(item)"
+                          title="Cobrar en caja y formalizar venta"
+                        >
+                          💳 Cobrar en caja
+                        </button>
+                      }
                       @if (primaryAction(item); as act) {
                         <button
                           class="order-primary-btn"
                           type="button"
                           [disabled]="saving()"
-                          (click)="update(item.id_reserva, act.targetState)"
+                          (click)="handleAction(item, act)"
                         >
                           {{ act.label }}
                         </button>
@@ -504,6 +521,232 @@ type ReservationTab =
           </table>
         </div>
       }
+
+      <!-- Modal de Cobro en Caja / Concretar Venta -->
+      @if (checkoutReservation(); as res) {
+        <div class="admin-modal-backdrop" (click)="closePaymentModal()">
+          <div
+            class="admin-modal-card"
+            (click)="$event.stopPropagation()"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-modal-title"
+          >
+            <header class="admin-modal-header">
+              <div>
+                <span class="admin-modal-kicker">Caja y Facturación Presencial</span>
+                <h2 id="checkout-modal-title" class="admin-modal-title">
+                  Concretar Venta · Reserva #{{ res.id_reserva }}
+                </h2>
+                <p class="admin-modal-subtitle">
+                  {{ formatBranchName(res.sucursal, res.id_sucursal) }} · {{ res.items.length }} prenda(s) reservada(s)
+                </p>
+              </div>
+              <button
+                type="button"
+                class="admin-modal-close"
+                (click)="closePaymentModal()"
+                [disabled]="saving()"
+                aria-label="Cerrar modal"
+              >
+                ✕
+              </button>
+            </header>
+
+            <div class="admin-modal-body">
+              <!-- Resumen de prendas reservadas -->
+              <div class="checkout-summary-section">
+                <span class="checkout-section-label">Prendas a facturar y retirar</span>
+                <div class="checkout-items-list">
+                  @for (line of res.items; track line.id_detalle) {
+                    <div class="checkout-item-row">
+                      @if (line.imagen_url) {
+                        <img [src]="line.imagen_url" [alt]="line.producto" class="checkout-item-thumb" />
+                      } @else {
+                        <span class="checkout-item-thumb checkout-item-thumb--placeholder">👕</span>
+                      }
+                      <div class="checkout-item-details">
+                        <span class="checkout-item-name">{{ line.producto }}</span>
+                        <div class="checkout-item-badges">
+                          <span class="checkout-badge-prop">{{ line.color }}</span>
+                          <span class="checkout-badge-prop">Talla {{ line.talla }}</span>
+                          <span class="checkout-badge-qty">×{{ line.cantidad }}</span>
+                        </div>
+                      </div>
+                      <div class="checkout-item-price">
+                        <span class="checkout-subtotal">{{ line.subtotal | bolivianos }}</span>
+                        <small class="checkout-unit-price">{{ line.precio_unitario | bolivianos }} c/u</small>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <!-- Banner de Total a Cobrar -->
+              <div class="checkout-total-banner">
+                <div class="checkout-total-banner__label">
+                  <span>TOTAL A COBRAR</span>
+                  <small>Prendas reservadas en tienda</small>
+                </div>
+                <div class="checkout-total-banner__amount">
+                  {{ totalEstimated(res) | bolivianos }}
+                </div>
+              </div>
+
+              <!-- Selector de Método de Pago -->
+              <div class="checkout-method-section">
+                <span class="checkout-section-label">Método de cobro</span>
+                <div class="payment-method-grid">
+                  <button
+                    type="button"
+                    class="payment-method-card"
+                    [class.is-selected]="paymentMethod() === 'EFECTIVO'"
+                    (click)="paymentMethod.set('EFECTIVO')"
+                  >
+                    <span class="payment-method-icon">💵</span>
+                    <strong class="payment-method-title">Efectivo</strong>
+                    <span class="payment-method-desc">Cálculo de cambio</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="payment-method-card"
+                    [class.is-selected]="paymentMethod() === 'TARJETA'"
+                    (click)="paymentMethod.set('TARJETA')"
+                  >
+                    <span class="payment-method-icon">💳</span>
+                    <strong class="payment-method-title">Tarjeta (POS)</strong>
+                    <span class="payment-method-desc">Débito / Crédito</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="payment-method-card"
+                    [class.is-selected]="paymentMethod() === 'QR'"
+                    (click)="paymentMethod.set('QR')"
+                  >
+                    <span class="payment-method-icon">📱</span>
+                    <strong class="payment-method-title">Pago QR</strong>
+                    <span class="payment-method-desc">Simple / Transferencia</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Configuración / Dinámica según Método -->
+              @if (paymentMethod() === 'EFECTIVO') {
+                <div class="checkout-method-detail cash-detail-box">
+                  <div class="cash-input-group">
+                    <label for="cash-received-input">Efectivo recibido del cliente (Bs.)</label>
+                    <div class="cash-input-wrap">
+                      <span class="cash-currency-symbol">Bs.</span>
+                      <input
+                        id="cash-received-input"
+                        type="number"
+                        step="1"
+                        min="0"
+                        class="cash-input"
+                        [ngModel]="amountReceived()"
+                        (ngModelChange)="amountReceived.set($event)"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Botones de billetes rápidos -->
+                  <div class="cash-quick-buttons">
+                    <span class="cash-quick-label">Atajos:</span>
+                    <button type="button" class="cash-chip-btn" (click)="setExactCash()">
+                      Exacto ({{ totalEstimated(res) | bolivianos }})
+                    </button>
+                    <button type="button" class="cash-chip-btn" (click)="addCash(10)">+10</button>
+                    <button type="button" class="cash-chip-btn" (click)="addCash(20)">+20</button>
+                    <button type="button" class="cash-chip-btn" (click)="addCash(50)">+50</button>
+                    <button type="button" class="cash-chip-btn" (click)="addCash(100)">+100</button>
+                  </div>
+
+                  <!-- Cálculo de vuelto o faltante -->
+                  @if (cashShortage() > 0) {
+                    <div class="cash-alert cash-alert--shortage">
+                      <span class="cash-alert-icon">⚠️</span>
+                      <div>
+                        <strong>Monto insuficiente</strong>
+                        <p>Faltan {{ cashShortage() | bolivianos }} para cubrir el total de la reserva.</p>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="cash-change-display">
+                      <span class="cash-change-label">CAMBIO / VUELTO A ENTREGAR:</span>
+                      <strong class="cash-change-amount">{{ changeAmount() | bolivianos }}</strong>
+                    </div>
+                  }
+                </div>
+              } @else if (paymentMethod() === 'TARJETA') {
+                <div class="checkout-method-detail card-detail-box">
+                  <div class="pos-info-banner">
+                    <span class="pos-icon">💳</span>
+                    <p>
+                      Pase la tarjeta del cliente por el dispositivo POS físico de la tienda. Una vez aprobada la transacción en el POS, ingrese el número de autorización para auditoría.
+                    </p>
+                  </div>
+                  <div class="ref-input-group">
+                    <label for="pos-reference-input">N° de Autorización o Referencia del POS (Opcional)</label>
+                    <input
+                      id="pos-reference-input"
+                      type="text"
+                      class="ref-input"
+                      placeholder="Ej: POS-94821 o N° de voucher"
+                      [ngModel]="cardReference()"
+                      (ngModelChange)="cardReference.set($event)"
+                    />
+                  </div>
+                </div>
+              } @else if (paymentMethod() === 'QR') {
+                <div class="checkout-method-detail qr-detail-box">
+                  <div class="qr-info-banner">
+                    <span class="qr-icon">📱</span>
+                    <div>
+                      <strong>Cobro vía Código QR (Simple / Banco)</strong>
+                      <p>Muestre el código QR al cliente para que realice la transferencia por el total exacto ({{ totalEstimated(res) | bolivianos }}). Compruebe la recepción en la app del banco antes de confirmar.</p>
+                    </div>
+                  </div>
+                  <div class="ref-input-group">
+                    <label for="qr-reference-input">Referencia o N° de Comprobante QR (Opcional)</label>
+                    <input
+                      id="qr-reference-input"
+                      type="text"
+                      class="ref-input"
+                      placeholder="Ej: TRANSF-55829 o N° de operación bancaria"
+                      [ngModel]="qrReference()"
+                      (ngModelChange)="qrReference.set($event)"
+                    />
+                  </div>
+                </div>
+              }
+            </div>
+
+            <footer class="admin-modal-footer">
+              <button
+                type="button"
+                class="admin-modal-btn admin-modal-btn--secondary"
+                (click)="closePaymentModal()"
+                [disabled]="saving()"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                class="admin-modal-btn admin-modal-btn--primary"
+                (click)="submitPosSale()"
+                [disabled]="saving() || (paymentMethod() === 'EFECTIVO' && cashShortage() > 0)"
+              >
+                @if (saving()) {
+                  <span>Registrando venta...</span>
+                } @else {
+                  <span>✓ Registrar Pago y Concretar ({{ totalEstimated(res) | bolivianos }})</span>
+                }
+              </button>
+            </footer>
+          </div>
+        </div>
+      }
     </section>
   `,
 })
@@ -521,7 +764,30 @@ export class ReservationsAdmin {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
+  readonly successMessage = signal<string>('');
   readonly formatBranchName = formatBranchName;
+
+  readonly checkoutReservation = signal<Reservation | null>(null);
+  readonly paymentMethod = signal<'EFECTIVO' | 'TARJETA' | 'QR'>('EFECTIVO');
+  readonly amountReceived = signal<number>(0);
+  readonly cardReference = signal<string>('');
+  readonly qrReference = signal<string>('');
+
+  readonly changeAmount = computed(() => {
+    const res = this.checkoutReservation();
+    if (!res) return 0;
+    const total = this.totalEstimated(res);
+    const received = Number(this.amountReceived()) || 0;
+    return Math.max(0, received - total);
+  });
+
+  readonly cashShortage = computed(() => {
+    const res = this.checkoutReservation();
+    if (!res) return 0;
+    const total = this.totalEstimated(res);
+    const received = Number(this.amountReceived()) || 0;
+    return Math.max(0, total - received);
+  });
 
   readonly counts = computed(() => {
     const all = this.items();
@@ -716,6 +982,120 @@ export class ReservationsAdmin {
           ),
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos actualizar la reserva.')),
+      });
+  }
+
+  canQuickCharge(item: Reservation): boolean {
+    return ['PREPARANDO', 'LISTA'].includes(item.estado);
+  }
+
+  handleAction(item: Reservation, act: { targetState: string; label: string }): void {
+    if (act.targetState === 'CONVERTIDA') {
+      this.openPaymentModal(item);
+    } else {
+      this.update(item.id_reserva, act.targetState);
+    }
+  }
+
+  openPaymentModal(res: Reservation): void {
+    this.checkoutReservation.set(res);
+    this.paymentMethod.set('EFECTIVO');
+    const total = this.totalEstimated(res);
+    this.amountReceived.set(total);
+    this.cardReference.set('');
+    this.qrReference.set('');
+    this.error.set('');
+  }
+
+  closePaymentModal(): void {
+    if (this.saving()) return;
+    this.checkoutReservation.set(null);
+  }
+
+  setExactCash(): void {
+    const res = this.checkoutReservation();
+    if (!res) return;
+    this.amountReceived.set(this.totalEstimated(res));
+  }
+
+  addCash(extra: number): void {
+    const current = Number(this.amountReceived()) || 0;
+    this.amountReceived.set(current + extra);
+  }
+
+  paymentMethodLabel(m: 'EFECTIVO' | 'TARJETA' | 'QR'): string {
+    switch (m) {
+      case 'EFECTIVO':
+        return 'Efectivo';
+      case 'TARJETA':
+        return 'Tarjeta (POS)';
+      case 'QR':
+        return 'Pago QR';
+    }
+  }
+
+  submitPosSale(): void {
+    const res = this.checkoutReservation();
+    if (!res) return;
+
+    const method = this.paymentMethod();
+    const total = this.totalEstimated(res);
+    const received = Number(this.amountReceived()) || 0;
+
+    if (method === 'EFECTIVO' && received < total) {
+      this.error.set(
+        `El monto recibido (Bs. ${received.toFixed(2)}) es insuficiente para cubrir el total (Bs. ${total.toFixed(2)}).`,
+      );
+      return;
+    }
+
+    let ref: string | null = null;
+    if (method === 'TARJETA') {
+      ref = this.cardReference().trim() || null;
+    } else if (method === 'QR') {
+      ref = this.qrReference().trim() || null;
+    }
+
+    const payload = {
+      id_sucursal: res.id_sucursal,
+      id_reserva: res.id_reserva,
+      modalidad_entrega: 'ENTREGA_DIRECTA',
+      items: res.items.map((line) => ({
+        id_variante: line.id_variante,
+        cantidad: line.cantidad,
+      })),
+      registrar_efectivo: true,
+      metodo_pago: method,
+      referencia_pago: ref,
+    };
+
+    this.saving.set(true);
+    this.error.set('');
+
+    this.commerce
+      .createPosSale(payload)
+      .pipe(finalize(() => this.saving.set(false)))
+      .subscribe({
+        next: (sale) => {
+          this.checkoutReservation.set(null);
+          const saleId = sale.id_venta ? ` #${sale.id_venta}` : '';
+          this.successMessage.set(
+            `¡Venta${saleId} registrada con éxito mediante ${this.paymentMethodLabel(method)}! Stock consumido y reserva finalizada.`,
+          );
+          this.items.update((items) =>
+            items.map((item) =>
+              item.id_reserva === res.id_reserva ? { ...item, estado: 'CONVERTIDA' } : item,
+            ),
+          );
+          setTimeout(() => {
+            if (this.successMessage().includes(saleId)) {
+              this.successMessage.set('');
+            }
+          }, 8000);
+        },
+        error: (err) => {
+          this.error.set(this.errors.message(err, 'No pudimos registrar la venta en caja.'));
+        },
       });
   }
 }
