@@ -502,9 +502,6 @@ class CommerceRepository:
             statement = statement.with_for_update()
         return await self.session.scalar(statement)
 
-    async def order_by_sale(self, sale_id: int) -> Pedido | None:
-        return await self.session.scalar(select(Pedido).where(Pedido.id_venta == sale_id))
-
     async def payment_by_sale(self, sale_id: int) -> Pago | None:
         return await self.session.scalar(
             select(Pago).where(Pago.id_venta == sale_id).order_by(Pago.id_pago.desc())

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.openrouteservice import OpenRouteServiceClient
 from app.integrations.stripe_checkout import StripeCheckoutGateway
-from app.modules.auth.models import Cliente, Sucursal, Usuario
+from app.modules.auth.models import Cliente, Empleado, Sucursal, Usuario
 from app.modules.catalog.models import InventarioSucursal
 from app.modules.commerce.exceptions import (
     CommerceConflictError,
