@@ -203,17 +203,37 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
 
       final uri = Uri.parse(checkoutData.checkoutUrl);
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      bool launched = false;
+      try {
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.inAppBrowserView,
+        );
+      } catch (_) {
+        launched = false;
+      }
+
+      if (!launched) {
+        try {
+          launched = await launchUrl(uri, mode: LaunchMode.inAppWebView);
+        } catch (_) {
+          launched = false;
+        }
+      }
+
+      if (!launched) {
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
 
       if (!launched && mounted) {
         setState(() {
-          _error = 'No se pudo abrir el navegador para completar el pago de Stripe.';
+          _error = 'No se pudo abrir la pasarela de pago para completar el pago de Stripe.';
           _processingCheckout = false;
         });
         return;
       }
 
-      // Al retornar del navegador, verificar el estado
+      // Al retornar del navegador interno, verificar el estado
       if (mounted) {
         _showPaymentVerificationSheet(checkoutData.sessionId);
       }
@@ -301,7 +321,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               OutlinedButton.icon(
                 onPressed: () => launchUrl(
                   Uri.parse(receiptUrl),
-                  mode: LaunchMode.externalApplication,
+                  mode: LaunchMode.inAppBrowserView,
                 ),
                 icon: const Icon(Icons.receipt_long_rounded, size: 18),
                 label: const Text('Ver recibo de Stripe'),

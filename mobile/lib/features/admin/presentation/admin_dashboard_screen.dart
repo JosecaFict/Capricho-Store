@@ -96,6 +96,16 @@ class AdminDashboardScreen extends ConsumerWidget {
                         accentColor: AppColors.inkSoft,
                         onTap: () => context.go('/admin/operaciones'),
                       ),
+                    if (user.canManageOrders)
+                      _buildMetricCard(
+                        context,
+                        title: 'Entregas en tienda',
+                        value: 'Activo',
+                        subtitle: 'Retiro en sucursal',
+                        icon: Icons.storefront_rounded,
+                        accentColor: AppColors.cobalt,
+                        onTap: () => context.go('/admin/operaciones'),
+                      ),
                   ];
                   if (cards.isEmpty) {
                     return const MessageState(

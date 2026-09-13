@@ -1,6 +1,7 @@
 import 'package:capricho_store/core/network/api_client.dart';
 import 'package:capricho_store/core/network/api_exception.dart';
 import 'package:capricho_store/features/admin/domain/admin_models.dart';
+import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -91,6 +92,40 @@ class AdminRepository {
         data: {'estado': status},
       );
       return TransferItem.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  Future<List<Order>> adminOrders({
+    String? estado,
+    int? sucursal,
+  }) async {
+    try {
+      final params = <String, dynamic>{};
+      if (estado != null && estado.isNotEmpty) params['estado'] = estado;
+      if (sucursal != null) params['sucursal'] = sucursal;
+
+      final res = await _dio.get('/admin/orders', queryParameters: params);
+      final list = (res.data as List? ?? []);
+      return list
+          .map((e) => Order.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
+  Future<Order> updateOrderStatus(
+    int orderId,
+    String estado,
+  ) async {
+    try {
+      final res = await _dio.patch(
+        '/admin/orders/$orderId/status',
+        data: {'estado': estado},
+      );
+      return Order.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw ApiException.fromDio(e);
     }

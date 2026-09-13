@@ -94,6 +94,33 @@ class OrderDetailScreen extends ConsumerWidget {
                     : 'Sucursal: ${order.sucursal}\nDirección: ${order.direccionSucursal}',
                 style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft, height: 1.3),
               ),
+              if (!order.isDelivery) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.cobaltLight.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.cobalt.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.qr_code_rounded, color: AppColors.cobaltDark, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Presenta el Pedido #${order.idPedido} al momento de retirar en sucursal.',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.cobaltDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -200,7 +227,7 @@ class OrderDetailScreen extends ConsumerWidget {
           OutlinedButton.icon(
             onPressed: () => launchUrl(
               Uri.parse(order.receiptUrl!),
-              mode: LaunchMode.externalApplication,
+              mode: LaunchMode.inAppBrowserView,
             ),
             icon: const Icon(Icons.receipt_long_rounded, color: AppColors.cobalt),
             label: const Text(

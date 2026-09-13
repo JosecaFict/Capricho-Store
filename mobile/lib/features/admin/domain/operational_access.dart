@@ -9,6 +9,8 @@ abstract final class OperationalPermissions {
   static const suppliersView = 'proveedores.ver';
   static const suppliersManage = 'proveedores.gestionar';
   static const productsView = 'productos.ver';
+  static const salesView = 'ventas.ver';
+  static const salesCreate = 'ventas.crear';
 
   static const mobileCapabilities = {
     inventoryView,
@@ -17,6 +19,8 @@ abstract final class OperationalPermissions {
     suppliersView,
     suppliersManage,
     productsView,
+    salesView,
+    salesCreate,
   };
 }
 
@@ -53,8 +57,18 @@ extension OperationalAccess on AppUser {
 
   bool get canViewTransfers => canViewInventory;
 
+  bool get canManageOrders =>
+      isAdmin ||
+      roles.contains('ENCARGADO_SUCURSAL') ||
+      roles.contains('CAJERO') ||
+      hasPermission(OperationalPermissions.salesView) ||
+      hasPermission(OperationalPermissions.salesCreate);
+
   bool get canViewOperations =>
-      canViewPurchaseOrders || canViewReceipts || canViewTransfers;
+      canViewPurchaseOrders ||
+      canViewReceipts ||
+      canViewTransfers ||
+      canManageOrders;
 
   bool canAccessSection(OperationalSection section) => switch (section) {
     OperationalSection.summary => canAccessOperationalPanel,
