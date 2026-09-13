@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 
 class ApiException implements Exception {
@@ -5,10 +6,16 @@ class ApiException implements Exception {
 
   factory ApiException.fromDio(DioException error) {
     final status = error.response?.statusCode;
-    final data = error.response?.data;
+    dynamic data = error.response?.data;
 
-    // Si el backend devuelve detail como String
-    if (data is Map<String, dynamic>) {
+    if (data is String && data.trim().isNotEmpty) {
+      try {
+        data = jsonDecode(data);
+      } catch (_) {}
+    }
+
+    // Si el backend devuelve detail como String o Map
+    if (data is Map) {
       final detail = data['detail'];
       if (detail is String && detail.trim().isNotEmpty) {
         return ApiException(detail.trim(), statusCode: status);
@@ -17,7 +24,7 @@ class ApiException implements Exception {
       if (detail is List && detail.isNotEmpty) {
         final messages = detail
             .map((item) {
-              if (item is Map<String, dynamic> && item['msg'] is String) {
+              if (item is Map && item['msg'] is String) {
                 return item['msg'] as String;
               }
               return item.toString();
