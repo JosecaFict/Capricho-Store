@@ -1015,12 +1015,12 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.12),
+                  color: AppColors.danger.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.cancel_rounded,
-                  color: AppColors.error,
+                  color: AppColors.danger,
                   size: 52,
                 ),
               ),
