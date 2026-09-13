@@ -1,4 +1,5 @@
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/catalog/data/catalog_repository.dart';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
@@ -884,6 +885,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     onPressed: hasBranch && hasVariant && hasStock && !_addingToCart
                         ? () async {
                             HapticFeedback.lightImpact();
+                            if (!await _ensureAuthenticated('agendar una reserva')) return;
+                            if (!context.mounted) return;
                             await ReservationBottomSheet.show(
                               context,
                               product: product,
@@ -954,7 +957,52 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
+  Future<bool> _ensureAuthenticated(String actionDescription) async {
+    final authState = ref.read(authControllerProvider);
+    if (authState.isAuthenticated) {
+      return true;
+    }
+
+    final shouldLogin = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, color: AppColors.cobalt),
+            SizedBox(width: 8),
+            Text('Inicia sesión', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          ],
+        ),
+        content: Text(
+          'Para $actionDescription necesitas una cuenta en Capricho Store.\n\n¿Deseas iniciar sesión o registrarte ahora?',
+          style: const TextStyle(fontSize: 14, color: AppColors.inkSoft, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Más tarde'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.login_rounded, size: 18),
+            label: const Text('Iniciar sesión'),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.cobalt),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogin == true && mounted) {
+      context.push('/login');
+    }
+    return false;
+  }
+
   Future<void> _addToCart(ProductVariant variant, String branchName) async {
+    if (!await _ensureAuthenticated('agregar prendas a tu carrito')) return;
+    if (!mounted) return;
+
     final currentCart = ref.read(cartProvider).value;
 
     // Regla central: 1 Carrito = 1 Sucursal

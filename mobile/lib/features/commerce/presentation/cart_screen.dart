@@ -1,4 +1,5 @@
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
@@ -14,6 +15,19 @@ class CartScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Mi Carrito'),
+          shape: const Border(
+            bottom: BorderSide(color: AppColors.line, width: 1),
+          ),
+        ),
+        body: _buildGuestCart(context),
+      );
+    }
+
     final cartAsync = ref.watch(cartProvider);
 
     return Scaffold(
@@ -43,6 +57,98 @@ class CartScreen extends ConsumerWidget {
           }
           return _buildCartContent(context, ref, cart);
         },
+      ),
+    );
+  }
+
+  Widget _buildGuestCart(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.cobalt.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.shopping_bag_outlined,
+                size: 60,
+                color: AppColors.cobalt,
+              ),
+            ),
+            const SizedBox(height: 22),
+            const Text(
+              'Inicia sesión para ver tu carrito',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppColors.ink,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Inicia sesión o regístrate para acceder a tus prendas guardadas, cotizar envíos delivery en Santa Cruz y finalizar tus pedidos con Stripe.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: AppColors.inkSoft, height: 1.45),
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => context.push('/login'),
+                icon: const Icon(Icons.login_rounded, size: 18),
+                label: const Text(
+                  'Iniciar sesión',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.cobalt,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => context.push('/registro'),
+                icon: const Icon(Icons.person_add_outlined, size: 18),
+                label: const Text(
+                  'Crear cuenta nueva',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.cobalt,
+                  side: const BorderSide(color: AppColors.cobalt, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            TextButton(
+              onPressed: () => context.go('/catalogo'),
+              child: const Text(
+                'Explorar catálogo sin cuenta',
+                style: TextStyle(
+                  color: AppColors.inkSoft,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

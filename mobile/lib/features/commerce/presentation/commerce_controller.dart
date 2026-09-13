@@ -1,4 +1,5 @@
 import 'package:capricho_store/core/network/api_exception.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/commerce/data/commerce_api.dart';
 import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,17 @@ class CartController extends AsyncNotifier<Cart?> {
 
   @override
   Future<Cart?> build() async {
+    ref.listen(authControllerProvider, (prev, next) {
+      if (prev?.user != next.user) {
+        refresh();
+      }
+    });
+
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      return null;
+    }
+
     try {
       return await _api.getCart();
     } on ApiException catch (e) {
@@ -26,6 +38,11 @@ class CartController extends AsyncNotifier<Cart?> {
   }
 
   Future<void> refresh() async {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       try {
