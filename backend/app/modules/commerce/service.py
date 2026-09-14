@@ -18,6 +18,7 @@ from app.modules.commerce.exceptions import (
     PaymentGatewayError,
 )
 from app.modules.commerce.invoice_mailer import InvoiceMailer
+from app.modules.commerce.fcm_sender import FcmPushSender, get_fcm_sender
 from app.modules.commerce.invoice_service import (
     InvoiceData,
     InvoiceItem,
@@ -58,6 +59,8 @@ from app.modules.commerce.schemas import (
     CheckoutCreate,
     CommerceLineRequest,
     CommerceLineResponse,
+    DeviceTokenRegisterRequest,
+    DeviceTokenResponse,
     ManualNotificationCreate,
     NotificationKpis,
     OrderResponse,
@@ -112,6 +115,7 @@ class CommerceService:
         stripe_gateway: StripeCheckoutGateway | None = None,
         route_client: OpenRouteServiceClient | None = None,
         invoice_mailer: InvoiceMailer | None = None,
+        fcm_sender: FcmPushSender | None = None,
         public_web_url: str = "http://localhost:4200",
         checkout_expire_minutes: int = 30,
     ) -> None:
@@ -120,6 +124,7 @@ class CommerceService:
         self.stripe_gateway = stripe_gateway
         self.route_client = route_client
         self.invoice_mailer = invoice_mailer or InvoiceMailer()
+        self.fcm_sender = fcm_sender or get_fcm_sender()
         self.public_web_url = public_web_url.rstrip("/")
         self.checkout_expire_minutes = checkout_expire_minutes
 
@@ -2135,22 +2140,55 @@ class CommerceService:
             raise
         return await self._return_response(returned)
 
-    async def _notify(self, user_id: int, kind: str, title: str, content: str) -> None:
+    async def _notify(
+        self,
+        user_id: int,
+        kind: str,
+        title: str,
+        content: str,
+        data: dict | None = None,
+    ) -> None:
         try:
             await self.repository.add(
                 Notificacion(
                     id_usuario=user_id,
                     id_campania=None,
                     tipo=kind,
-                    canal="EMAIL",
+                    canal="PUSH",
                     proveedor="SISTEMA",
                     titulo=title,
                     contenido=content,
                     estado="PENDIENTE",
                 )
             )
+            # Despachar push a los dispositivos registrados
+            device_tokens = await self.repository.get_user_device_tokens(user_id)
+            if device_tokens:
+                push_data = dict(data or {})
+                push_data.setdefault("type", kind)
+                await self.fcm_sender.send_push_notification(
+                    tokens=device_tokens,
+                    title=title,
+                    body=content,
+                    data=push_data,
+                )
         except Exception as exc:
             logger.warning("No se pudo registrar la notificacion: %s", exc)
+
+    async def register_device_token(
+        self, user_id: int, payload: DeviceTokenRegisterRequest
+    ) -> DeviceTokenResponse:
+        await self.repository.register_device_token(
+            user_id=user_id,
+            token=payload.token,
+            plataforma=payload.plataforma,
+            dispositivo_info=payload.dispositivo_info,
+        )
+        await self.session.commit()
+        return DeviceTokenResponse(
+            mensaje="Dispositivo registrado exitosamente para notificaciones push.",
+            registrado=True,
+        )
 
     async def list_notifications(self, user_id: int):
         return await self.repository.notifications(user_id)
@@ -2234,6 +2272,18 @@ class CommerceService:
                 fecha_entrega = now
             else:
                 estado = "PENDIENTE"
+        elif canal == "PUSH":
+            estado = "ENVIADO"
+            fecha_envio = now
+            fecha_entrega = now
+            tokens = await self.repository.get_user_device_tokens(user.id_usuario)
+            if tokens:
+                await self.fcm_sender.send_push_notification(
+                    tokens=tokens,
+                    title=payload.titulo,
+                    body=payload.contenido,
+                    data={"type": payload.tipo},
+                )
         else:
             estado = "ENVIADO"
             fecha_envio = now

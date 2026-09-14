@@ -473,12 +473,73 @@ class CommerceRepository:
             (
                 await self.session.scalars(
                     select(Notificacion)
-                    .where(Notificacion.id_usuario == user_id, Notificacion.id_campania.is_(None))
+                    .where(
+                        Notificacion.id_usuario == user_id,
+                        Notificacion.id_campania.is_(None),
+                        Notificacion.tipo != "REGISTRO_DISPOSITIVO",
+                    )
                     .order_by(Notificacion.fecha_creacion.desc())
                     .limit(100)
                 )
             ).all()
         )
+
+    async def register_device_token(
+        self,
+        *,
+        user_id: int,
+        token: str,
+        plataforma: str,
+        dispositivo_info: str | None = None,
+    ) -> Notificacion:
+        existing = (
+            await self.session.scalars(
+                select(Notificacion).where(
+                    Notificacion.id_usuario == user_id,
+                    Notificacion.tipo == "REGISTRO_DISPOSITIVO",
+                    Notificacion.destinatario == token,
+                )
+            )
+        ).first()
+
+        now = datetime.now(UTC)
+        if existing:
+            existing.estado = "ACTIVO"
+            existing.titulo = plataforma.lower()
+            existing.contenido = dispositivo_info or "Dispositivo Móvil"
+            existing.fecha_envio = now
+            self.session.add(existing)
+            await self.session.flush()
+            return existing
+
+        notif = Notificacion(
+            id_usuario=user_id,
+            id_campania=None,
+            tipo="REGISTRO_DISPOSITIVO",
+            canal="PUSH",
+            proveedor="FCM",
+            destinatario=token,
+            titulo=plataforma.lower(),
+            contenido=dispositivo_info or "Dispositivo Móvil",
+            estado="ACTIVO",
+            fecha_creacion=now,
+            fecha_envio=now,
+        )
+        self.session.add(notif)
+        await self.session.flush()
+        return notif
+
+    async def get_user_device_tokens(self, user_id: int) -> list[str]:
+        tokens = (
+            await self.session.scalars(
+                select(Notificacion.destinatario).where(
+                    Notificacion.id_usuario == user_id,
+                    Notificacion.tipo == "REGISTRO_DISPOSITIVO",
+                    Notificacion.estado == "ACTIVO",
+                )
+            )
+        ).all()
+        return [t for t in tokens if t]
 
     async def admin_notifications(
         self,

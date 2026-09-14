@@ -23,6 +23,8 @@ from app.modules.commerce.schemas import (
     CartItemUpdate,
     CartResponse,
     CheckoutCreate,
+    DeviceTokenRegisterRequest,
+    DeviceTokenResponse,
     ManualNotificationCreate,
     NotificationResponse,
     OrderResponse,
@@ -391,6 +393,15 @@ async def update_return_status(
 @router.get("/notifications", response_model=list[NotificationResponse])
 async def list_notifications(principal: Authenticated, service: Service):
     return await service.list_notifications(principal.user.id_usuario)
+
+
+@router.post("/notifications/devices", response_model=DeviceTokenResponse)
+async def register_device_token(
+    payload: DeviceTokenRegisterRequest,
+    principal: Authenticated,
+    service: Service,
+):
+    return await service.register_device_token(principal.user.id_usuario, payload)
 
 
 @router.get("/admin/notifications", response_model=AdminNotificationPage)

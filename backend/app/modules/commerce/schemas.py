@@ -389,6 +389,17 @@ class ManualNotificationCreate(BaseModel):
     tipo: str = "AVISO_OPERATIVO"
 
 
+class DeviceTokenRegisterRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=500)
+    plataforma: str = Field(default="ios", max_length=20)
+    dispositivo_info: str | None = Field(default=None, max_length=200)
+
+
+class DeviceTokenResponse(BaseModel):
+    mensaje: str
+    registrado: bool
+
+
 class SupplierPurchaseHistoryItem(BaseModel):
     fecha_recepcion: datetime
     proveedor: str

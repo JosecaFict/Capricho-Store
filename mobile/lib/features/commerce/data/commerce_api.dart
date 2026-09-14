@@ -281,4 +281,23 @@ class CommerceApi {
       throw ApiException.fromDio(e);
     }
   }
+
+  Future<void> registerDeviceToken({
+    required String token,
+    String platform = 'ios',
+    String? deviceInfo,
+  }) async {
+    try {
+      await _dio.post(
+        '/notifications/devices',
+        data: {
+          'token': token.trim(),
+          'plataforma': platform.trim().toLowerCase(),
+          'dispositivo_info': deviceInfo?.trim(),
+        },
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
 }

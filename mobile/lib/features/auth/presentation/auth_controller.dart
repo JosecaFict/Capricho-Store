@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:capricho_store/core/network/api_client.dart';
+import 'package:capricho_store/core/notifications/fcm_service.dart';
 import 'package:capricho_store/features/auth/data/auth_repository.dart';
 import 'package:capricho_store/features/auth/domain/app_user.dart';
+import 'package:capricho_store/features/commerce/data/commerce_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AuthState {
@@ -81,6 +83,7 @@ class AuthController extends Notifier<AuthState> {
     try {
       final user = await ref.read(authRepositoryProvider).me();
       state = AuthState(user: user, initialized: true);
+      _syncFcmToken();
     } catch (_) {
       await ref.read(authRepositoryProvider).logout();
       state = const AuthState(initialized: true);
@@ -99,6 +102,7 @@ class AuthController extends Notifier<AuthState> {
           .read(authRepositoryProvider)
           .login(email, password);
       state = AuthState(user: user, initialized: true);
+      _syncFcmToken();
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -183,5 +187,12 @@ class AuthController extends Notifier<AuthState> {
   Future<void> logout() async {
     await ref.read(authRepositoryProvider).logout();
     state = const AuthState(initialized: true);
+  }
+
+  void _syncFcmToken() {
+    try {
+      final api = ref.read(commerceApiProvider);
+      FcmService().syncTokenWithBackend(api);
+    } catch (_) {}
   }
 }
