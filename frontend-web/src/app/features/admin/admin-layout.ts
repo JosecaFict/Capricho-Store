@@ -9,7 +9,7 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
   imports: [RouterLink, RouterLinkActive, RouterOutlet, NotificationBell],
   template: `
     <!-- THESIS: Un taller operativo de moda, no un mosaico SaaS; la tarea y el estado mandan. OWN-WORLD: papel frío, grafito, líneas cromadas y cobalto reservado a acción y selección. STORY: el equipo reconoce su alcance, entra al módulo permitido y actúa con contexto. FIRST VIEWPORT: rail lateral estable, cabecera de identidad y área de trabajo densa sin tarjetas decorativas. FORM: extensión Operate del sistema aprobado. FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance -->
-    <div class="admin-shell">
+    <div class="admin-shell" [class.sidebar-collapsed]="sidebarCollapsed()">
       <button
         class="admin-backdrop"
         [class.is-open]="menuOpen()"
@@ -19,11 +19,25 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
       <aside
         class="admin-sidebar"
         [class.is-open]="menuOpen()"
+        [class.is-collapsed]="sidebarCollapsed()"
         aria-label="Navegación administrativa"
       >
-        <a class="admin-brand" routerLink="/admin" (click)="menuOpen.set(false)"
-          ><span>CAPRICHO</span><small>OPERACIONES</small></a
-        >
+        <div class="admin-brand-row">
+          <a class="admin-brand" routerLink="/admin" (click)="menuOpen.set(false)"
+            ><span>CAPRICHO</span><small>OPERACIONES</small></a
+          >
+          <button
+            type="button"
+            class="admin-sidebar-collapse-btn"
+            (click)="toggleSidebar()"
+            title="Ocultar menú lateral"
+            aria-label="Ocultar menú lateral"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+              <path d="m15 18-6-6 6-6"/>
+            </svg>
+          </button>
+        </div>
         <nav>
           @for (group of visibleNavigation(); track group.label) {
             <section class="admin-nav-group" [class.is-expanded]="isGroupExpanded(group)">
@@ -62,18 +76,25 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
       </aside>
       <div class="admin-workspace">
         <header class="admin-header">
-          <button
-            class="admin-menu-button"
-            type="button"
-            (click)="menuOpen.set(!menuOpen())"
-            [attr.aria-expanded]="menuOpen()"
-          >
-            Menú
-          </button>
-          <div>
-            <span class="admin-context">Panel operativo</span>
-            <strong>{{ roleLabel() }}</strong>
-            <small class="admin-branch-context">{{ branchLabel() }}</small>
+          <div class="admin-header__left">
+            <button
+              class="admin-menu-toggle-btn"
+              type="button"
+              (click)="toggleSidebar()"
+              [attr.aria-label]="sidebarCollapsed() ? 'Mostrar menú lateral' : 'Ocultar menú lateral'"
+              [title]="sidebarCollapsed() ? 'Mostrar menú' : 'Ocultar menú'"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+            <div class="admin-header__titles">
+              <span class="admin-context">Panel operativo</span>
+              <strong>{{ roleLabel() }}</strong>
+              <small class="admin-branch-context">{{ branchLabel() }}</small>
+            </div>
           </div>
           <div class="admin-user">
             <app-notification-bell mode="admin" />
@@ -90,6 +111,7 @@ export class AdminLayout {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   readonly menuOpen = signal(false);
+  readonly sidebarCollapsed = signal(false);
   readonly expandedGroups = signal<Record<string, boolean>>({});
   readonly user = this.auth.currentUser;
   readonly roleLabel = computed(() => this.user()?.roles.join(' · ') || 'Sin rol asignado');
@@ -99,6 +121,26 @@ export class AdminLayout {
     return user?.sucursal ? `Sucursal asignada: ${user.sucursal}` : 'Sin sucursal asignada';
   });
   readonly visibleNavigation = computed(() => visibleAdminNavigation(this.user()?.permisos ?? []));
+
+  constructor() {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      this.sidebarCollapsed.set(
+        localStorage.getItem('capricho_admin_sidebar_collapsed') === 'true',
+      );
+    }
+  }
+
+  toggleSidebar(): void {
+    if (typeof window !== 'undefined' && window.innerWidth < 960) {
+      this.menuOpen.update((open) => !open);
+    } else {
+      const next = !this.sidebarCollapsed();
+      this.sidebarCollapsed.set(next);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('capricho_admin_sidebar_collapsed', String(next));
+      }
+    }
+  }
 
   isGroupExpanded(group: AdminNavGroup): boolean {
     return this.expandedGroups()[group.label] ?? this.isGroupActive(group);
@@ -123,3 +165,4 @@ export class AdminLayout {
     void this.router.navigate(['/login']);
   }
 }
+
