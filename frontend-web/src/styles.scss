@@ -798,7 +798,7 @@ app-password-field {
   margin-bottom: 2rem;
   color: var(--ink-soft);
 }
-input,
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
 select {
   width: 100%;
   min-height: 48px;
@@ -811,11 +811,22 @@ select {
     border-color 160ms ease,
     box-shadow 160ms ease;
 }
-input:focus,
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
 select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(6, 79, 232, 0.15);
   outline: 0;
+}
+input[type='checkbox'],
+input[type='radio'] {
+  width: 1.15rem;
+  height: 1.15rem;
+  min-height: 1.15rem;
+  max-width: 1.15rem;
+  margin: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 input[aria-invalid='true'] {
   border-color: var(--danger);

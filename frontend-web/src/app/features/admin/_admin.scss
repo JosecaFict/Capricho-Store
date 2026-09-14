@@ -3951,7 +3951,8 @@ textarea {
 /* ==========================================================================
    MODAL DE CAJA Y COBRO (RESERVAS -> VENTAS)
    ========================================================================== */
-.admin-modal-backdrop {
+.admin-modal-backdrop,
+.modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.65);
@@ -3974,7 +3975,9 @@ textarea {
   }
 }
 
-.admin-modal-card {
+.admin-modal-card,
+.modal-card,
+.modal-dialog {
   background: var(--surface, #ffffff);
   color: var(--ink, #0f172a);
   border: 1px solid var(--line, #e2e8f0);
@@ -4000,7 +4003,8 @@ textarea {
   }
 }
 
-.admin-modal-header {
+.admin-modal-header,
+.modal-header {
   padding: 1.2rem 1.5rem;
   border-bottom: 1px solid var(--line, #e2e8f0);
   background: var(--surface-muted, #f8fafc);
@@ -4033,7 +4037,8 @@ textarea {
   color: var(--ink-soft, #64748b);
 }
 
-.admin-modal-close {
+.admin-modal-close,
+.modal-close {
   background: transparent;
   border: none;
   font-size: 1.1rem;
@@ -4053,7 +4058,8 @@ textarea {
   }
 }
 
-.admin-modal-body {
+.admin-modal-body,
+.modal-body {
   padding: 1.25rem 1.5rem;
   overflow-y: auto;
   display: flex;
@@ -4457,7 +4463,8 @@ textarea {
 }
 
 /* Footer modal */
-.admin-modal-footer {
+.admin-modal-footer,
+.modal-footer {
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--line, #e2e8f0);
   background: var(--surface-muted, #f8fafc);

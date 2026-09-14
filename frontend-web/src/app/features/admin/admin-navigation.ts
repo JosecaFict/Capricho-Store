@@ -89,6 +89,11 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
         path: '/admin/campanias',
         permissions: ['promociones.gestionar'],
       },
+      {
+        label: 'Recomendador IA',
+        path: '/admin/recomendador',
+        permissions: ['promociones.gestionar'],
+      },
     ],
   },
   {

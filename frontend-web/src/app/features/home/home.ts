@@ -3,8 +3,10 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { OFFICIAL_CATEGORIES } from '../../core/config/api.config';
 import { Product } from '../../core/models/catalog.model';
+import { RecommendedProduct } from '../../core/models/recommendation.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
+import { RecommendationService } from '../../core/services/recommendation.service';
 import { ProductCard } from '../../shared/components/product-card/product-card';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
 
@@ -101,19 +103,70 @@ import { StatusPanel } from '../../shared/components/status-panel/status-panel';
         </div>
       }
     </section>
+
+    <!-- Recomendaciones Inteligentes -->
+    @if (recommendationsList().length > 0) {
+      <section class="featured-section page-shell" aria-labelledby="rec-title" style="margin-top: 3.5rem;">
+        <div class="section-heading section-heading--row">
+          <div>
+            <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(37, 99, 235, 0.1); color: #2563eb; padding: 0.25rem 0.65rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.4rem;">
+              <span>✨ Sugerencias para ti</span>
+            </div>
+            <h2 id="rec-title">Recomendaciones personalizadas</h2>
+            <p>Prendas seleccionadas según tus estilos favoritos, temporadas y tendencias.</p>
+          </div>
+          <a class="text-link" routerLink="/catalogo">Explorar catálogo</a>
+        </div>
+        <div class="product-grid">
+          @for (item of recommendationsList(); track item.id_producto) {
+            <a class="product-card" [routerLink]="['/catalogo', item.id_producto]" style="text-decoration: none; color: inherit; display: flex; flex-direction: column;">
+              <div class="product-card__media" style="position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: #f1f5f9;">
+                <img [src]="item.imagen_url || '/images/hero-catalogo-oficial.jpg'" [alt]="item.nombre" style="width: 100%; height: 100%; object-fit: cover;" />
+                @if (item.descuento_porcentaje) {
+                  <span style="position: absolute; top: 8px; left: 8px; background: #dc2626; color: #fff; font-weight: 800; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px;">
+                    -{{ item.descuento_porcentaje }}%
+                  </span>
+                }
+                @if (item.motivo) {
+                  <span style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.8); color: #fff; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; backdrop-filter: blur(4px);">
+                    {{ item.motivo }}
+                  </span>
+                }
+              </div>
+              <div style="padding: 0.75rem 0.25rem 0; flex: 1; display: flex; flex-direction: column;">
+                <span style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">{{ item.categoria }} · {{ item.marca }}</span>
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin: 0.25rem 0 0.4rem; line-height: 1.3;">{{ item.nombre }}</h3>
+                <div style="display: flex; gap: 0.5rem; align-items: baseline; margin-top: auto;">
+                  @if (item.precio_promocional) {
+                    <strong style="color: #2563eb; font-size: 1rem;">Bs. {{ item.precio_promocional }}</strong>
+                    <del style="font-size: 0.8rem; color: var(--color-text-muted);">Bs. {{ item.precio_actual }}</del>
+                  } @else {
+                    <strong style="font-size: 1rem;">Bs. {{ item.precio_actual }}</strong>
+                  }
+                </div>
+              </div>
+            </a>
+          }
+        </div>
+      </section>
+    }
   `,
 })
 export class Home {
   private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
+  private readonly recService = inject(RecommendationService, { optional: true });
+
   readonly categories = OFFICIAL_CATEGORIES;
   readonly products = signal<Product[]>([]);
+  readonly recommendationsList = signal<RecommendedProduct[]>([]);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
   readonly skeletons = [1, 2, 3, 4];
 
   constructor() {
     this.loadProducts();
+    this.loadRecommendations();
   }
 
   categoryLabel(category: string): string {
@@ -133,5 +186,13 @@ export class Home {
             this.errors.message(error, 'No pudimos cargar los productos recientes.'),
           ),
       });
+  }
+
+  loadRecommendations(): void {
+    if (!this.recService) return;
+    this.recService.getPersonalizedRecommendations(4).subscribe({
+      next: (items) => this.recommendationsList.set(items),
+      error: () => {},
+    });
   }
 }

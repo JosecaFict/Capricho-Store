@@ -191,14 +191,18 @@ type ScopeType = 'STOREWIDE' | 'CATEGORIES' | 'SEASONS' | 'PRODUCTS';
 
       <!-- Modal de Creación / Edición -->
       @if (showModal()) {
-        <div class="modal-backdrop" (click)="closeModal()">
-          <div class="modal-card" style="max-width: 620px; width: 100%; max-height: 90vh; overflow-y: auto;" (click)="$event.stopPropagation()">
-            <header class="modal-header">
-              <h2>{{ editingPromo() ? 'Editar Promoción' : 'Nueva Promoción' }}</h2>
-              <button type="button" class="button button--ghost button--small" (click)="closeModal()">✕</button>
+        <div class="admin-modal-backdrop" (click)="closeModal()">
+          <div class="admin-modal-card" style="max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto;" (click)="$event.stopPropagation()">
+            <header class="admin-modal-header">
+              <div>
+                <span class="admin-modal-kicker">Marketing y Ventas</span>
+                <h2 class="admin-modal-title">{{ editingPromo() ? 'Editar Promoción' : 'Nueva Promoción' }}</h2>
+                <p class="admin-modal-subtitle">Configura el alcance y descuento comercial con vigencia programada.</p>
+              </div>
+              <button type="button" class="admin-modal-close" (click)="closeModal()" aria-label="Cerrar modal">✕</button>
             </header>
 
-            <form [formGroup]="promoForm" (ngSubmit)="savePromotion()" class="modal-body">
+            <form [formGroup]="promoForm" (ngSubmit)="savePromotion()" class="admin-modal-body">
               <div class="form-group" style="margin-bottom: 1rem;">
                 <label class="form-label" for="promo-name">Nombre de la promoción *</label>
                 <input
@@ -224,7 +228,7 @@ type ScopeType = 'STOREWIDE' | 'CATEGORIES' | 'SEASONS' | 'PRODUCTS';
                 ></textarea>
               </div>
 
-              <div class="form-row" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+              <div class="form-row" style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: flex-end;">
                 <div class="form-group" style="flex: 1;">
                   <label class="form-label" for="promo-pct">Porcentaje de descuento (%) *</label>
                   <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -238,17 +242,17 @@ type ScopeType = 'STOREWIDE' | 'CATEGORIES' | 'SEASONS' | 'PRODUCTS';
                       formControlName="porcentaje_descuento"
                       placeholder="Ej. 15, 20, 50"
                     />
-                    <span style="font-weight: 700; font-size: 1.1rem; color: #60a5fa;">%</span>
+                    <span style="font-weight: 700; font-size: 1.1rem; color: #2563eb;">%</span>
                   </div>
                   @if (promoForm.get('porcentaje_descuento')?.invalid && promoForm.get('porcentaje_descuento')?.touched) {
                     <p class="form-error">Debe ser entre 1% y 100%.</p>
                   }
                 </div>
 
-                <div class="form-group" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
-                  <label class="form-checkbox" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; cursor: pointer;">
-                    <input type="checkbox" formControlName="activo" />
-                    <span>Promoción activa</span>
+                <div class="form-group" style="flex: 1;">
+                  <label class="form-checkbox" style="display: flex; align-items: center; gap: 0.65rem; padding: 0.7rem 0.85rem; border: 1px solid var(--line, #cbd5e1); border-radius: 8px; background: var(--surface-muted, #f8fafc); cursor: pointer; min-height: 48px;">
+                    <input type="checkbox" formControlName="activo" style="width: 1.2rem; height: 1.2rem; accent-color: #2563eb; cursor: pointer; flex-shrink: 0;" />
+                    <span style="font-weight: 600; font-size: 0.9rem;">Promoción activa</span>
                   </label>
                 </div>
               </div>
@@ -283,7 +287,7 @@ type ScopeType = 'STOREWIDE' | 'CATEGORIES' | 'SEASONS' | 'PRODUCTS';
 
               <!-- Selector de Alcance -->
               <div class="form-group" style="margin-bottom: 1.25rem;">
-                <label class="form-label">Alcance de la Promoción</label>
+                <label class="form-label" style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Alcance de la Promoción</label>
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
                   <button
                     type="button"
@@ -324,73 +328,86 @@ type ScopeType = 'STOREWIDE' | 'CATEGORIES' | 'SEASONS' | 'PRODUCTS';
                 </div>
 
                 @if (selectedScope() === 'CATEGORIES') {
-                  <div style="border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem; max-height: 160px; overflow-y: auto;">
-                    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 0.5rem;">
+                  <div style="border: 1px solid var(--line, #cbd5e1); border-radius: 8px; padding: 0.75rem; max-height: 200px; overflow-y: auto; background: var(--surface-muted, #f8fafc);">
+                    <p style="font-size: 0.8rem; color: var(--ink-soft, #64748b); margin-bottom: 0.5rem; font-weight: 600;">
                       Selecciona una o más categorías a las que aplicará el descuento:
                     </p>
-                    @for (cat of categories(); track cat.id_categoria) {
-                      <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; margin-bottom: 0.35rem; cursor: pointer;">
-                        <input
-                          type="checkbox"
-                          [checked]="selectedCategoryIds().has(cat.id_categoria)"
-                          (change)="toggleCategory(cat.id_categoria)"
-                        />
-                        <span>{{ cat.nombre }}</span>
-                      </label>
-                    }
+                    <div style="display: grid; gap: 0.4rem;">
+                      @for (cat of categories(); track cat.id_categoria) {
+                        <label style="display: flex; align-items: center; gap: 0.65rem; font-size: 0.875rem; padding: 0.45rem 0.65rem; border-radius: 6px; background: #ffffff; border: 1px solid var(--line, #e2e8f0); cursor: pointer;">
+                          <input
+                            type="checkbox"
+                            style="width: 1.15rem; height: 1.15rem; accent-color: #2563eb; cursor: pointer; flex-shrink: 0;"
+                            [checked]="selectedCategoryIds().has(cat.id_categoria)"
+                            (change)="toggleCategory(cat.id_categoria)"
+                          />
+                          <span style="font-weight: 500;">{{ cat.nombre }}</span>
+                        </label>
+                      }
+                    </div>
                   </div>
                 }
 
                 @if (selectedScope() === 'SEASONS') {
-                  <div style="border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem; max-height: 160px; overflow-y: auto;">
-                    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 0.5rem;">
+                  <div style="border: 1px solid var(--line, #cbd5e1); border-radius: 8px; padding: 0.75rem; max-height: 200px; overflow-y: auto; background: var(--surface-muted, #f8fafc);">
+                    <p style="font-size: 0.8rem; color: var(--ink-soft, #64748b); margin-bottom: 0.5rem; font-weight: 600;">
                       Selecciona una o más temporadas:
                     </p>
-                    @for (season of seasons(); track season.id_temporada) {
-                      <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; margin-bottom: 0.35rem; cursor: pointer;">
-                        <input
-                          type="checkbox"
-                          [checked]="selectedSeasonIds().has(season.id_temporada)"
-                          (change)="toggleSeason(season.id_temporada)"
-                        />
-                        <span>{{ season.nombre }}</span>
-                      </label>
-                    }
+                    <div style="display: grid; gap: 0.4rem;">
+                      @for (season of seasons(); track season.id_temporada) {
+                        <label style="display: flex; align-items: center; gap: 0.65rem; font-size: 0.875rem; padding: 0.45rem 0.65rem; border-radius: 6px; background: #ffffff; border: 1px solid var(--line, #e2e8f0); cursor: pointer;">
+                          <input
+                            type="checkbox"
+                            style="width: 1.15rem; height: 1.15rem; accent-color: #2563eb; cursor: pointer; flex-shrink: 0;"
+                            [checked]="selectedSeasonIds().has(season.id_temporada)"
+                            (change)="toggleSeason(season.id_temporada)"
+                          />
+                          <span style="font-weight: 500;">{{ season.nombre }}</span>
+                        </label>
+                      }
+                    </div>
                   </div>
                 }
 
                 @if (selectedScope() === 'PRODUCTS') {
-                  <div style="border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem; max-height: 180px; overflow-y: auto;">
-                    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 0.5rem;">
+                  <div style="border: 1px solid var(--line, #cbd5e1); border-radius: 8px; padding: 0.75rem; max-height: 220px; overflow-y: auto; background: var(--surface-muted, #f8fafc);">
+                    <p style="font-size: 0.8rem; color: var(--ink-soft, #64748b); margin-bottom: 0.5rem; font-weight: 600;">
                       Selecciona los productos en oferta ({{ selectedProductIds().size }} seleccionados):
                     </p>
-                    @for (prod of products(); track prod.id_producto) {
-                      <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; margin-bottom: 0.35rem; cursor: pointer;">
-                        <input
-                          type="checkbox"
-                          [checked]="selectedProductIds().has(prod.id_producto)"
-                          (change)="toggleProduct(prod.id_producto)"
-                        />
-                        <span>{{ prod.nombre }} <small style="color: var(--color-text-muted);">({{ prod.categoria }})</small></span>
-                      </label>
-                    }
+                    <div style="display: grid; gap: 0.4rem;">
+                      @for (prod of products(); track prod.id_producto) {
+                        <label style="display: flex; align-items: center; gap: 0.65rem; font-size: 0.875rem; padding: 0.45rem 0.65rem; border-radius: 6px; background: #ffffff; border: 1px solid var(--line, #e2e8f0); cursor: pointer;">
+                          <input
+                            type="checkbox"
+                            style="width: 1.15rem; height: 1.15rem; accent-color: #2563eb; cursor: pointer; flex-shrink: 0;"
+                            [checked]="selectedProductIds().has(prod.id_producto)"
+                            (change)="toggleProduct(prod.id_producto)"
+                          />
+                          <span style="flex: 1; font-weight: 500;">
+                            {{ prod.nombre }}
+                            <small style="color: var(--ink-soft, #64748b); margin-left: 0.25rem;">({{ prod.categoria }})</small>
+                          </span>
+                          <span style="font-weight: 700; font-size: 0.825rem; color: #2563eb;">Bs. {{ prod.precio_actual }}</span>
+                        </label>
+                      }
+                    </div>
                   </div>
                 }
 
                 @if (selectedScope() === 'STOREWIDE') {
                   <div style="background: rgba(37, 99, 235, 0.08); border: 1px dashed rgba(37, 99, 235, 0.4); border-radius: 8px; padding: 0.75rem;">
-                    <span style="font-size: 0.85rem; color: #93c5fd;">
+                    <span style="font-size: 0.85rem; color: #2563eb; font-weight: 500;">
                       ℹ️ El descuento se aplicará a todos los productos del catálogo mientras la promoción esté vigente.
                     </span>
                   </div>
                 }
               </div>
 
-              <footer class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
-                <button type="button" class="button button--secondary" (click)="closeModal()" [disabled]="submitting()">
+              <footer class="admin-modal-footer">
+                <button type="button" class="admin-modal-btn admin-modal-btn--secondary" (click)="closeModal()" [disabled]="submitting()">
                   Cancelar
                 </button>
-                <button type="submit" class="button button--primary" [disabled]="promoForm.invalid || submitting()">
+                <button type="submit" class="admin-modal-btn admin-modal-btn--primary" [disabled]="promoForm.invalid || submitting()">
                   {{ submitting() ? 'Guardando...' : (editingPromo() ? 'Actualizar Promoción' : 'Crear Promoción') }}
                 </button>
               </footer>
@@ -401,26 +418,29 @@ type ScopeType = 'STOREWIDE' | 'CATEGORIES' | 'SEASONS' | 'PRODUCTS';
 
       <!-- Modal de Confirmación de Eliminación -->
       @if (deletingPromo()) {
-        <div class="modal-backdrop" (click)="deletingPromo.set(null)">
-          <div class="modal-card" style="max-width: 440px;" (click)="$event.stopPropagation()">
-            <header class="modal-header">
-              <h2>¿Eliminar Promoción?</h2>
-              <button type="button" class="button button--ghost button--small" (click)="deletingPromo.set(null)">✕</button>
+        <div class="admin-modal-backdrop" (click)="deletingPromo.set(null)">
+          <div class="admin-modal-card" style="max-width: 460px; width: 100%;" (click)="$event.stopPropagation()">
+            <header class="admin-modal-header">
+              <div>
+                <span class="admin-modal-kicker">Confirmar Acción</span>
+                <h2 class="admin-modal-title">¿Eliminar Promoción?</h2>
+              </div>
+              <button type="button" class="admin-modal-close" (click)="deletingPromo.set(null)" aria-label="Cerrar modal">✕</button>
             </header>
-            <div class="modal-body">
-              <p>
+            <div class="admin-modal-body">
+              <p style="margin: 0; font-size: 0.95rem; line-height: 1.5;">
                 ¿Estás seguro de que deseas eliminar permanentemente la promoción
                 <strong>"{{ deletingPromo()?.nombre }}"</strong>?
               </p>
-              <p style="color: var(--color-text-muted); font-size: 0.875rem; margin-top: 0.5rem;">
+              <p style="color: var(--ink-soft, #64748b); font-size: 0.85rem; margin: 0.5rem 0 0;">
                 Los productos asociados volverán a mostrar sus precios normales.
               </p>
             </div>
-            <footer class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
-              <button type="button" class="button button--secondary" (click)="deletingPromo.set(null)" [disabled]="submitting()">
+            <footer class="admin-modal-footer">
+              <button type="button" class="admin-modal-btn admin-modal-btn--secondary" (click)="deletingPromo.set(null)" [disabled]="submitting()">
                 Cancelar
               </button>
-              <button type="button" class="button button--primary" style="background-color: var(--color-danger, #ef4444);" (click)="executeDelete()" [disabled]="submitting()">
+              <button type="button" class="admin-modal-btn admin-modal-btn--primary" style="background-color: var(--color-danger, #ef4444); border-color: #dc2626;" (click)="executeDelete()" [disabled]="submitting()">
                 {{ submitting() ? 'Eliminando...' : 'Sí, Eliminar' }}
               </button>
             </footer>

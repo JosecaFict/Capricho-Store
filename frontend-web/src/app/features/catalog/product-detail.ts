@@ -3,9 +3,11 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { Branch, Product, ProductImage, ProductMeasurement } from '../../core/models/catalog.model';
+import { RecommendedProduct } from '../../core/models/recommendation.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
+import { RecommendationService } from '../../core/services/recommendation.service';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
 import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
 
@@ -290,6 +292,50 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
             </div>
           </article>
         </div>
+
+        <!-- Prendas similares recomendadas (IA Híbrida) -->
+        @if (similarProducts().length > 0) {
+          <section class="similar-products-section" style="margin-top: 3.5rem; border-top: 1px solid var(--color-border); padding-top: 2.5rem;">
+            <div style="margin-bottom: 1.5rem;">
+              <div style="display: inline-flex; align-items: center; gap: 0.35rem; background: rgba(37, 99, 235, 0.1); color: #2563eb; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.35rem;">
+                <span>✨ Prendas Similares</span>
+              </div>
+              <h2 style="font-size: 1.35rem; font-weight: 800; margin: 0 0 0.25rem;">Completa o combina tu estilo</h2>
+              <p style="color: var(--color-text-muted); font-size: 0.875rem; margin: 0;">Sugerencias basadas en afinidad de categoría, corte y temporada.</p>
+            </div>
+            <div class="product-grid">
+              @for (sim of similarProducts(); track sim.id_producto) {
+                <a class="product-card" [routerLink]="['/catalogo', sim.id_producto]" style="text-decoration: none; color: inherit; display: flex; flex-direction: column;">
+                  <div class="product-card__media" style="position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: #f1f5f9;">
+                    <img [src]="sim.imagen_url || '/images/hero-catalogo-oficial.jpg'" [alt]="sim.nombre" style="width: 100%; height: 100%; object-fit: cover;" />
+                    @if (sim.descuento_porcentaje) {
+                      <span style="position: absolute; top: 8px; left: 8px; background: #dc2626; color: #fff; font-weight: 800; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px;">
+                        -{{ sim.descuento_porcentaje }}%
+                      </span>
+                    }
+                    @if (sim.motivo) {
+                      <span style="position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.8); color: #fff; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; backdrop-filter: blur(4px);">
+                        {{ sim.motivo }}
+                      </span>
+                    }
+                  </div>
+                  <div style="padding: 0.75rem 0.25rem 0; flex: 1; display: flex; flex-direction: column;">
+                    <span style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">{{ sim.categoria }} · {{ sim.marca }}</span>
+                    <h3 style="font-size: 0.95rem; font-weight: 700; margin: 0.25rem 0 0.4rem; line-height: 1.3;">{{ sim.nombre }}</h3>
+                    <div style="display: flex; gap: 0.5rem; align-items: baseline; margin-top: auto;">
+                      @if (sim.precio_promocional) {
+                        <strong style="color: #2563eb; font-size: 1rem;">Bs. {{ sim.precio_promocional }}</strong>
+                        <del style="font-size: 0.8rem; color: var(--color-text-muted);">Bs. {{ sim.precio_actual }}</del>
+                      } @else {
+                        <strong style="font-size: 1rem;">Bs. {{ sim.precio_actual }}</strong>
+                      }
+                    </div>
+                  </div>
+                </a>
+              }
+            </div>
+          </section>
+        }
       }
     </section>
   `,
@@ -298,9 +344,11 @@ export class ProductDetail {
   private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
   private readonly commerce = inject(CommerceService);
+  private readonly recService = inject(RecommendationService, { optional: true });
   private readonly route = inject(ActivatedRoute);
   readonly auth = inject(AuthService);
   readonly product = signal<Product | null>(null);
+  readonly similarProducts = signal<RecommendedProduct[]>([]);
   readonly images = signal<ProductImage[]>([]);
   readonly selectedColorId = signal<number | null>(null);
   readonly selectedSize = signal<string | null>(null);
@@ -359,6 +407,8 @@ export class ProductDetail {
           this.selectedColorId.set(firstColor);
           this.selectedSize.set(this.availableSizes(product)[0] ?? null);
           this.syncActiveImage(product);
+          this.trackInteraction(product.id_producto, 'VER_PRODUCTO');
+          this.loadSimilar(product.id_producto);
         },
         error: (error) =>
           this.errorMessage.set(this.errors.message(error, 'No pudimos cargar el producto.')),
@@ -586,6 +636,7 @@ export class ProductDetail {
               ? 'La prenda se agregó al carrito.'
               : `Se agregaron ${quantity} unidades al carrito.`,
           );
+          this.trackInteraction(item.id_producto, 'AGREGAR_CARRITO');
         },
         error: (error) => {
           this.actionError.set(true);
@@ -616,5 +667,20 @@ export class ProductDetail {
           );
         },
       });
+  }
+
+  private trackInteraction(productId: number, type: 'VER_PRODUCTO' | 'AGREGAR_CARRITO'): void {
+    if (!this.recService) return;
+    this.recService.trackInteraction({ id_producto: productId, tipo_interaccion: type }).subscribe({
+      error: () => {},
+    });
+  }
+
+  private loadSimilar(productId: number): void {
+    if (!this.recService) return;
+    this.recService.getRelatedProducts(productId, 4).subscribe({
+      next: (items) => this.similarProducts.set(items),
+      error: () => {},
+    });
   }
 }

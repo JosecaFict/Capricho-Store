@@ -14,6 +14,7 @@ from app.modules.catalog.handlers import register_catalog_exception_handlers
 from app.modules.commerce.handlers import register_commerce_exception_handlers
 from app.modules.employees.handlers import register_employee_exception_handlers
 from app.modules.inventory.handlers import register_inventory_exception_handlers
+from app.modules.recommendations.handlers import register_recommendation_exception_handlers
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     register_catalog_exception_handlers(application)
     register_commerce_exception_handlers(application)
     register_inventory_exception_handlers(application)
+    register_recommendation_exception_handlers(application)
     return application
 
 

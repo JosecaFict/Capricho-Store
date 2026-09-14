@@ -236,6 +236,13 @@ export const routes: Routes = [
           import('./features/admin/campaigns-admin').then((m) => m.CampaignsAdmin),
       },
       {
+        path: 'recomendador',
+        title: 'Recomendador IA | Capricho Store',
+        canActivate: [requireAnyPermission('promociones.gestionar')],
+        loadComponent: () =>
+          import('./features/admin/recommendations-admin').then((m) => m.RecommendationsAdmin),
+      },
+      {
         path: 'inventario',
         canActivate: [requireAnyPermission('inventario.ver')],
         loadComponent: () =>
