@@ -19,6 +19,10 @@ from app.modules.commerce.schemas import (
     AdminNotificationPage,
     AdminNotificationResponse,
     AdminReturnCreate,
+    CampaignCreate,
+    CampaignLaunchResponse,
+    CampaignResponse,
+    CampaignUpdate,
     CartItemCreate,
     CartItemUpdate,
     CartResponse,
@@ -475,3 +479,57 @@ async def supplier_purchase_history(
         date_from=(datetime.combine(fecha_desde, time.min, tzinfo=UTC) if fecha_desde else None),
         date_to=(datetime.combine(fecha_hasta, time.max, tzinfo=UTC) if fecha_hasta else None),
     )
+
+
+@router.get("/admin/campaigns", response_model=list[CampaignResponse])
+async def list_campaigns(
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+    estado: str | None = None,
+):
+    return await service.list_campaigns(state=estado)
+
+
+@router.post(
+    "/admin/campaigns",
+    response_model=CampaignResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_campaign(
+    payload: CampaignCreate,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.create_campaign(payload)
+
+
+@router.get("/admin/campaigns/{campaign_id}", response_model=CampaignResponse)
+async def get_campaign(
+    campaign_id: int,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.get_campaign(campaign_id)
+
+
+@router.patch("/admin/campaigns/{campaign_id}", response_model=CampaignResponse)
+async def update_campaign(
+    campaign_id: int,
+    payload: CampaignUpdate,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.update_campaign(campaign_id, payload)
+
+
+@router.post(
+    "/admin/campaigns/{campaign_id}/send",
+    response_model=CampaignLaunchResponse,
+)
+async def launch_campaign(
+    campaign_id: int,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.launch_campaign(campaign_id)
+

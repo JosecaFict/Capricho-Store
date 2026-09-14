@@ -2,10 +2,11 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { AdminNavGroup, visibleAdminNavigation } from './admin-navigation';
+import { NotificationBell } from '../../shared/components/notification-bell/notification-bell';
 
 @Component({
   selector: 'app-admin-layout',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, NotificationBell],
   template: `
     <!-- THESIS: Un taller operativo de moda, no un mosaico SaaS; la tarea y el estado mandan. OWN-WORLD: papel frío, grafito, líneas cromadas y cobalto reservado a acción y selección. STORY: el equipo reconoce su alcance, entra al módulo permitido y actúa con contexto. FIRST VIEWPORT: rail lateral estable, cabecera de identidad y área de trabajo densa sin tarjetas decorativas. FORM: extensión Operate del sistema aprobado. FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance -->
     <div class="admin-shell">
@@ -75,8 +76,9 @@ import { AdminNavGroup, visibleAdminNavigation } from './admin-navigation';
             <small class="admin-branch-context">{{ branchLabel() }}</small>
           </div>
           <div class="admin-user">
-            <span>{{ user()?.nombres }} {{ user()?.apellidos }}</span
-            ><button type="button" (click)="logout()">Cerrar sesión</button>
+            <app-notification-bell mode="admin" />
+            <span>{{ user()?.nombres }} {{ user()?.apellidos }}</span>
+            <button type="button" (click)="logout()">Cerrar sesión</button>
           </div>
         </header>
         <main class="admin-main" id="contenido"><router-outlet /></main>

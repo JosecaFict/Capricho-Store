@@ -375,3 +375,27 @@ class Notificacion(Base):
     fecha_envio: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fecha_entrega: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_mensaje: Mapped[str | None] = mapped_column(Text)
+
+
+class Campania(Base):
+    __tablename__ = "campania"
+
+    id_campania: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=True), primary_key=True
+    )
+    nombre: Mapped[str] = mapped_column(String(150), nullable=False)
+    descripcion: Mapped[str | None] = mapped_column(String(250))
+    asunto_email: Mapped[str | None] = mapped_column(String(180))
+    segmento_objetivo: Mapped[str | None] = mapped_column(String(150))
+    fecha_inicio: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fecha_fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    estado: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'BORRADOR'")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+

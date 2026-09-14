@@ -2,10 +2,11 @@ import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { PermissionService } from '../../core/permissions/permission.service';
+import { NotificationBell } from '../../shared/components/notification-bell/notification-bell';
 
 @Component({
   selector: 'app-site-header',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, NotificationBell],
   template: `
     <header class="site-header">
       <a class="brand" routerLink="/" aria-label="Capricho Store, ir al inicio">
@@ -36,6 +37,7 @@ import { PermissionService } from '../../core/permissions/permission.service';
         <a routerLink="/catalogo" routerLinkActive="active" (click)="closeMenu()">Catálogo</a>
         @if (auth.currentUser()) {
           <a routerLink="/carrito" routerLinkActive="active" (click)="closeMenu()">Carrito</a>
+          <app-notification-bell mode="public" />
           @if (permissions.hasAdminAccess()) {
             <a class="nav-admin" routerLink="/admin" routerLinkActive="active" (click)="closeMenu()"
               >Panel administrativo</a

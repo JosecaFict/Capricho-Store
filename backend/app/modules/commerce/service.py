@@ -25,6 +25,7 @@ from app.modules.commerce.invoice_service import (
     generate_invoice_pdf,
 )
 from app.modules.commerce.models import (
+    Campania,
     Carrito,
     CotizacionEnvio,
     DetalleCarrito,
@@ -53,6 +54,10 @@ from app.modules.commerce.schemas import (
     AdminNotificationPage,
     AdminNotificationResponse,
     AdminReturnCreate,
+    CampaignCreate,
+    CampaignLaunchResponse,
+    CampaignResponse,
+    CampaignUpdate,
     CartItemCreate,
     CartItemUpdate,
     CartResponse,
@@ -2389,3 +2394,172 @@ class CommerceService:
         return SupplierPurchaseHistoryPage(
             items=list(rows), total=total, page=filters["page"], page_size=filters["page_size"]
         )
+
+    async def list_campaigns(self, state: str | None = None) -> list[CampaignResponse]:
+        rows = await self.repository.list_campaigns(state=state)
+        return [
+            CampaignResponse(
+                id_campania=c.id_campania,
+                nombre=c.nombre,
+                descripcion=c.descripcion,
+                asunto_email=c.asunto_email,
+                segmento_objetivo=c.segmento_objetivo,
+                fecha_inicio=c.fecha_inicio,
+                fecha_fin=c.fecha_fin,
+                estado=c.estado,
+                created_at=c.created_at,
+                updated_at=c.updated_at,
+                total_notificaciones=notif_count,
+            )
+            for c, notif_count in rows
+        ]
+
+    async def create_campaign(self, payload: CampaignCreate) -> CampaignResponse:
+        campaign = Campania(
+            nombre=payload.nombre.strip(),
+            descripcion=payload.descripcion.strip(),
+            asunto_email=payload.asunto_email.strip() if payload.asunto_email else None,
+            segmento_objetivo=(
+                payload.segmento_objetivo.strip() if payload.segmento_objetivo else "TODOS"
+            ),
+            fecha_inicio=payload.fecha_inicio,
+            fecha_fin=payload.fecha_fin,
+            estado="BORRADOR",
+        )
+        await self.repository.add(campaign)
+        await self.session.commit()
+        await self.session.refresh(campaign)
+        return CampaignResponse(
+            id_campania=campaign.id_campania,
+            nombre=campaign.nombre,
+            descripcion=campaign.descripcion,
+            asunto_email=campaign.asunto_email,
+            segmento_objetivo=campaign.segmento_objetivo,
+            fecha_inicio=campaign.fecha_inicio,
+            fecha_fin=campaign.fecha_fin,
+            estado=campaign.estado,
+            created_at=campaign.created_at,
+            updated_at=campaign.updated_at,
+            total_notificaciones=0,
+        )
+
+    async def get_campaign(self, campaign_id: int) -> CampaignResponse:
+        campaign = await self.repository.get_campaign(campaign_id)
+        if not campaign:
+            raise CommerceNotFoundError(f"Campaña con ID {campaign_id} no encontrada.")
+        count = await self.repository.get_campaign_notifications_count(campaign_id)
+        return CampaignResponse(
+            id_campania=campaign.id_campania,
+            nombre=campaign.nombre,
+            descripcion=campaign.descripcion,
+            asunto_email=campaign.asunto_email,
+            segmento_objetivo=campaign.segmento_objetivo,
+            fecha_inicio=campaign.fecha_inicio,
+            fecha_fin=campaign.fecha_fin,
+            estado=campaign.estado,
+            created_at=campaign.created_at,
+            updated_at=campaign.updated_at,
+            total_notificaciones=count,
+        )
+
+    async def update_campaign(self, campaign_id: int, payload: CampaignUpdate) -> CampaignResponse:
+        campaign = await self.repository.get_campaign(campaign_id)
+        if not campaign:
+            raise CommerceNotFoundError(f"Campaña con ID {campaign_id} no encontrada.")
+        if campaign.estado not in ("BORRADOR", "PROGRAMADA"):
+            raise InvalidCommerceOperationError(
+                f"No se puede modificar una campaña en estado {campaign.estado}."
+            )
+        if payload.nombre is not None:
+            campaign.nombre = payload.nombre.strip()
+        if payload.descripcion is not None:
+            campaign.descripcion = payload.descripcion.strip()
+        if payload.asunto_email is not None:
+            campaign.asunto_email = payload.asunto_email.strip() if payload.asunto_email else None
+        if payload.segmento_objetivo is not None:
+            campaign.segmento_objetivo = payload.segmento_objetivo.strip()
+        if payload.fecha_inicio is not None:
+            campaign.fecha_inicio = payload.fecha_inicio
+        if payload.fecha_fin is not None:
+            campaign.fecha_fin = payload.fecha_fin
+        if payload.estado is not None:
+            campaign.estado = payload.estado
+
+        await self.session.commit()
+        await self.session.refresh(campaign)
+        count = await self.repository.get_campaign_notifications_count(campaign_id)
+        return CampaignResponse(
+            id_campania=campaign.id_campania,
+            nombre=campaign.nombre,
+            descripcion=campaign.descripcion,
+            asunto_email=campaign.asunto_email,
+            segmento_objetivo=campaign.segmento_objetivo,
+            fecha_inicio=campaign.fecha_inicio,
+            fecha_fin=campaign.fecha_fin,
+            estado=campaign.estado,
+            created_at=campaign.created_at,
+            updated_at=campaign.updated_at,
+            total_notificaciones=count,
+        )
+
+    async def launch_campaign(self, campaign_id: int) -> CampaignLaunchResponse:
+        campaign = await self.repository.get_campaign(campaign_id)
+        if not campaign:
+            raise CommerceNotFoundError(f"Campaña con ID {campaign_id} no encontrada.")
+        if campaign.estado == "FINALIZADA":
+            raise InvalidCommerceOperationError("Esta campaña ya fue enviada y finalizada.")
+
+        campaign.estado = "ENVIANDO"
+        target_users = await self.repository.get_target_users_for_campaign(
+            campaign.segmento_objetivo or "TODOS"
+        )
+
+        now = datetime.now(UTC)
+        for user in target_users:
+            notif = Notificacion(
+                id_usuario=user.id_usuario,
+                id_campania=campaign.id_campania,
+                tipo="CAMPAÑA_PROMOCIONAL",
+                canal="PUSH",
+                proveedor="SISTEMA",
+                destinatario=user.correo,
+                titulo=campaign.nombre,
+                contenido=campaign.descripcion,
+                estado="ENVIADO",
+                fecha_envio=now,
+                fecha_entrega=now,
+            )
+            await self.repository.add(notif)
+            try:
+                tokens = await self.repository.get_user_device_tokens(user.id_usuario)
+                if tokens:
+                    await self.fcm_sender.send_push_notification(
+                        tokens=tokens,
+                        title=campaign.nombre,
+                        body=campaign.descripcion,
+                        data={
+                            "type": "CAMPAÑA_PROMOCIONAL",
+                            "campaign_id": str(campaign.id_campania),
+                        },
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Error al emitir push de campaña al usuario %s: %s", user.id_usuario, exc
+                )
+
+        campaign.estado = "FINALIZADA"
+        campaign.fecha_inicio = campaign.fecha_inicio or now
+        await self.session.commit()
+
+        msg = (
+            f"Campaña '{campaign.nombre}' difundida con éxito "
+            f"a {len(target_users)} cliente(s)."
+        )
+        return CampaignLaunchResponse(
+            id_campania=campaign.id_campania,
+            nombre=campaign.nombre,
+            estado=campaign.estado,
+            destinatarios_notificados=len(target_users),
+            mensaje=msg,
+        )
+

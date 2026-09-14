@@ -291,3 +291,45 @@ export interface CustomerAdminUpdateRequest {
   estado?: 'ACTIVO' | 'INACTIVO';
   nuevo_password?: string;
 }
+
+export interface Campaign {
+  id_campania: number;
+  nombre: string;
+  descripcion: string | null;
+  asunto_email: string | null;
+  segmento_objetivo: string | null;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  estado: 'BORRADOR' | 'PROGRAMADA' | 'ENVIANDO' | 'FINALIZADA' | 'CANCELADA';
+  created_at: string;
+  updated_at: string;
+  total_notificaciones: number;
+}
+
+export interface CampaignCreate {
+  nombre: string;
+  descripcion: string;
+  asunto_email?: string | null;
+  segmento_objetivo?: string;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+}
+
+export interface CampaignUpdate {
+  nombre?: string;
+  descripcion?: string;
+  asunto_email?: string | null;
+  segmento_objetivo?: string;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+  estado?: 'BORRADOR' | 'PROGRAMADA' | 'CANCELADA';
+}
+
+export interface CampaignLaunchResponse {
+  id_campania: number;
+  nombre: string;
+  estado: string;
+  destinatarios_notificados: number;
+  mensaje: string;
+}
+

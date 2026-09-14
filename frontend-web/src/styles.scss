@@ -2497,3 +2497,302 @@ td {
     flex-direction: column;
   }
 }
+
+/* ==========================================================================
+   NOTIFICATION BELL & DROPDOWN (Ciclo III)
+   ========================================================================== */
+
+.notification-bell-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-bell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 140ms ease;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    border-color: var(--ink);
+  }
+
+  .bell-icon {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e11d48;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.4);
+  animation: badge-pop 200ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes badge-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.notification-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 150;
+  width: min(390px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow:
+    0 16px 36px -4px rgba(18, 20, 24, 0.14),
+    0 4px 12px -2px rgba(18, 20, 24, 0.06);
+  animation: dropdown-fade-in 140ms ease-out;
+  overflow: hidden;
+}
+
+@keyframes dropdown-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-dropdown__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 35%, var(--surface));
+
+  .dropdown-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    h3 {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .dropdown-count-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+  }
+
+  .dropdown-refresh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background: var(--line);
+      color: var(--ink);
+    }
+
+    .is-spinning {
+      animation: spin 700ms linear infinite;
+    }
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.notification-dropdown__list {
+  max-height: 360px;
+  overflow-y: auto;
+
+  .dropdown-state-box {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--ink-soft);
+
+    .empty-icon {
+      display: block;
+      font-size: 2rem;
+      margin-bottom: 8px;
+      opacity: 0.7;
+    }
+
+    p {
+      margin: 0 0 4px;
+      color: var(--ink);
+    }
+
+    small {
+      font-size: 0.8rem;
+    }
+  }
+}
+
+.notification-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+  transition: background 120ms ease;
+
+  &:hover {
+    background: color-mix(in srgb, var(--canvas) 60%, transparent);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .notification-item__icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    background: color-mix(in srgb, var(--canvas) 80%, transparent);
+    border: 1px solid var(--line);
+  }
+
+  &[data-type="pago"] .notification-item__icon-wrap {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+  }
+
+  &[data-type="delivery"] .notification-item__icon-wrap {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  &[data-type="reserva"] .notification-item__icon-wrap {
+    background: #fef3c7;
+    border-color: #fde68a;
+  }
+
+  &[data-type="campania"] .notification-item__icon-wrap {
+    background: #fdf2f8;
+    border-color: #fbcfe8;
+  }
+
+  .notification-item__content {
+    flex: 1;
+    min-width: 0;
+
+    .notification-item__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 3px;
+
+      .notification-item__badge {
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+      }
+
+      time {
+        font-size: 0.72rem;
+        color: var(--ink-soft);
+      }
+    }
+
+    .notification-item__title {
+      margin: 0 0 2px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .notification-item__body {
+      margin: 0;
+      font-size: 0.78rem;
+      color: var(--ink-soft);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  }
+}
+
+.notification-dropdown__footer {
+  padding: 10px 16px;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 40%, var(--surface));
+
+  .view-all-link {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-decoration: none;
+    transition: opacity 120ms ease;
+
+    &:hover {
+      text-decoration: underline;
+      opacity: 0.85;
+    }
+  }
+}
+

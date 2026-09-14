@@ -77,6 +77,16 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
     ],
   },
   {
+    label: 'Marketing',
+    items: [
+      {
+        label: 'Campañas',
+        path: '/admin/campanias',
+        permissions: ['promociones.gestionar'],
+      },
+    ],
+  },
+  {
     label: 'Historiales',
     items: [
       {

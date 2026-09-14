@@ -424,3 +424,48 @@ class SupplierPurchaseHistoryPage(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+CampaignState = Literal["BORRADOR", "PROGRAMADA", "ENVIANDO", "FINALIZADA", "CANCELADA"]
+
+
+class CampaignCreate(BaseModel):
+    nombre: str = Field(min_length=3, max_length=150)
+    descripcion: str = Field(min_length=5, max_length=250)
+    asunto_email: str | None = Field(default=None, max_length=180)
+    segmento_objetivo: str = Field(default="TODOS", max_length=150)
+    fecha_inicio: datetime | None = None
+    fecha_fin: datetime | None = None
+
+
+class CampaignUpdate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=3, max_length=150)
+    descripcion: str | None = Field(default=None, min_length=5, max_length=250)
+    asunto_email: str | None = Field(default=None, max_length=180)
+    segmento_objetivo: str | None = Field(default=None, max_length=150)
+    fecha_inicio: datetime | None = None
+    fecha_fin: datetime | None = None
+    estado: Literal["BORRADOR", "PROGRAMADA", "CANCELADA"] | None = None
+
+
+class CampaignResponse(ORMResponse):
+    id_campania: int
+    nombre: str
+    descripcion: str | None = None
+    asunto_email: str | None = None
+    segmento_objetivo: str | None = None
+    fecha_inicio: datetime | None = None
+    fecha_fin: datetime | None = None
+    estado: str
+    created_at: datetime
+    updated_at: datetime
+    total_notificaciones: int = 0
+
+
+class CampaignLaunchResponse(BaseModel):
+    id_campania: int
+    nombre: str
+    estado: str
+    destinatarios_notificados: int
+    mensaje: str
+

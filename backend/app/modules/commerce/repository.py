@@ -15,6 +15,7 @@ from app.modules.catalog.models import (
     VarianteProducto,
 )
 from app.modules.commerce.models import (
+    Campania,
     Carrito,
     DetalleCarrito,
     DetalleDevolucion,
@@ -761,4 +762,40 @@ class CommerceRepository:
             .with_for_update()
         )
         return list((await self.session.scalars(statement)).all())
+
+    async def list_campaigns(self, state: str | None = None) -> list[tuple[Campania, int]]:
+        count_subq = (
+            select(func.count(Notificacion.id_notificacion))
+            .where(Notificacion.id_campania == Campania.id_campania)
+            .scalar_subquery()
+        )
+        statement = select(Campania, count_subq.label("total_notif"))
+        if state:
+            statement = statement.where(Campania.estado == state)
+        statement = statement.order_by(Campania.created_at.desc())
+        result = await self.session.execute(statement)
+        return [(row[0], int(row[1] or 0)) for row in result.all()]
+
+    async def get_campaign(self, campaign_id: int) -> Campania | None:
+        return await self.session.get(Campania, campaign_id)
+
+    async def get_campaign_notifications_count(self, campaign_id: int) -> int:
+        statement = select(func.count(Notificacion.id_notificacion)).where(
+            Notificacion.id_campania == campaign_id
+        )
+        return int(await self.session.scalar(statement) or 0)
+
+    async def get_target_users_for_campaign(self, segment: str = "TODOS") -> list[Usuario]:
+        statement = (
+            select(Usuario)
+            .join(Cliente, Cliente.id_usuario == Usuario.id_usuario)
+            .where(Usuario.estado == "ACTIVO")
+        )
+        if segment == "CON_COMPRAS":
+            statement = statement.join(Venta, Venta.id_cliente == Cliente.id_cliente).distinct()
+        elif segment == "CON_RESERVAS":
+            statement = statement.join(Reserva, Reserva.id_cliente == Cliente.id_cliente).distinct()
+        result = await self.session.scalars(statement)
+        return list(result.all())
+
 

@@ -5,6 +5,10 @@ import {
   Address,
   AdminNotificationPage,
   AdminOperationalNotification,
+  Campaign,
+  CampaignCreate,
+  CampaignLaunchResponse,
+  CampaignUpdate,
   Cart,
   ManualNotificationPayload,
   OperationalNotification,
@@ -214,5 +218,23 @@ export class CommerceService {
       params: this.params(params),
     });
   }
+  adminCampaigns(params?: Params) {
+    return this.http.get<Campaign[]>(`${API_BASE_URL}/admin/campaigns`, {
+      params: this.params(params),
+    });
+  }
+  createCampaign(payload: CampaignCreate) {
+    return this.http.post<Campaign>(`${API_BASE_URL}/admin/campaigns`, payload);
+  }
+  getCampaign(id: number) {
+    return this.http.get<Campaign>(`${API_BASE_URL}/admin/campaigns/${id}`);
+  }
+  updateCampaign(id: number, payload: CampaignUpdate) {
+    return this.http.patch<Campaign>(`${API_BASE_URL}/admin/campaigns/${id}`, payload);
+  }
+  launchCampaign(id: number) {
+    return this.http.post<CampaignLaunchResponse>(`${API_BASE_URL}/admin/campaigns/${id}/send`, {});
+  }
 }
+
 
