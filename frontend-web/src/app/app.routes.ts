@@ -222,6 +222,13 @@ export const routes: Routes = [
           import('./features/admin/notifications-admin').then((m) => m.NotificationsAdmin),
       },
       {
+        path: 'promociones',
+        title: 'Promociones y Descuentos | Capricho Store',
+        canActivate: [requireAnyPermission('promociones.gestionar')],
+        loadComponent: () =>
+          import('./features/admin/promotions-admin').then((m) => m.PromotionsAdmin),
+      },
+      {
         path: 'campanias',
         title: 'Campañas y Difusión | Capricho Store',
         canActivate: [requireAnyPermission('promociones.gestionar')],

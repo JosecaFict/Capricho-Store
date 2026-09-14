@@ -516,6 +516,34 @@ h3 {
   margin: 0;
   font-weight: 700;
 }
+.product-card__promo-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+.product-card__price-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.product-card__price--discounted {
+  color: #2563eb;
+  font-weight: 800;
+}
+.product-card__price-original {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  text-decoration: line-through;
+}
 .product-card__audience {
   color: var(--ink-soft);
   font-size: 0.85rem;

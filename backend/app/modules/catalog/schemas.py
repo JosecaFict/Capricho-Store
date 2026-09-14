@@ -520,6 +520,10 @@ class ProductResponse(ORMResponse):
     permite_vestidor: bool
     activo: bool
     precio_actual: Decimal | None
+    descuento_porcentaje: Decimal | None = None
+    precio_promocional: Decimal | None = None
+    id_promocion: int | None = None
+    promocion_nombre: str | None = None
     imagen_principal: ProductImageResponse | None
     variantes: list[VariantResponse]
     tallas_disponibles: list[str]

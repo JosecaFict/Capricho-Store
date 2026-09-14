@@ -80,6 +80,11 @@ export const ADMIN_NAVIGATION: AdminNavGroup[] = [
     label: 'Marketing',
     items: [
       {
+        label: 'Promociones',
+        path: '/admin/promociones',
+        permissions: ['promociones.gestionar'],
+      },
+      {
         label: 'Campañas',
         path: '/admin/campanias',
         permissions: ['promociones.gestionar'],

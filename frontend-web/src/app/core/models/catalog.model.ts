@@ -97,6 +97,10 @@ export interface Product {
   permite_vestidor: boolean;
   activo: boolean;
   precio_actual: string | null;
+  descuento_porcentaje?: number | null;
+  precio_promocional?: string | null;
+  id_promocion?: number | null;
+  promocion_nombre?: string | null;
   imagen_principal: ProductImage | null;
   variantes: ProductVariant[];
   tallas_disponibles: string[];

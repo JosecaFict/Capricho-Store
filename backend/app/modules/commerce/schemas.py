@@ -469,3 +469,72 @@ class CampaignLaunchResponse(BaseModel):
     destinatarios_notificados: int
     mensaje: str
 
+
+class PromotionCreate(BaseModel):
+    nombre: str = Field(min_length=3, max_length=150)
+    descripcion: str | None = Field(default=None, max_length=250)
+    porcentaje_descuento: Decimal = Field(gt=0, le=100)
+    fecha_inicio: datetime
+    fecha_fin: datetime
+    activo: bool = True
+    producto_ids: list[int] = Field(default_factory=list)
+    categoria_ids: list[int] = Field(default_factory=list)
+    temporada_ids: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "PromotionCreate":
+        if self.fecha_fin <= self.fecha_inicio:
+            raise ValueError("La fecha de fin debe ser posterior a la fecha de inicio")
+        return self
+
+
+class PromotionUpdate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=3, max_length=150)
+    descripcion: str | None = Field(default=None, max_length=250)
+    porcentaje_descuento: Decimal | None = Field(default=None, gt=0, le=100)
+    fecha_inicio: datetime | None = None
+    fecha_fin: datetime | None = None
+    activo: bool | None = None
+    producto_ids: list[int] | None = None
+    categoria_ids: list[int] | None = None
+    temporada_ids: list[int] | None = None
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "PromotionUpdate":
+        if self.fecha_inicio is not None and self.fecha_fin is not None:
+            if self.fecha_fin <= self.fecha_inicio:
+                raise ValueError("La fecha de fin debe ser posterior a la fecha de inicio")
+        return self
+
+
+class PromotionResponse(ORMResponse):
+    id_promocion: int
+    nombre: str
+    descripcion: str | None = None
+    porcentaje_descuento: Decimal
+    fecha_inicio: datetime
+    fecha_fin: datetime
+    activo: bool
+    created_at: datetime
+    updated_at: datetime
+    producto_ids: list[int] = Field(default_factory=list)
+    categoria_ids: list[int] = Field(default_factory=list)
+    temporada_ids: list[int] = Field(default_factory=list)
+    productos_count: int = 0
+    categorias_count: int = 0
+    temporadas_count: int = 0
+    estado_vigencia: str = "VIGENTE"
+
+
+class ActivePromotionItem(BaseModel):
+    id_promocion: int
+    nombre: str
+    descripcion: str | None = None
+    porcentaje_descuento: Decimal
+    fecha_inicio: datetime
+    fecha_fin: datetime
+    productos_count: int = 0
+    categorias_count: int = 0
+    temporadas_count: int = 0
+
+

@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { API_BASE_URL } from '../config/api.config';
 import {
+  ActivePromotionItem,
   Address,
   AdminNotificationPage,
   AdminOperationalNotification,
@@ -13,6 +14,9 @@ import {
   ManualNotificationPayload,
   OperationalNotification,
   Order,
+  Promotion,
+  PromotionCreate,
+  PromotionUpdate,
   Reservation,
   ReturnRequest,
   Sale,
@@ -234,6 +238,26 @@ export class CommerceService {
   }
   launchCampaign(id: number) {
     return this.http.post<CampaignLaunchResponse>(`${API_BASE_URL}/admin/campaigns/${id}/send`, {});
+  }
+  adminPromotions(params?: Params) {
+    return this.http.get<Promotion[]>(`${API_BASE_URL}/admin/promotions`, {
+      params: this.params(params),
+    });
+  }
+  createPromotion(payload: PromotionCreate) {
+    return this.http.post<Promotion>(`${API_BASE_URL}/admin/promotions`, payload);
+  }
+  getPromotion(id: number) {
+    return this.http.get<Promotion>(`${API_BASE_URL}/admin/promotions/${id}`);
+  }
+  updatePromotion(id: number, payload: PromotionUpdate) {
+    return this.http.patch<Promotion>(`${API_BASE_URL}/admin/promotions/${id}`, payload);
+  }
+  deletePromotion(id: number) {
+    return this.http.delete<{ mensaje: string }>(`${API_BASE_URL}/admin/promotions/${id}`);
+  }
+  activePromotions() {
+    return this.http.get<ActivePromotionItem[]>(`${API_BASE_URL}/promotions/active`);
   }
 }
 

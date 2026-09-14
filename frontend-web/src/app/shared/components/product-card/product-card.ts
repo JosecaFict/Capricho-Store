@@ -22,6 +22,9 @@ import { BolivianosPipe } from '../../pipes/bolivianos.pipe';
           loading="lazy"
           (error)="useFallback()"
         />
+        @if (product().descuento_porcentaje) {
+          <span class="product-card__promo-badge">-{{ product().descuento_porcentaje }}% OFF</span>
+        }
         @if (isFallback()) {
           <span class="product-card__temporary">Imagen temporal</span>
         }
@@ -32,7 +35,18 @@ import { BolivianosPipe } from '../../pipes/bolivianos.pipe';
           <a [routerLink]="['/productos', product().id_producto]">{{ product().nombre }}</a>
         </h3>
         <div class="product-card__footer">
-          <p class="product-card__price">{{ product().precio_actual | bolivianos }}</p>
+          <div class="product-card__price-wrap">
+            @if (product().precio_promocional) {
+              <p class="product-card__price product-card__price--discounted">
+                {{ product().precio_promocional | bolivianos }}
+              </p>
+              <del class="product-card__price-original">
+                {{ product().precio_actual | bolivianos }}
+              </del>
+            } @else {
+              <p class="product-card__price">{{ product().precio_actual | bolivianos }}</p>
+            }
+          </div>
           <span class="product-card__audience">{{
             product().publico_objetivo === 'HOMBRE' ? 'Hombre' : 'Mujer'
           }}</span>

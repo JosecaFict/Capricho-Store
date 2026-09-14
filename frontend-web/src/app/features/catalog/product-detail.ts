@@ -67,7 +67,26 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
           <article class="product-info">
             <p class="product-info__meta">{{ item.marca }} · {{ item.categoria }}</p>
             <h1>{{ item.nombre }}</h1>
-            <p class="product-info__price">{{ item.precio_actual | bolivianos }}</p>
+            @if (item.precio_promocional) {
+              <div class="product-info__promo-wrap" style="display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                <span class="product-info__price product-info__price--discount" style="color: #2563eb; font-size: 1.75rem; font-weight: 800;">
+                  {{ item.precio_promocional | bolivianos }}
+                </span>
+                <del style="color: var(--ink-soft); font-size: 1.1rem; text-decoration: line-through;">
+                  {{ item.precio_actual | bolivianos }}
+                </del>
+                <span class="badge" style="background: rgba(220, 38, 38, 0.15); color: #dc2626; font-weight: 800; border-radius: 999px; padding: 0.25rem 0.6rem;">
+                  -{{ item.descuento_porcentaje }}% OFF
+                </span>
+              </div>
+              @if (item.promocion_nombre) {
+                <p style="font-size: 0.85rem; color: #2563eb; font-weight: 600; margin-top: -0.25rem; margin-bottom: 0.75rem;">
+                  🏷️ Oferta especial: {{ item.promocion_nombre }}
+                </p>
+              }
+            } @else {
+              <p class="product-info__price">{{ item.precio_actual | bolivianos }}</p>
+            }
             <p class="product-info__description">
               {{ item.descripcion || 'Este producto todavía no tiene una descripción publicada.' }}
             </p>

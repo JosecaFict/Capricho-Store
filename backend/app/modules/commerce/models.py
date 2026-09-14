@@ -399,3 +399,86 @@ class Campania(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+
+class Promocion(Base):
+    __tablename__ = "promocion"
+
+    id_promocion: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=True), primary_key=True
+    )
+    nombre: Mapped[str] = mapped_column(String(150), nullable=False)
+    descripcion: Mapped[str | None] = mapped_column(String(250))
+    porcentaje_descuento: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False
+    )
+    fecha_inicio: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    fecha_fin: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    activo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class PromocionProducto(Base):
+    __tablename__ = "promocion_producto"
+
+    id_promocion_producto: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=True), primary_key=True
+    )
+    id_promocion: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("capricho.promocion.id_promocion", ondelete="CASCADE"),
+        nullable=False,
+    )
+    id_producto: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("capricho.producto.id_producto", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+
+class PromocionCategoria(Base):
+    __tablename__ = "promocion_categoria"
+
+    id_promocion_categoria: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=True), primary_key=True
+    )
+    id_promocion: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("capricho.promocion.id_promocion", ondelete="CASCADE"),
+        nullable=False,
+    )
+    id_categoria: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("capricho.categoria.id_categoria", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+
+class PromocionTemporada(Base):
+    __tablename__ = "promocion_temporada"
+
+    id_promocion_temporada: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=True), primary_key=True
+    )
+    id_promocion: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("capricho.promocion.id_promocion", ondelete="CASCADE"),
+        nullable=False,
+    )
+    id_temporada: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("capricho.temporada.id_temporada", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+

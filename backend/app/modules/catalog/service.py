@@ -1,4 +1,5 @@
 import math
+from decimal import Decimal
 from typing import Any, TypeVar
 
 from sqlalchemy.exc import IntegrityError
@@ -283,8 +284,22 @@ class CatalogService:
 
     async def list_products(self, **filters: Any) -> ProductPage:
         records, total = await self.repository.list_products(**filters)
+        product_ids = [record.product.id_producto for record in records]
+        discounts: dict[int, tuple[Decimal, int, str]] = {}
+        try:
+            from app.modules.commerce.repository import CommerceRepository
+
+            commerce_repo = CommerceRepository(self.session)
+            discounts = await commerce_repo.get_active_discounts_for_products(product_ids)
+        except Exception:
+            discounts = {}
+
         items = [
-            await self._product_response(record, branch_id=filters.get("branch_id"))
+            await self._product_response(
+                record,
+                branch_id=filters.get("branch_id"),
+                discount=discounts.get(record.product.id_producto),
+            )
             for record in records
         ]
         return ProductPage(
@@ -296,8 +311,20 @@ class CatalogService:
         )
 
     async def get_product(self, product_id: int, branch_id: int | None = None) -> ProductResponse:
+        discount: tuple[Decimal, int, str] | None = None
+        try:
+            from app.modules.commerce.repository import CommerceRepository
+
+            commerce_repo = CommerceRepository(self.session)
+            discounts = await commerce_repo.get_active_discounts_for_products([product_id])
+            discount = discounts.get(product_id)
+        except Exception:
+            discount = None
+
         return await self._product_response(
-            await self._require_product(product_id), branch_id=branch_id
+            await self._require_product(product_id),
+            branch_id=branch_id,
+            discount=discount,
         )
 
     async def create_product(
@@ -717,7 +744,10 @@ class CatalogService:
         )
 
     async def _product_response(
-        self, record: ProductCore, branch_id: int | None
+        self,
+        record: ProductCore,
+        branch_id: int | None,
+        discount: tuple[Decimal, int, str] | None = None,
     ) -> ProductResponse:
         variants = [
             self._variant_response(item)
@@ -727,6 +757,20 @@ class CatalogService:
         ]
         images = await self.repository.list_images(record.product.id_producto)
         principal = next((image for image in images if image.es_principal), None)
+
+        descuento_porcentaje = None
+        precio_promocional = None
+        id_promocion = None
+        promocion_nombre = None
+
+        if discount and record.current_price is not None:
+            porcentaje, id_promo, promo_nombre = discount
+            descuento_porcentaje = porcentaje
+            id_promocion = id_promo
+            promocion_nombre = promo_nombre
+            factor = Decimal("1.00") - (porcentaje / Decimal("100"))
+            precio_promocional = (record.current_price * factor).quantize(Decimal("0.01"))
+
         return ProductResponse(
             id_producto=record.product.id_producto,
             id_categoria=record.product.id_categoria,
@@ -739,6 +783,10 @@ class CatalogService:
             permite_vestidor=record.product.permite_vestidor,
             activo=record.product.activo,
             precio_actual=record.current_price,
+            descuento_porcentaje=descuento_porcentaje,
+            precio_promocional=precio_promocional,
+            id_promocion=id_promocion,
+            promocion_nombre=promocion_nombre,
             imagen_principal=self._image_response(principal) if principal else None,
             variantes=variants,
             tallas_disponibles=sorted({variant.talla for variant in variants}),

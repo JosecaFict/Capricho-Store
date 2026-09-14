@@ -38,6 +38,10 @@ from app.modules.commerce.models import (
     Notificacion,
     Pago,
     Pedido,
+    Promocion,
+    PromocionCategoria,
+    PromocionProducto,
+    PromocionTemporada,
     Reserva,
     TransaccionPasarela,
     Venta,
@@ -48,6 +52,7 @@ from app.modules.commerce.business_days import (
     is_return_window_valid,
 )
 from app.modules.commerce.schemas import (
+    ActivePromotionItem,
     AddressCreate,
     AddressResponse,
     AddressUpdate,
@@ -70,6 +75,9 @@ from app.modules.commerce.schemas import (
     NotificationKpis,
     OrderResponse,
     OrderStatusUpdate,
+    PromotionCreate,
+    PromotionResponse,
+    PromotionUpdate,
     ReservationCreate,
     ReservationResponse,
     ReservationStatusUpdate,
@@ -2562,4 +2570,141 @@ class CommerceService:
             destinatarios_notificados=len(target_users),
             mensaje=msg,
         )
+
+    async def list_promotions(self) -> list[PromotionResponse]:
+        raw_items = await self.repository.list_promotions()
+        return [
+            PromotionResponse(
+                id_promocion=item["promotion"].id_promocion,
+                nombre=item["promotion"].nombre,
+                descripcion=item["promotion"].descripcion,
+                porcentaje_descuento=item["promotion"].porcentaje_descuento,
+                fecha_inicio=item["promotion"].fecha_inicio,
+                fecha_fin=item["promotion"].fecha_fin,
+                activo=item["promotion"].activo,
+                created_at=item["promotion"].created_at,
+                updated_at=item["promotion"].updated_at,
+                producto_ids=item["producto_ids"],
+                categoria_ids=item["categoria_ids"],
+                temporada_ids=item["temporada_ids"],
+                productos_count=len(item["producto_ids"]),
+                categorias_count=len(item["categoria_ids"]),
+                temporadas_count=len(item["temporada_ids"]),
+                estado_vigencia=item["estado_vigencia"],
+            )
+            for item in raw_items
+        ]
+
+    async def get_promotion(self, promo_id: int) -> PromotionResponse:
+        details = await self.repository.get_promotion_details(promo_id)
+        if not details:
+            raise CommerceNotFoundError("Promoción no encontrada")
+        p = details["promotion"]
+        return PromotionResponse(
+            id_promocion=p.id_promocion,
+            nombre=p.nombre,
+            descripcion=p.descripcion,
+            porcentaje_descuento=p.porcentaje_descuento,
+            fecha_inicio=p.fecha_inicio,
+            fecha_fin=p.fecha_fin,
+            activo=p.activo,
+            created_at=p.created_at,
+            updated_at=p.updated_at,
+            producto_ids=details["producto_ids"],
+            categoria_ids=details["categoria_ids"],
+            temporada_ids=details["temporada_ids"],
+            productos_count=len(details["producto_ids"]),
+            categorias_count=len(details["categoria_ids"]),
+            temporadas_count=len(details["temporada_ids"]),
+            estado_vigencia=details["estado_vigencia"],
+        )
+
+    async def create_promotion(self, payload: PromotionCreate) -> PromotionResponse:
+        promo = Promocion(
+            nombre=payload.nombre,
+            descripcion=payload.descripcion,
+            porcentaje_descuento=payload.porcentaje_descuento,
+            fecha_inicio=payload.fecha_inicio,
+            fecha_fin=payload.fecha_fin,
+            activo=payload.activo,
+        )
+        await self.repository.add(promo)
+        await self.repository.set_promotion_associations(
+            promo.id_promocion,
+            product_ids=payload.producto_ids,
+            category_ids=payload.categoria_ids,
+            season_ids=payload.temporada_ids,
+        )
+        await self.session.commit()
+        return await self.get_promotion(promo.id_promocion)
+
+    async def update_promotion(
+        self, promo_id: int, payload: PromotionUpdate
+    ) -> PromotionResponse:
+        promo = await self.repository.get_promotion(promo_id)
+        if not promo:
+            raise CommerceNotFoundError("Promoción no encontrada")
+
+        if payload.nombre is not None:
+            promo.nombre = payload.nombre
+        if payload.descripcion is not None:
+            promo.descripcion = payload.descripcion
+        if payload.porcentaje_descuento is not None:
+            promo.porcentaje_descuento = payload.porcentaje_descuento
+        if payload.fecha_inicio is not None:
+            promo.fecha_inicio = payload.fecha_inicio
+        if payload.fecha_fin is not None:
+            promo.fecha_fin = payload.fecha_fin
+        if payload.activo is not None:
+            promo.activo = payload.activo
+
+        if promo.fecha_fin <= promo.fecha_inicio:
+            raise InvalidCommerceOperationError(
+                "La fecha de fin debe ser posterior a la fecha de inicio"
+            )
+
+        if (
+            payload.producto_ids is not None
+            or payload.categoria_ids is not None
+            or payload.temporada_ids is not None
+        ):
+            await self.repository.set_promotion_associations(
+                promo.id_promocion,
+                product_ids=payload.producto_ids,
+                category_ids=payload.categoria_ids,
+                season_ids=payload.temporada_ids,
+            )
+
+        await self.session.commit()
+        return await self.get_promotion(promo.id_promocion)
+
+    async def delete_promotion(self, promo_id: int) -> dict:
+        promo = await self.repository.get_promotion(promo_id)
+        if not promo:
+            raise CommerceNotFoundError("Promoción no encontrada")
+        await self.repository.delete_promotion(promo)
+        await self.session.commit()
+        return {"mensaje": f"Promoción '{promo.nombre}' eliminada con éxito"}
+
+    async def list_active_promotions_public(self) -> list[ActivePromotionItem]:
+        promos = await self.repository.get_active_promotions()
+        results: list[ActivePromotionItem] = []
+        for p in promos:
+            details = await self.repository.get_promotion_details(p.id_promocion)
+            if details:
+                results.append(
+                    ActivePromotionItem(
+                        id_promocion=p.id_promocion,
+                        nombre=p.nombre,
+                        descripcion=p.descripcion,
+                        porcentaje_descuento=p.porcentaje_descuento,
+                        fecha_inicio=p.fecha_inicio,
+                        fecha_fin=p.fecha_fin,
+                        productos_count=len(details["producto_ids"]),
+                        categorias_count=len(details["categoria_ids"]),
+                        temporadas_count=len(details["temporada_ids"]),
+                    )
+                )
+        return results
+
 

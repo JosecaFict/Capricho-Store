@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from app.modules.catalog.models import (
     InventarioSucursal,
     Marca,
     Producto,
+    ProductoTemporada,
     Talla,
     VarianteProducto,
 )
@@ -27,6 +29,10 @@ from app.modules.commerce.models import (
     Notificacion,
     Pago,
     Pedido,
+    Promocion,
+    PromocionCategoria,
+    PromocionProducto,
+    PromocionTemporada,
     Reserva,
     TarifaEnvio,
     TransaccionPasarela,
@@ -797,5 +803,235 @@ class CommerceRepository:
             statement = statement.join(Reserva, Reserva.id_cliente == Cliente.id_cliente).distinct()
         result = await self.session.scalars(statement)
         return list(result.all())
+
+    async def list_promotions(self) -> list[dict]:
+        statement = select(Promocion).order_by(Promocion.created_at.desc())
+        promos = list((await self.session.scalars(statement)).all())
+        results: list[dict] = []
+        now = datetime.now(UTC)
+        for p in promos:
+            prod_ids = list(
+                (
+                    await self.session.scalars(
+                        select(PromocionProducto.id_producto).where(
+                            PromocionProducto.id_promocion == p.id_promocion
+                        )
+                    )
+                ).all()
+            )
+            cat_ids = list(
+                (
+                    await self.session.scalars(
+                        select(PromocionCategoria.id_categoria).where(
+                            PromocionCategoria.id_promocion == p.id_promocion
+                        )
+                    )
+                ).all()
+            )
+            temp_ids = list(
+                (
+                    await self.session.scalars(
+                        select(PromocionTemporada.id_temporada).where(
+                            PromocionTemporada.id_promocion == p.id_promocion
+                        )
+                    )
+                ).all()
+            )
+            if not p.activo:
+                vigencia = "INACTIVA"
+            elif p.fecha_inicio > now:
+                vigencia = "PROGRAMADA"
+            elif p.fecha_fin < now:
+                vigencia = "EXPIRADA"
+            else:
+                vigencia = "VIGENTE"
+
+            results.append(
+                {
+                    "promotion": p,
+                    "producto_ids": prod_ids,
+                    "categoria_ids": cat_ids,
+                    "temporada_ids": temp_ids,
+                    "estado_vigencia": vigencia,
+                }
+            )
+        return results
+
+    async def get_promotion(self, promo_id: int) -> Promocion | None:
+        return await self.session.get(Promocion, promo_id)
+
+    async def get_promotion_details(self, promo_id: int) -> dict | None:
+        p = await self.session.get(Promocion, promo_id)
+        if not p:
+            return None
+        prod_ids = list(
+            (
+                await self.session.scalars(
+                    select(PromocionProducto.id_producto).where(
+                        PromocionProducto.id_promocion == p.id_promocion
+                    )
+                )
+            ).all()
+        )
+        cat_ids = list(
+            (
+                await self.session.scalars(
+                    select(PromocionCategoria.id_categoria).where(
+                        PromocionCategoria.id_promocion == p.id_promocion
+                    )
+                )
+            ).all()
+        )
+        temp_ids = list(
+            (
+                await self.session.scalars(
+                    select(PromocionTemporada.id_temporada).where(
+                        PromocionTemporada.id_promocion == p.id_promocion
+                    )
+                )
+            ).all()
+        )
+        now = datetime.now(UTC)
+        if not p.activo:
+            vigencia = "INACTIVA"
+        elif p.fecha_inicio > now:
+            vigencia = "PROGRAMADA"
+        elif p.fecha_fin < now:
+            vigencia = "EXPIRADA"
+        else:
+            vigencia = "VIGENTE"
+
+        return {
+            "promotion": p,
+            "producto_ids": prod_ids,
+            "categoria_ids": cat_ids,
+            "temporada_ids": temp_ids,
+            "estado_vigencia": vigencia,
+        }
+
+    async def set_promotion_associations(
+        self,
+        promo_id: int,
+        product_ids: list[int] | None = None,
+        category_ids: list[int] | None = None,
+        season_ids: list[int] | None = None,
+    ) -> None:
+        if product_ids is not None:
+            await self.session.execute(
+                delete(PromocionProducto).where(PromocionProducto.id_promocion == promo_id)
+            )
+            for pid in set(product_ids):
+                self.session.add(PromocionProducto(id_promocion=promo_id, id_producto=pid))
+        if category_ids is not None:
+            await self.session.execute(
+                delete(PromocionCategoria).where(PromocionCategoria.id_promocion == promo_id)
+            )
+            for cid in set(category_ids):
+                self.session.add(PromocionCategoria(id_promocion=promo_id, id_categoria=cid))
+        if season_ids is not None:
+            await self.session.execute(
+                delete(PromocionTemporada).where(PromocionTemporada.id_promocion == promo_id)
+            )
+            for sid in set(season_ids):
+                self.session.add(PromocionTemporada(id_promocion=promo_id, id_temporada=sid))
+        await self.session.flush()
+
+    async def delete_promotion(self, promo: Promocion) -> None:
+        await self.session.delete(promo)
+        await self.session.flush()
+
+    async def get_active_promotions(self) -> list[Promocion]:
+        now = datetime.now(UTC)
+        statement = (
+            select(Promocion)
+            .where(
+                Promocion.activo.is_(True),
+                Promocion.fecha_inicio <= now,
+                Promocion.fecha_fin >= now,
+            )
+            .order_by(Promocion.porcentaje_descuento.desc())
+        )
+        return list((await self.session.scalars(statement)).all())
+
+    async def get_active_discounts_for_products(
+        self, product_ids: list[int]
+    ) -> dict[int, tuple[Decimal, int, str]]:
+        if not product_ids:
+            return {}
+
+        now = datetime.now(UTC)
+        promos = await self.get_active_promotions()
+        if not promos:
+            return {}
+
+        products_stmt = select(Producto.id_producto, Producto.id_categoria).where(
+            Producto.id_producto.in_(product_ids)
+        )
+        product_rows = (await self.session.execute(products_stmt)).all()
+        prod_cats = {r[0]: r[1] for r in product_rows}
+
+        temp_stmt = select(
+            ProductoTemporada.id_producto, ProductoTemporada.id_temporada
+        ).where(ProductoTemporada.id_producto.in_(product_ids))
+        temp_rows = (await self.session.execute(temp_stmt)).all()
+        prod_temps: dict[int, set[int]] = {}
+        for pid, tid in temp_rows:
+            prod_temps.setdefault(pid, set()).add(tid)
+
+        discounts: dict[int, tuple[Decimal, int, str]] = {}
+
+        for promo in promos:
+            p_ids = set(
+                (
+                    await self.session.scalars(
+                        select(PromocionProducto.id_producto).where(
+                            PromocionProducto.id_promocion == promo.id_promocion
+                        )
+                    )
+                ).all()
+            )
+            c_ids = set(
+                (
+                    await self.session.scalars(
+                        select(PromocionCategoria.id_categoria).where(
+                            PromocionCategoria.id_promocion == promo.id_promocion
+                        )
+                    )
+                ).all()
+            )
+            t_ids = set(
+                (
+                    await self.session.scalars(
+                        select(PromocionTemporada.id_temporada).where(
+                            PromocionTemporada.id_promocion == promo.id_promocion
+                        )
+                    )
+                ).all()
+            )
+
+            is_storewide = not p_ids and not c_ids and not t_ids
+
+            for pid in product_ids:
+                matches = False
+                if is_storewide:
+                    matches = True
+                elif pid in p_ids:
+                    matches = True
+                elif prod_cats.get(pid) in c_ids:
+                    matches = True
+                elif pid in prod_temps and bool(prod_temps[pid] & t_ids):
+                    matches = True
+
+                if matches:
+                    current_best = discounts.get(pid)
+                    if current_best is None or promo.porcentaje_descuento > current_best[0]:
+                        discounts[pid] = (
+                            promo.porcentaje_descuento,
+                            promo.id_promocion,
+                            promo.nombre,
+                        )
+
+        return discounts
+
 
 

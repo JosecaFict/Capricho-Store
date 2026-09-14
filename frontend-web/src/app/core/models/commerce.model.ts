@@ -333,3 +333,59 @@ export interface CampaignLaunchResponse {
   mensaje: string;
 }
 
+export interface Promotion {
+  id_promocion: number;
+  nombre: string;
+  descripcion?: string | null;
+  porcentaje_descuento: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+  producto_ids: number[];
+  categoria_ids: number[];
+  temporada_ids: number[];
+  productos_count: number;
+  categorias_count: number;
+  temporadas_count: number;
+  estado_vigencia: 'VIGENTE' | 'PROGRAMADA' | 'EXPIRADA' | 'INACTIVA';
+}
+
+export interface PromotionCreate {
+  nombre: string;
+  descripcion?: string | null;
+  porcentaje_descuento: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  activo: boolean;
+  producto_ids?: number[];
+  categoria_ids?: number[];
+  temporada_ids?: number[];
+}
+
+export interface PromotionUpdate {
+  nombre?: string;
+  descripcion?: string | null;
+  porcentaje_descuento?: number;
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  activo?: boolean;
+  producto_ids?: number[];
+  categoria_ids?: number[];
+  temporada_ids?: number[];
+}
+
+export interface ActivePromotionItem {
+  id_promocion: number;
+  nombre: string;
+  descripcion?: string | null;
+  porcentaje_descuento: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  productos_count: number;
+  categorias_count: number;
+  temporadas_count: number;
+}
+
+

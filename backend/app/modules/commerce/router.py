@@ -13,6 +13,7 @@ from app.modules.auth.exceptions import PermissionDeniedError
 from app.modules.commerce.dependencies import get_commerce_service
 from app.modules.commerce.exceptions import PaymentGatewayError
 from app.modules.commerce.schemas import (
+    ActivePromotionItem,
     AddressCreate,
     AddressResponse,
     AddressUpdate,
@@ -33,6 +34,9 @@ from app.modules.commerce.schemas import (
     NotificationResponse,
     OrderResponse,
     OrderStatusUpdate,
+    PromotionCreate,
+    PromotionResponse,
+    PromotionUpdate,
     ReservationCreate,
     ReservationResponse,
     ReservationStatusUpdate,
@@ -532,4 +536,59 @@ async def launch_campaign(
     service: Service,
 ):
     return await service.launch_campaign(campaign_id)
+
+
+@router.get("/admin/promotions", response_model=list[PromotionResponse])
+async def list_promotions_admin(
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.list_promotions()
+
+
+@router.post(
+    "/admin/promotions",
+    response_model=PromotionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_promotion(
+    payload: PromotionCreate,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.create_promotion(payload)
+
+
+@router.get("/admin/promotions/{promotion_id}", response_model=PromotionResponse)
+async def get_promotion_admin(
+    promotion_id: int,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.get_promotion(promotion_id)
+
+
+@router.patch("/admin/promotions/{promotion_id}", response_model=PromotionResponse)
+async def update_promotion_admin(
+    promotion_id: int,
+    payload: PromotionUpdate,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.update_promotion(promotion_id, payload)
+
+
+@router.delete("/admin/promotions/{promotion_id}")
+async def delete_promotion_admin(
+    promotion_id: int,
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("promociones.gestionar"))],
+    service: Service,
+):
+    return await service.delete_promotion(promotion_id)
+
+
+@router.get("/promotions/active", response_model=list[ActivePromotionItem])
+async def list_active_promotions_public(service: Service):
+    return await service.list_active_promotions_public()
+
 
