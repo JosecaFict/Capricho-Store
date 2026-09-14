@@ -462,7 +462,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen> {
                           ),
                         ),
                         Text(
-                          'Bs. ${widget.product.price.toStringAsFixed(2)}',
+                          'Bs. ${(widget.product.price ?? 0).toStringAsFixed(2)}',
                           style: const TextStyle(
                             color: Color(0xFF38BDF8),
                             fontSize: 16,
