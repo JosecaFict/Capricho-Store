@@ -113,3 +113,23 @@ class AuthRepository:
         role_permissions = await self.get_role_permission_codes(user_id)
         overrides = await self.get_user_permission_overrides(user_id)
         return resolve_effective_permissions(role_permissions, overrides)
+
+    async def update_profile(
+        self,
+        user_id: int,
+        *,
+        nombres: str,
+        apellidos: str,
+        telefono: str | None,
+        ci: str | None,
+    ) -> Usuario:
+        user = await self.session.get(Usuario, user_id)
+        if user is None:
+            raise InactiveUserError("User not found")
+        user.nombres = nombres
+        user.apellidos = apellidos
+        user.telefono = telefono
+        user.ci = ci
+        self.session.add(user)
+        await self.session.flush()
+        return user

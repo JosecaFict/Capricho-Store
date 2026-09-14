@@ -19,6 +19,7 @@ from app.modules.auth.schemas import (
     PasswordResetRequest,
     RegisterRequest,
     TokenResponse,
+    UpdateProfileRequest,
     UserResponse,
 )
 from app.modules.auth.service import AuthService
@@ -95,3 +96,33 @@ async def me(
         id_sucursal=principal.id_sucursal,
         sucursal=principal.sucursal,
     )
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_profile(
+    payload: UpdateProfileRequest,
+    principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+    request: Request,
+) -> UserResponse:
+    audit_context = build_request_audit_context(
+        request,
+        user_id=principal.user.id_usuario,
+        session_id=principal.session_id,
+    )
+    user = await service.update_profile(principal.user.id_usuario, payload, audit_context)
+    return UserResponse(
+        id_usuario=user.id_usuario,
+        nombres=user.nombres,
+        apellidos=user.apellidos,
+        correo=user.correo,
+        telefono=user.telefono,
+        ci=user.ci,
+        estado=user.estado,
+        created_at=user.created_at,
+        roles=sorted(principal.roles),
+        permisos=sorted(principal.permissions),
+        id_sucursal=principal.id_sucursal,
+        sucursal=principal.sucursal,
+    )
+

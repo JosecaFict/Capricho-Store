@@ -346,16 +346,47 @@ class ProfileScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(Icons.badge_outlined, size: 20, color: AppColors.cobalt),
-                  SizedBox(width: 8),
-                  Text(
-                    'Información personal',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13.5,
-                      color: AppColors.ink,
+                  const Row(
+                    children: [
+                      Icon(Icons.badge_outlined, size: 20, color: AppColors.cobalt),
+                      SizedBox(width: 8),
+                      Text(
+                        'Información personal',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                  InkWell(
+                    onTap: () => _showEditProfileDialog(context, ref, user),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 15,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Editar',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -515,6 +546,19 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _showEditProfileDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppUser user,
+  ) async {
+    HapticFeedback.selectionClick();
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _EditProfileDialog(user: user),
+    );
+  }
+
   Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
     final confirmed = await AdaptiveDialogs.showConfirmation(
       context: context,
@@ -561,6 +605,268 @@ class _InfoRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EditProfileDialog extends ConsumerStatefulWidget {
+  const _EditProfileDialog({required this.user});
+
+  final AppUser user;
+
+  @override
+  ConsumerState<_EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _namesController;
+  late final TextEditingController _surnamesController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _ciController;
+
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _namesController = TextEditingController(text: widget.user.names);
+    _surnamesController = TextEditingController(text: widget.user.surnames);
+    _phoneController = TextEditingController(text: widget.user.phone ?? '');
+    _ciController = TextEditingController(text: widget.user.ci ?? '');
+  }
+
+  @override
+  void dispose() {
+    _namesController.dispose();
+    _surnamesController.dispose();
+    _phoneController.dispose();
+    _ciController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final success = await ref.read(authControllerProvider.notifier).updateProfile(
+          names: _namesController.text.trim(),
+          surnames: _surnamesController.text.trim(),
+          phone: _phoneController.text.trim().isEmpty
+              ? null
+              : _phoneController.text.trim(),
+          ci: _ciController.text.trim().isEmpty
+              ? null
+              : _ciController.text.trim(),
+        );
+
+    if (!mounted) return;
+
+    if (success) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text('Perfil actualizado correctamente.'),
+            ],
+          ),
+          backgroundColor: Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      final authError = ref.read(authControllerProvider).error;
+      setState(() {
+        _loading = false;
+        _error = authError ?? 'No se pudo actualizar el perfil.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.edit_note_rounded, color: AppColors.cobalt),
+          SizedBox(width: 8),
+          Text(
+            'Editar perfil',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_error != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppColors.danger.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.danger,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(
+                              color: AppColors.danger,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                TextFormField(
+                  controller: _namesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombres *',
+                    hintText: 'Ej. Juan',
+                    prefixIcon: Icon(Icons.person_outline, size: 20),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) {
+                    final val = v?.trim() ?? '';
+                    if (val.isEmpty) return 'Ingresa tus nombres';
+                    if (val.length < 2) return 'Mínimo 2 caracteres';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _surnamesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Apellidos *',
+                    hintText: 'Ej. Pérez',
+                    prefixIcon: Icon(Icons.person_outline, size: 20),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) {
+                    final val = v?.trim() ?? '';
+                    if (val.isEmpty) return 'Ingresa tus apellidos';
+                    if (val.length < 2) return 'Mínimo 2 caracteres';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.muted,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.lock_outline_rounded,
+                        size: 18,
+                        color: AppColors.inkSoft,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.user.email,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'El correo no se puede modificar por seguridad',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Teléfono / WhatsApp',
+                    hintText: 'Ej. 70012345',
+                    prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _ciController,
+                  decoration: const InputDecoration(
+                    labelText: 'Cédula de Identidad (CI)',
+                    hintText: 'Ej. 1234567-SC',
+                    prefixIcon: Icon(Icons.credit_card_outlined, size: 20),
+                  ),
+                  textCapitalization: TextCapitalization.characters,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _save,
+          child: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Guardar cambios'),
+        ),
+      ],
     );
   }
 }

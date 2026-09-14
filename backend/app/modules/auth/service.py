@@ -13,7 +13,13 @@ from app.modules.auth.exceptions import (
 )
 from app.modules.auth.models import Usuario
 from app.modules.auth.repository import AuthRepository
-from app.modules.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.modules.auth.schemas import (
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+    UpdateProfileRequest,
+    UserResponse,
+)
 
 
 def normalize_email(email: str) -> str:
@@ -87,6 +93,22 @@ class AuthService:
 
         token, expires_in = create_access_token(user.id_usuario)
         return TokenResponse(access_token=token, expires_in=expires_in)
+
+    async def update_profile(
+        self,
+        user_id: int,
+        payload: UpdateProfileRequest,
+        audit_context: AuditContext,
+    ) -> Usuario:
+        async with self.session.begin():
+            await apply_audit_context(self.session, audit_context)
+            return await self.repository.update_profile(
+                user_id,
+                nombres=payload.nombres,
+                apellidos=payload.apellidos,
+                telefono=payload.telefono,
+                ci=payload.ci,
+            )
 
     @staticmethod
     def _user_response(

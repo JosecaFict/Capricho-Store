@@ -65,6 +65,28 @@ class AuthRepository {
     }
   }
 
+  Future<AppUser> updateProfile({
+    required String names,
+    required String surnames,
+    String? phone,
+    String? ci,
+  }) async {
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '/auth/me',
+        data: {
+          'nombres': names.trim(),
+          'apellidos': surnames.trim(),
+          'telefono': _optional(phone),
+          'ci': _optional(ci),
+        },
+      );
+      return AppUser.fromJson(response.data!);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<bool> hasSession() async => (await _storage.read()) != null;
   Future<void> logout() => _storage.clear();
 

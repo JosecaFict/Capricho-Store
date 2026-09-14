@@ -42,6 +42,29 @@ class LoginRequest(BaseModel):
     password: SecretStr
 
 
+class UpdateProfileRequest(BaseModel):
+    nombres: str = Field(min_length=1, max_length=100)
+    apellidos: str = Field(min_length=1, max_length=100)
+    telefono: str | None = Field(default=None, max_length=30)
+    ci: str | None = Field(default=None, max_length=30)
+
+    @field_validator("nombres", "apellidos")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Value must not be blank")
+        return stripped
+
+    @field_validator("telefono", "ci")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
