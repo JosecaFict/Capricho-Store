@@ -10,8 +10,10 @@ import 'package:capricho_store/features/auth/presentation/login_screen.dart';
 import 'package:capricho_store/features/auth/presentation/password_recovery_screen.dart';
 import 'package:capricho_store/features/auth/presentation/profile_screen.dart';
 import 'package:capricho_store/features/auth/presentation/register_screen.dart';
+import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/features/catalog/presentation/catalog_screen.dart';
 import 'package:capricho_store/features/catalog/presentation/product_detail_screen.dart';
+import 'package:capricho_store/features/fitting/presentation/virtual_fitting_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/addresses_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/cart_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/checkout_screen.dart';
@@ -203,6 +205,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           child: const NotificationsScreen(),
         ),
+      ),
+      GoRoute(
+        path: '/vestidor',
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return _adaptivePage(
+            key: state.pageKey,
+            child: VirtualFittingScreen(
+              product: extra['product'] as ProductDetail,
+              measurements:
+                  (extra['measurements'] as List<ProductMeasurement>?) ??
+                      const [],
+              initialVariant: extra['initialVariant'] as ProductVariant?,
+            ),
+          );
+        },
       ),
     ],
   );

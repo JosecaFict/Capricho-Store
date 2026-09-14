@@ -462,7 +462,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
                       // Banner de compatibilidad con vestidor virtual (AR)
                       if (product.fittingEnabled) ...[
-                        _buildFittingBanner(context),
+                        _buildFittingBanner(
+                          context,
+                          product,
+                          measurements,
+                          matchedVariant,
+                        ),
                         const SizedBox(height: 16),
                       ],
 
@@ -496,64 +501,109 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     });
   }
 
-  Widget _buildFittingBanner(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), AppColors.cobalt],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _buildFittingBanner(
+    BuildContext context,
+    ProductDetail product,
+    List<ProductMeasurement> measurements,
+    ProductVariant? matchedVariant,
+  ) {
+    return InkWell(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        context.push(
+          '/vestidor',
+          extra: {
+            'product': product,
+            'measurements': measurements,
+            'initialVariant': matchedVariant,
+          },
+        );
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0F172A), AppColors.cobalt],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.cobalt.withValues(alpha: 0.25),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cobalt.withValues(alpha: 0.25),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: Colors.white,
+                size: 22,
+              ),
             ),
-            child: const Icon(
-              Icons.auto_awesome,
-              color: Colors.white,
-              size: 22,
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Vestidor Virtual con Cámara',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Pruébate esta prenda en vivo y descubre tu talla ideal.',
+                    style: TextStyle(
+                      color: Color(0xFFE2E8F0),
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Compatible con Vestidor Virtual',
-                  style: TextStyle(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Probar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    letterSpacing: 0.2,
+                    size: 11,
                   ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Esta prenda cuenta con soporte para prueba con realidad aumentada.',
-                  style: TextStyle(
-                    color: Color(0xFFE2E8F0),
-                    fontSize: 11.5,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

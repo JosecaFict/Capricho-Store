@@ -71,5 +71,9 @@
 		<string>https</string>
 		<string>http</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Capricho Store necesita acceso a la cámara para el Vestidor Virtual y la prueba de prendas en tiempo real.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Capricho Store necesita permiso para guardar fotos del vestidor virtual en tu galería.</string>
 </dict>
 </plist>
