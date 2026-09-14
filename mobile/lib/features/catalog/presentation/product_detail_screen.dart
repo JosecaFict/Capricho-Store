@@ -467,6 +467,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           product,
                           measurements,
                           matchedVariant,
+                          images,
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -503,9 +504,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   Widget _buildFittingBanner(
     BuildContext context,
-    ProductDetail product,
+    Product product,
     List<ProductMeasurement> measurements,
     ProductVariant? matchedVariant,
+    List<ProductImage> images,
   ) {
     return InkWell(
       onTap: () {
@@ -516,6 +518,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             'product': product,
             'measurements': measurements,
             'initialVariant': matchedVariant,
+            'images': images,
           },
         );
       },

@@ -213,11 +213,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return _adaptivePage(
             key: state.pageKey,
             child: VirtualFittingScreen(
-              product: extra['product'] as ProductDetail,
+              product: extra['product'] as Product,
               measurements:
                   (extra['measurements'] as List<ProductMeasurement>?) ??
                       const [],
               initialVariant: extra['initialVariant'] as ProductVariant?,
+              images: (extra['images'] as List<ProductImage>?) ?? const [],
             ),
           );
         },

@@ -16,11 +16,13 @@ class VirtualFittingScreen extends ConsumerStatefulWidget {
     required this.product,
     required this.measurements,
     this.initialVariant,
+    this.images = const [],
   });
 
-  final ProductDetail product;
+  final Product product;
   final List<ProductMeasurement> measurements;
   final ProductVariant? initialVariant;
+  final List<ProductImage> images;
 
   @override
   ConsumerState<VirtualFittingScreen> createState() =>
@@ -162,14 +164,17 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen> {
   }
 
   String? get _activeImageUrl {
-    // Buscar imagen del color seleccionado
-    final colorImg = widget.product.images.firstWhere(
-      (img) => img.colorName == _activeColor,
-      orElse: () => widget.product.images.isNotEmpty
-          ? widget.product.images.first
-          : const ProductImage(id: 0, url: '', isMain: true),
-    );
-    return colorImg.url.isNotEmpty ? colorImg.url : widget.product.mainImage;
+    if (_activeVariant != null && widget.images.isNotEmpty) {
+      final match = widget.images.firstWhere(
+        (img) => img.colorId == _activeVariant!.colorId,
+        orElse: () => widget.images.first,
+      );
+      if (match.url.isNotEmpty) return match.url;
+    }
+    if (widget.images.isNotEmpty) {
+      return widget.images.first.url;
+    }
+    return widget.product.image?.url;
   }
 
   Future<void> _addToCart() async {
@@ -184,14 +189,15 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen> {
     }
 
     HapticFeedback.heavyImpact();
-    final ok = await ref.read(cartControllerProvider.notifier).addItem(
+    await ref.read(cartProvider.notifier).addItem(
           variantId: _activeVariant!.id,
           quantity: 1,
         );
 
     if (!mounted) return;
 
-    if (ok) {
+    final cartState = ref.read(cartProvider);
+    if (!cartState.hasError) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -215,6 +221,15 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen> {
               context.go('/carrito');
             },
           ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            cartState.error.toString().replaceAll('ApiException: ', ''),
+          ),
+          backgroundColor: AppColors.danger,
         ),
       );
     }
@@ -289,7 +304,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen> {
                             imageUrl: _activeImageUrl!,
                             fit: BoxFit.contain,
                             placeholder: (_, __) => const SizedBox(),
-                            errorWidget: (_, __) => const Icon(
+                            errorWidget: (_, __, ___) => const Icon(
                               Icons.checkroom_rounded,
                               size: 100,
                               color: Colors.white70,

@@ -6,25 +6,28 @@ void main() {
   group('FittingEngine Tests', () {
     final sampleMeasurements = [
       const ProductMeasurement(
+        id: 1,
         size: 'S',
         shouldersCm: 41.0,
         chestCm: 92.0,
         lengthCm: 68.0,
-        sleeveLengthCm: 20.0,
+        sleeveCm: 20.0,
       ),
       const ProductMeasurement(
+        id: 2,
         size: 'M',
         shouldersCm: 44.0,
         chestCm: 98.0,
         lengthCm: 71.0,
-        sleeveLengthCm: 21.0,
+        sleeveCm: 21.0,
       ),
       const ProductMeasurement(
+        id: 3,
         size: 'L',
         shouldersCm: 47.0,
         chestCm: 104.0,
         lengthCm: 74.0,
-        sleeveLengthCm: 22.0,
+        sleeveCm: 22.0,
       ),
     ];
 
