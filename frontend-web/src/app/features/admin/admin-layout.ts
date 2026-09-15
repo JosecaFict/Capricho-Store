@@ -72,7 +72,34 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
             </section>
           }
         </nav>
-        <a class="admin-public-link" routerLink="/">← Volver a la tienda</a>
+        <div class="admin-sidebar-footer">
+          <a
+            class="admin-sidebar-footer__link"
+            routerLink="/cuenta"
+            routerLinkActive="active"
+            (click)="menuOpen.set(false)"
+            title="Mi cuenta"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <span>Mi cuenta</span>
+          </a>
+          <button
+            type="button"
+            class="admin-sidebar-footer__logout"
+            (click)="logout()"
+            title="Cerrar sesión"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>Cerrar sesión</span>
+          </button>
+        </div>
       </aside>
       <div class="admin-workspace">
         <header class="admin-header">
@@ -92,14 +119,35 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
             </button>
             <div class="admin-header__titles">
               <span class="admin-context">Panel operativo</span>
-              <strong>{{ roleLabel() }}</strong>
-              <small class="admin-branch-context">{{ branchLabel() }}</small>
             </div>
           </div>
-          <div class="admin-user">
+          <div class="admin-header__right">
+            <a
+              class="admin-store-btn"
+              routerLink="/"
+              title="Ir a la tienda pública"
+              aria-label="Ir a la tienda pública"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
+                <path d="M2 7h20"/>
+              </svg>
+              <span class="admin-store-btn__label">Tienda</span>
+            </a>
             <app-notification-bell mode="admin" />
-            <span>{{ user()?.nombres }} {{ user()?.apellidos }}</span>
-            <button type="button" (click)="logout()">Cerrar sesión</button>
+            <span class="admin-header__divider" aria-hidden="true"></span>
+            <div class="admin-user-profile">
+              <div class="admin-user-profile__avatar" aria-hidden="true">
+                {{ userInitial() }}
+              </div>
+              <div class="admin-user-profile__details">
+                <span class="admin-user-profile__name">{{ displayName() }}</span>
+                <span class="admin-user-profile__role">{{ roleLabel() }}</span>
+                <small class="admin-user-profile__branch">{{ branchLabel() }}</small>
+              </div>
+            </div>
           </div>
         </header>
         <main class="admin-main" id="contenido"><router-outlet /></main>
@@ -114,6 +162,8 @@ export class AdminLayout {
   readonly sidebarCollapsed = signal(false);
   readonly expandedGroups = signal<Record<string, boolean>>({});
   readonly user = this.auth.currentUser;
+  readonly displayName = computed(() => this.user()?.nombres?.trim() || 'Usuario');
+  readonly userInitial = computed(() => this.displayName().charAt(0).toUpperCase());
   readonly roleLabel = computed(() => this.user()?.roles.join(' · ') || 'Sin rol asignado');
   readonly branchLabel = computed(() => {
     const user = this.user();

@@ -144,12 +144,54 @@
   background: #1b315f;
   color: #fff;
 }
-.admin-public-link {
+.admin-sidebar-footer {
   margin-top: auto;
-  padding: 16px 10px 0;
-  border-top: 1px solid #343944;
+  padding-top: 14px;
+  border-top: 1px solid #2d333f;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.admin-sidebar-footer__link,
+.admin-sidebar-footer__logout {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: #c9ced6;
-  font-size: 0.85rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+  width: 100%;
+  text-align: left;
+
+  svg {
+    flex-shrink: 0;
+    stroke: currentColor;
+  }
+
+  &:hover {
+    background: #242830;
+    color: #ffffff;
+  }
+}
+.admin-sidebar-footer__link.active {
+  border-left: 2px solid #7da4ff;
+  background: #1b315f;
+  color: #ffffff;
+}
+.admin-sidebar-footer__logout:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: #f87171;
 }
 .admin-workspace {
   min-width: 0;
@@ -205,25 +247,92 @@
 }
 .admin-context {
   color: var(--ink-soft);
-  font-size: 0.75rem;
-}
-.admin-branch-context {
-  margin-top: 3px;
-  color: var(--accent-dark);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-.admin-user {
-  align-items: flex-end;
+.admin-header__right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
-.admin-user button {
-  padding: 2px 0;
-  border: 0;
-  background: transparent;
-  color: var(--accent-dark);
-  font-size: 0.8rem;
+.admin-store-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.82rem;
   font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
+  transition: all 140ms ease;
+
+  svg {
+    stroke: currentColor;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+    border-color: var(--ink);
+    color: var(--primary, #064fe8);
+  }
+}
+.admin-header__divider {
+  width: 1px;
+  height: 28px;
+  background: var(--line);
+}
+.admin-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.admin-user-profile__avatar {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #1e293b;
+  color: #7da4ff;
+  border: 1px solid #334155;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  user-select: none;
+}
+.admin-user-profile__details {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  text-align: right;
+}
+.admin-user-profile__name {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.admin-user-profile__role {
+  color: var(--primary, #064fe8);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.admin-user-profile__branch {
+  color: var(--ink-soft);
+  font-size: 0.70rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .admin-menu-button,
 .admin-backdrop {
@@ -2384,25 +2493,40 @@ textarea {
 }
 @media (max-width: 600px) {
   .admin-header {
-    padding-inline: 16px;
+    padding-inline: 14px;
+    gap: 10px;
   }
   .admin-context {
     display: none;
   }
-  .admin-header > div:first-of-type strong {
-    font-size: 0.78rem;
+  .admin-header__right {
+    gap: 8px;
   }
-  .admin-branch-context {
-    max-width: 150px;
+  .admin-store-btn {
+    padding: 0 8px;
+    font-size: 0.75rem;
+  }
+  .admin-store-btn__label {
+    display: none;
+  }
+  .admin-header__divider {
+    display: none;
+  }
+  .admin-user-profile__avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8rem;
+  }
+  .admin-user-profile__name {
+    max-width: 110px;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 0.82rem;
   }
-  .admin-user span {
-    max-width: 150px;
+  .admin-user-profile__branch {
+    max-width: 110px;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .admin-main {
     width: calc(100% - 32px);
