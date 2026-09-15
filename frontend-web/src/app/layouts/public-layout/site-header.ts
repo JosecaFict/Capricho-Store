@@ -36,14 +36,28 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
         >
         <a routerLink="/catalogo" routerLinkActive="active" (click)="closeMenu()">Catálogo</a>
         @if (auth.currentUser()) {
-          <a routerLink="/carrito" routerLinkActive="active" (click)="closeMenu()">Carrito</a>
+          @if (!permissions.hasAdminAccess()) {
+            <a routerLink="/carrito" routerLinkActive="active" (click)="closeMenu()">Carrito</a>
+          }
           <app-notification-bell mode="public" />
           @if (permissions.hasAdminAccess()) {
-            <a class="nav-admin" routerLink="/admin" routerLinkActive="active" (click)="closeMenu()"
-              >Panel administrativo</a
+            <a
+              class="nav-admin-badge"
+              routerLink="/admin"
+              routerLinkActive="active"
+              (click)="closeMenu()"
+              title="Ir al panel operativo"
             >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" aria-hidden="true">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+              <span>Panel</span>
+            </a>
+            <a routerLink="/admin/perfil" routerLinkActive="active" (click)="closeMenu()">Mi cuenta</a>
+          } @else {
+            <a routerLink="/cuenta" routerLinkActive="active" (click)="closeMenu()">Mi cuenta</a>
           }
-          <a routerLink="/cuenta" routerLinkActive="active" (click)="closeMenu()">Mi cuenta</a>
           <button class="nav-action" type="button" (click)="logout()">Cerrar sesión</button>
         } @else {
           <a routerLink="/login" routerLinkActive="active" (click)="closeMenu()">Ingresar</a>

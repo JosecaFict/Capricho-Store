@@ -269,8 +269,38 @@ h3 {
 .site-nav .nav-signup::after {
   display: none;
 }
-.site-nav .nav-admin {
-  color: var(--accent-dark);
+.site-nav .nav-admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(6, 79, 232, 0.08);
+  border: 1px solid rgba(6, 79, 232, 0.25);
+  color: var(--primary, #064fe8);
+  font-weight: 700;
+  font-size: 0.86rem;
+  text-decoration: none;
+  transition: all 160ms ease;
+
+  svg {
+    stroke: currentColor;
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    background: var(--primary, #064fe8);
+    color: #ffffff;
+    border-color: var(--primary, #064fe8);
+
+    svg {
+      stroke: #ffffff;
+    }
+  }
+
+  &::after {
+    display: none !important;
+  }
 }
 .nav-action:hover {
   color: var(--accent);

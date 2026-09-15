@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { PermissionService } from '../../core/permissions/permission.service';
 
@@ -39,9 +39,6 @@ import { PermissionService } from '../../core/permissions/permission.service';
           }
         </dl>
         <div class="account-actions">
-          @if (permissions.hasAdminAccess()) {
-            <a class="button button--primary" routerLink="/admin">Ir al panel administrativo</a>
-          }
           <a class="button button--secondary" routerLink="/catalogo">Explorar catálogo</a>
           <a class="button button--secondary" routerLink="/pedidos">Mis pedidos</a>
           <a class="button button--secondary" routerLink="/reservas">Mis reservas</a>
@@ -58,4 +55,11 @@ import { PermissionService } from '../../core/permissions/permission.service';
 export class Account {
   readonly auth = inject(AuthService);
   readonly permissions = inject(PermissionService);
+  private readonly router = inject(Router);
+
+  constructor() {
+    if (this.permissions.hasAdminAccess()) {
+      void this.router.navigate(['/admin/perfil'], { replaceUrl: true });
+    }
+  }
 }
