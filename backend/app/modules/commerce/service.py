@@ -4,7 +4,7 @@ from decimal import Decimal
 from math import asin, ceil, cos, radians, sin, sqrt
 from urllib.parse import urlparse
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.openrouteservice import OpenRouteServiceClient
@@ -2791,10 +2791,14 @@ class CommerceService:
         reservations_today_count = int(await self.session.scalar(stmt_reservations_today) or 0)
 
         # 4. Alertas de Stock Crítico
+        critical_threshold = case(
+            (InventarioSucursal.stock_minimo > 3, InventarioSucursal.stock_minimo),
+            else_=3,
+        )
         stmt_stock_alerts = (
             select(func.count(InventarioSucursal.id_inventario))
             .where(
-                (InventarioSucursal.stock_fisico - InventarioSucursal.stock_reservado) <= func.greatest(InventarioSucursal.stock_minimo, 3)
+                (InventarioSucursal.stock_fisico - InventarioSucursal.stock_reservado) <= critical_threshold
             )
         )
         if id_sucursal:
@@ -2884,7 +2888,11 @@ class CommerceService:
 
         pedidos_urgentes: list[DashboardUrgentOrder] = []
         for ped, vta, cli, usr in urgent_rows:
-            client_name = f"{cli.nombres} {cli.apellidos}".strip() if cli and cli.nombres else (usr.correo if usr else "Cliente Mostrador")
+            client_name = (
+                f"{usr.nombres} {usr.apellidos}".strip()
+                if usr and (usr.nombres or usr.apellidos)
+                else (usr.correo if usr else "Cliente Mostrador")
+            )
             pedidos_urgentes.append(
                 DashboardUrgentOrder(
                     id_pedido=ped.id_pedido,

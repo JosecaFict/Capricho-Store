@@ -48,13 +48,13 @@ interface DonutSegment {
           <select
             id="branchFilter"
             class="dashboard-branch-select"
-            [ngModel]="selectedBranchId()"
-            (ngModelChange)="onBranchChange($event)"
+            [value]="selectedBranchId() ?? ''"
+            (change)="onBranchChange($any($event.target).value)"
             [disabled]="loading()"
           >
-            <option [ngValue]="null">Todas las sucursales (Global)</option>
+            <option value="">Todas las sucursales (Global)</option>
             @for (b of branches(); track b.id_sucursal) {
-              <option [ngValue]="b.id_sucursal">{{ b.nombre }}</option>
+              <option [value]="b.id_sucursal">{{ b.nombre }}</option>
             }
           </select>
 
@@ -664,13 +664,21 @@ export class AdminDashboard implements OnInit {
           this.lastUpdated.set(new Date());
         },
         error: (err) => {
-          this.error.set(err?.error?.detail || 'No se pudieron cargar los datos del dashboard.');
+          const detail = err?.error?.detail || err?.message;
+          this.error.set(
+            typeof detail === 'string' ? detail : 'No se pudieron cargar los datos del dashboard.'
+          );
         },
       });
   }
 
-  onBranchChange(branchId: number | null): void {
-    this.selectedBranchId.set(branchId);
+  onBranchChange(val: string | number | null): void {
+    if (val === '' || val === null || val === undefined || val === 'null') {
+      this.selectedBranchId.set(null);
+    } else {
+      const num = Number(val);
+      this.selectedBranchId.set(Number.isFinite(num) ? num : null);
+    }
     this.loadSummary();
   }
 
