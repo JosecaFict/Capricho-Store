@@ -538,3 +538,53 @@ class ActivePromotionItem(BaseModel):
     temporadas_count: int = 0
 
 
+class DashboardKpis(BaseModel):
+    ventas_mes_total: Decimal
+    ventas_crecimiento_pct: float
+    pedidos_pendientes: int
+    reservas_hoy: int
+    alertas_stock_critico: int
+
+
+class DashboardDailyRevenue(BaseModel):
+    fecha: str
+    dia_nombre: str
+    total: Decimal
+
+
+class DashboardBranchShare(BaseModel):
+    id_sucursal: int | None
+    nombre: str
+    total: Decimal
+    porcentaje: float
+
+
+class DashboardUrgentOrder(BaseModel):
+    id_pedido: int
+    id_venta: int
+    cliente_nombre: str
+    tipo_entrega: str
+    estado: str
+    total: Decimal
+    fecha_creacion: datetime
+
+
+class DashboardTopProduct(BaseModel):
+    id_producto: int
+    nombre: str
+    categoria: str
+    marca: str
+    unidades_vendidas: int
+    total_recaudado: Decimal
+    imagen_url: str | None = None
+
+
+class AdminDashboardSummaryResponse(BaseModel):
+    kpis: DashboardKpis
+    tendencia_semanal: list[DashboardDailyRevenue]
+    ventas_por_sucursal: list[DashboardBranchShare]
+    pedidos_urgentes: list[DashboardUrgentOrder]
+    top_productos: list[DashboardTopProduct]
+
+
+

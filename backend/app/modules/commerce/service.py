@@ -4,12 +4,20 @@ from decimal import Decimal
 from math import asin, ceil, cos, radians, sin, sqrt
 from urllib.parse import urlparse
 
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.openrouteservice import OpenRouteServiceClient
 from app.integrations.stripe_checkout import StripeCheckoutGateway
 from app.modules.auth.models import Cliente, Empleado, Sucursal, Usuario
-from app.modules.catalog.models import InventarioSucursal
+from app.modules.catalog.models import (
+    Categoria,
+    ImagenProducto,
+    InventarioSucursal,
+    Marca,
+    Producto,
+    VarianteProducto,
+)
 from app.modules.commerce.exceptions import (
     CommerceConflictError,
     CommerceForbiddenError,
@@ -56,6 +64,7 @@ from app.modules.commerce.schemas import (
     AddressCreate,
     AddressResponse,
     AddressUpdate,
+    AdminDashboardSummaryResponse,
     AdminNotificationPage,
     AdminNotificationResponse,
     AdminReturnCreate,
@@ -69,6 +78,11 @@ from app.modules.commerce.schemas import (
     CheckoutCreate,
     CommerceLineRequest,
     CommerceLineResponse,
+    DashboardBranchShare,
+    DashboardDailyRevenue,
+    DashboardKpis,
+    DashboardTopProduct,
+    DashboardUrgentOrder,
     DeviceTokenRegisterRequest,
     DeviceTokenResponse,
     ManualNotificationCreate,
@@ -2706,5 +2720,242 @@ class CommerceService:
                     )
                 )
         return results
+
+    async def get_admin_dashboard_summary(
+        self, id_sucursal: int | None = None
+    ) -> AdminDashboardSummaryResponse:
+        now = datetime.now(UTC)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if month_start.month == 1:
+            prev_month_start = month_start.replace(year=month_start.year - 1, month=12)
+        else:
+            prev_month_start = month_start.replace(month=month_start.month - 1)
+        prev_month_end = month_start - timedelta(microseconds=1)
+
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+
+        # 1. Ventas Mes Actual
+        stmt_sales_month = (
+            select(func.coalesce(func.sum(Venta.total), 0))
+            .where(Venta.estado == "PAGADA", Venta.fecha_venta >= month_start)
+        )
+        if id_sucursal:
+            stmt_sales_month = stmt_sales_month.where(Venta.id_sucursal == id_sucursal)
+        sales_month_total = Decimal(str(await self.session.scalar(stmt_sales_month) or 0))
+
+        # 1b. Ventas Mes Anterior
+        stmt_sales_prev = (
+            select(func.coalesce(func.sum(Venta.total), 0))
+            .where(
+                Venta.estado == "PAGADA",
+                Venta.fecha_venta >= prev_month_start,
+                Venta.fecha_venta <= prev_month_end,
+            )
+        )
+        if id_sucursal:
+            stmt_sales_prev = stmt_sales_prev.where(Venta.id_sucursal == id_sucursal)
+        sales_prev_total = Decimal(str(await self.session.scalar(stmt_sales_prev) or 0))
+
+        if sales_prev_total > 0:
+            growth_pct = float(round(((sales_month_total - sales_prev_total) / sales_prev_total) * 100, 1))
+        else:
+            growth_pct = 0.0
+
+        # 2. Pedidos Pendientes
+        stmt_pending_orders = (
+            select(func.count(Pedido.id_pedido))
+            .join(Venta, Venta.id_venta == Pedido.id_venta)
+            .where(
+                Venta.estado == "PAGADA",
+                Pedido.estado.in_(["PAGADO", "PREPARANDO", "LISTO_PARA_ENVIO", "LISTO_PARA_RETIRO", "EN_CAMINO"]),
+            )
+        )
+        if id_sucursal:
+            stmt_pending_orders = stmt_pending_orders.where(Venta.id_sucursal == id_sucursal)
+        pending_orders_count = int(await self.session.scalar(stmt_pending_orders) or 0)
+
+        # 3. Reservas Hoy
+        stmt_reservations_today = (
+            select(func.count(Reserva.id_reserva))
+            .where(
+                Reserva.estado.in_(["PENDIENTE", "CONFIRMADA"]),
+                or_(
+                    and_(Reserva.fecha_cita >= today_start, Reserva.fecha_cita < today_end),
+                    and_(Reserva.fecha_cita.is_(None), Reserva.fecha_reserva >= today_start, Reserva.fecha_reserva < today_end),
+                ),
+            )
+        )
+        if id_sucursal:
+            stmt_reservations_today = stmt_reservations_today.where(Reserva.id_sucursal == id_sucursal)
+        reservations_today_count = int(await self.session.scalar(stmt_reservations_today) or 0)
+
+        # 4. Alertas de Stock Crítico
+        stmt_stock_alerts = (
+            select(func.count(InventarioSucursal.id_inventario))
+            .where(
+                (InventarioSucursal.stock_fisico - InventarioSucursal.stock_reservado) <= func.greatest(InventarioSucursal.stock_minimo, 3)
+            )
+        )
+        if id_sucursal:
+            stmt_stock_alerts = stmt_stock_alerts.where(InventarioSucursal.id_sucursal == id_sucursal)
+        stock_alerts_count = int(await self.session.scalar(stmt_stock_alerts) or 0)
+
+        kpis = DashboardKpis(
+            ventas_mes_total=sales_month_total,
+            ventas_crecimiento_pct=growth_pct,
+            pedidos_pendientes=pending_orders_count,
+            reservas_hoy=reservations_today_count,
+            alertas_stock_critico=stock_alerts_count,
+        )
+
+        # 5. Tendencia Semanal (Últimos 7 días)
+        day_names_es = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+        tendencia_semanal: list[DashboardDailyRevenue] = []
+        for i in range(6, -1, -1):
+            day_dt = today_start - timedelta(days=i)
+            day_next = day_dt + timedelta(days=1)
+            stmt_day = (
+                select(func.coalesce(func.sum(Venta.total), 0))
+                .where(
+                    Venta.estado == "PAGADA",
+                    Venta.fecha_venta >= day_dt,
+                    Venta.fecha_venta < day_next,
+                )
+            )
+            if id_sucursal:
+                stmt_day = stmt_day.where(Venta.id_sucursal == id_sucursal)
+            day_total = Decimal(str(await self.session.scalar(stmt_day) or 0))
+            dia_nombre = day_names_es[day_dt.weekday()]
+            tendencia_semanal.append(
+                DashboardDailyRevenue(
+                    fecha=day_dt.strftime("%Y-%m-%d"),
+                    dia_nombre=dia_nombre,
+                    total=day_total,
+                )
+            )
+
+        # 6. Ventas por Sucursal
+        stmt_branches = select(Sucursal).where(Sucursal.activo.is_(True)).order_by(Sucursal.id_sucursal)
+        branches = list((await self.session.scalars(stmt_branches)).all())
+        ventas_por_sucursal: list[DashboardBranchShare] = []
+        total_all_branches = Decimal("0")
+
+        branch_totals: list[tuple[Sucursal, Decimal]] = []
+        for b in branches:
+            stmt_b_sales = (
+                select(func.coalesce(func.sum(Venta.total), 0))
+                .where(
+                    Venta.estado == "PAGADA",
+                    Venta.id_sucursal == b.id_sucursal,
+                    Venta.fecha_venta >= month_start,
+                )
+            )
+            b_total = Decimal(str(await self.session.scalar(stmt_b_sales) or 0))
+            branch_totals.append((b, b_total))
+            total_all_branches += b_total
+
+        for b, b_total in branch_totals:
+            pct = float(round((b_total / total_all_branches * 100), 1)) if total_all_branches > 0 else 0.0
+            ventas_por_sucursal.append(
+                DashboardBranchShare(
+                    id_sucursal=b.id_sucursal,
+                    nombre=b.nombre,
+                    total=b_total,
+                    porcentaje=pct,
+                )
+            )
+
+        # 7. Pedidos Urgentes (5 más recientes)
+        stmt_urgent = (
+            select(Pedido, Venta, Cliente, Usuario)
+            .join(Venta, Venta.id_venta == Pedido.id_venta)
+            .outerjoin(Cliente, Cliente.id_cliente == Venta.id_cliente)
+            .outerjoin(Usuario, Usuario.id_usuario == Cliente.id_usuario)
+            .where(
+                Venta.estado == "PAGADA",
+                Pedido.estado.in_(["PAGADO", "PREPARANDO", "LISTO_PARA_ENVIO", "LISTO_PARA_RETIRO", "EN_CAMINO"]),
+            )
+        )
+        if id_sucursal:
+            stmt_urgent = stmt_urgent.where(Venta.id_sucursal == id_sucursal)
+        stmt_urgent = stmt_urgent.order_by(Pedido.fecha_creacion.desc()).limit(5)
+        urgent_rows = (await self.session.execute(stmt_urgent)).all()
+
+        pedidos_urgentes: list[DashboardUrgentOrder] = []
+        for ped, vta, cli, usr in urgent_rows:
+            client_name = f"{cli.nombres} {cli.apellidos}".strip() if cli and cli.nombres else (usr.correo if usr else "Cliente Mostrador")
+            pedidos_urgentes.append(
+                DashboardUrgentOrder(
+                    id_pedido=ped.id_pedido,
+                    id_venta=vta.id_venta,
+                    cliente_nombre=client_name,
+                    tipo_entrega=vta.modalidad_entrega,
+                    estado=ped.estado,
+                    total=vta.total,
+                    fecha_creacion=ped.fecha_creacion,
+                )
+            )
+
+        # 8. Top 5 Productos Más Vendidos
+        stmt_top = (
+            select(
+                Producto.id_producto,
+                Producto.nombre,
+                Categoria.nombre.label("categoria_nombre"),
+                Marca.nombre.label("marca_nombre"),
+                func.sum(DetalleVenta.cantidad).label("unidades"),
+                func.sum(DetalleVenta.subtotal).label("recaudado"),
+            )
+            .select_from(DetalleVenta)
+            .join(VarianteProducto, VarianteProducto.id_variante == DetalleVenta.id_variante)
+            .join(Producto, Producto.id_producto == VarianteProducto.id_producto)
+            .join(Categoria, Categoria.id_categoria == Producto.id_categoria)
+            .join(Marca, Marca.id_marca == Producto.id_marca)
+            .join(Venta, Venta.id_venta == DetalleVenta.id_venta)
+            .where(Venta.estado == "PAGADA")
+        )
+        if id_sucursal:
+            stmt_top = stmt_top.where(Venta.id_sucursal == id_sucursal)
+        stmt_top = (
+            stmt_top.group_by(
+                Producto.id_producto,
+                Producto.nombre,
+                Categoria.nombre,
+                Marca.nombre,
+            )
+            .order_by(func.sum(DetalleVenta.cantidad).desc())
+            .limit(5)
+        )
+        top_rows = (await self.session.execute(stmt_top)).all()
+
+        top_productos: list[DashboardTopProduct] = []
+        for p_id, p_nom, c_nom, m_nom, unids, rec in top_rows:
+            stmt_img = (
+                select(ImagenProducto.secure_url)
+                .where(ImagenProducto.id_producto == p_id, ImagenProducto.es_principal.is_(True))
+                .limit(1)
+            )
+            img_url = await self.session.scalar(stmt_img)
+            top_productos.append(
+                DashboardTopProduct(
+                    id_producto=p_id,
+                    nombre=p_nom,
+                    categoria=c_nom,
+                    marca=m_nom,
+                    unidades_vendidas=int(unids or 0),
+                    total_recaudado=Decimal(str(rec or 0)),
+                    imagen_url=img_url,
+                )
+            )
+
+        return AdminDashboardSummaryResponse(
+            kpis=kpis,
+            tendencia_semanal=tendencia_semanal,
+            ventas_por_sucursal=ventas_por_sucursal,
+            pedidos_urgentes=pedidos_urgentes,
+            top_productos=top_productos,
+        )
+
 
 

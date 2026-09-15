@@ -17,6 +17,7 @@ from app.modules.commerce.schemas import (
     AddressCreate,
     AddressResponse,
     AddressUpdate,
+    AdminDashboardSummaryResponse,
     AdminNotificationPage,
     AdminNotificationResponse,
     AdminReturnCreate,
@@ -590,5 +591,17 @@ async def delete_promotion_admin(
 @router.get("/promotions/active", response_model=list[ActivePromotionItem])
 async def list_active_promotions_public(service: Service):
     return await service.list_active_promotions_public()
+
+
+@router.get("/admin/dashboard/summary", response_model=AdminDashboardSummaryResponse)
+async def get_admin_dashboard_summary(
+    principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
+    service: Service,
+    id_sucursal: int | None = Query(default=None),
+):
+    target_sucursal = id_sucursal
+    if "ventas.sucursales_todas" not in principal.permissions and "ADMIN" not in principal.roles and principal.id_sucursal:
+        target_sucursal = principal.id_sucursal
+    return await service.get_admin_dashboard_summary(id_sucursal=target_sucursal)
 
 

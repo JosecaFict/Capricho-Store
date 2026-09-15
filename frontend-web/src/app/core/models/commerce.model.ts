@@ -388,4 +388,53 @@ export interface ActivePromotionItem {
   temporadas_count: number;
 }
 
+export interface DashboardKpis {
+  ventas_mes_total: number;
+  ventas_crecimiento_pct: number;
+  pedidos_pendientes: number;
+  reservas_hoy: number;
+  alertas_stock_critico: number;
+}
+
+export interface DashboardDailyRevenue {
+  fecha: string;
+  dia_nombre: string;
+  total: number;
+}
+
+export interface DashboardBranchShare {
+  id_sucursal: number | null;
+  nombre: string;
+  total: number;
+  porcentaje: number;
+}
+
+export interface DashboardUrgentOrder {
+  id_pedido: number;
+  id_venta: number;
+  cliente_nombre: string;
+  tipo_entrega: string;
+  estado: string;
+  total: number;
+  fecha_creacion: string;
+}
+
+export interface DashboardTopProduct {
+  id_producto: number;
+  nombre: string;
+  categoria: string;
+  marca: string;
+  unidades_vendidas: number;
+  total_recaudado: number;
+  imagen_url: string | null;
+}
+
+export interface AdminDashboardSummary {
+  kpis: DashboardKpis;
+  tendencia_semanal: DashboardDailyRevenue[];
+  ventas_por_sucursal: DashboardBranchShare[];
+  pedidos_urgentes: DashboardUrgentOrder[];
+  top_productos: DashboardTopProduct[];
+}
+
 

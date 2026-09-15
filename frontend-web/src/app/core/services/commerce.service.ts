@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../config/api.config';
 import {
   ActivePromotionItem,
   Address,
+  AdminDashboardSummary,
   AdminNotificationPage,
   AdminOperationalNotification,
   Campaign,
@@ -258,6 +259,15 @@ export class CommerceService {
   }
   activePromotions() {
     return this.http.get<ActivePromotionItem[]>(`${API_BASE_URL}/promotions/active`);
+  }
+  adminDashboardSummary(branchId?: number | null) {
+    const params: Params = {};
+    if (branchId != null) {
+      params['id_sucursal'] = branchId;
+    }
+    return this.http.get<AdminDashboardSummary>(`${API_BASE_URL}/admin/dashboard/summary`, {
+      params: this.params(params),
+    });
   }
 }
 
