@@ -61,7 +61,7 @@ describe('SiteHeader', () => {
     return { fixture, component: fixture.componentInstance, authServiceMock };
   }
 
-  it('hides Carrito, renders briefcase Panel badge and links Mi cuenta to /admin/perfil for admin staff', () => {
+  it('hides Carrito, Mi cuenta and Cerrar sesión for admin staff, rendering only the briefcase icon button pointing to /admin', () => {
     const { fixture } = setup(true, true);
 
     const links = fixture.debugElement.queryAll(By.css('a'));
@@ -70,16 +70,19 @@ describe('SiteHeader', () => {
     // Admin should NOT see Carrito
     expect(linkTexts).not.toContain('Carrito');
 
-    // Admin should see briefcase Panel badge pointing to /admin
+    // Admin should NOT see Mi cuenta in the public header
+    expect(linkTexts).not.toContain('Mi cuenta');
+
+    // Admin should NOT see Cerrar sesión in the public header
+    const logoutBtn = fixture.debugElement.query(By.css('.nav-action'));
+    expect(logoutBtn).toBeNull();
+
+    // Admin should see briefcase icon button pointing to /admin without text "Panel"
     const adminBadge = fixture.debugElement.query(By.css('.nav-admin-badge'));
     expect(adminBadge).toBeTruthy();
     expect(adminBadge.attributes['routerLink']).toBe('/admin');
-    expect(adminBadge.nativeElement.textContent).toContain('Panel');
-
-    // Mi cuenta should point to /admin/perfil
-    const myAccountLink = links.find((l) => l.nativeElement.textContent.trim() === 'Mi cuenta');
-    expect(myAccountLink).toBeTruthy();
-    expect(myAccountLink?.attributes['routerLink']).toBe('/admin/perfil');
+    expect(adminBadge.nativeElement.textContent.trim()).toBe('');
+    expect(adminBadge.query(By.css('svg'))).toBeTruthy();
   });
 
   it('renders Carrito, hides Panel badge and links Mi cuenta to /cuenta for regular customers', () => {
