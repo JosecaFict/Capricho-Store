@@ -37,6 +37,18 @@ export interface MessageResponse {
   message: string;
 }
 
+export interface UpdateProfileRequest {
+  nombres: string;
+  apellidos: string;
+  telefono: string | null;
+  ci: string | null;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: 'bearer';

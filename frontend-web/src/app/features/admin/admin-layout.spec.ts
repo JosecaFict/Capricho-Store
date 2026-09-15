@@ -95,7 +95,7 @@ describe('AdminLayout', () => {
     const logoutBtn = fixture.debugElement.query(By.css('.admin-sidebar-footer__logout'));
 
     expect(accountLink).toBeTruthy();
-    expect(accountLink.attributes['routerLink']).toBe('/cuenta');
+    expect(accountLink.attributes['routerLink']).toBe('/admin/perfil');
     expect(accountLink.nativeElement.textContent).toContain('Mi cuenta');
 
     expect(logoutBtn).toBeTruthy();

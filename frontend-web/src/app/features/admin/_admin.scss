@@ -6638,5 +6638,336 @@ textarea {
   }
 }
 
+/* ==========================================================================
+   ADMIN PROFILE & CREDENTIALS VIEW (/admin/perfil)
+   ========================================================================== */
+.admin-profile-page {
+  max-width: 1040px;
+}
+
+.admin-profile-card {
+  margin-bottom: 28px;
+  padding: 24px 28px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.admin-profile-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+
+.admin-profile-card__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  svg {
+    stroke: var(--primary, #064fe8);
+    flex-shrink: 0;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+}
+
+.admin-profile-card__subtitle {
+  margin: -6px 0 20px;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.admin-profile-grid {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.admin-profile-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 16px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--canvas) 60%, var(--surface));
+  border: 1px solid var(--line);
+}
+
+.admin-profile-identity__avatar {
+  display: flex;
+  width: 76px;
+  height: 76px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #182235;
+  color: #7da4ff;
+  border: 2px solid #283b63;
+  font-size: 2rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  user-select: none;
+  margin-bottom: 14px;
+}
+
+.admin-profile-identity__badges {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  width: 100%;
+
+  .status-chip {
+    padding: 3px 12px;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+
+    &.status-chip--active {
+      background: rgba(16, 185, 129, 0.12);
+      color: #059669;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+  }
+
+  .role-chip {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: rgba(6, 79, 232, 0.1);
+    color: var(--primary, #064fe8);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+}
+
+.admin-profile-identity__branch {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.35;
+
+  strong {
+    color: var(--ink);
+  }
+}
+
+.admin-profile-fields {
+  min-width: 0;
+}
+
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
+  margin: 0;
+}
+
+.profile-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--canvas) 40%, var(--surface));
+  border: 1px solid var(--line);
+
+  dt {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  dd {
+    margin: 0;
+    font-size: 0.94rem;
+    font-weight: 600;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  .profile-info-item__email {
+    display: flex;
+    flex-direction: column;
+
+    small {
+      color: var(--ink-soft);
+      font-size: 0.72rem;
+      font-weight: 400;
+    }
+  }
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.password-form-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  input {
+    width: 100%;
+    padding-right: 38px;
+  }
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 140ms ease;
+
+  &:hover {
+    color: var(--ink);
+  }
+
+  svg {
+    stroke: currentColor;
+  }
+}
+
+.password-requirements {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--canvas) 60%, var(--surface));
+  border: 1px solid var(--line);
+
+  .req-title {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .req-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 20px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      position: relative;
+      padding-left: 18px;
+      font-size: 0.8rem;
+      color: var(--ink-soft);
+      transition: color 140ms ease;
+
+      &::before {
+        content: '•';
+        position: absolute;
+        left: 4px;
+        color: #94a3b8;
+        font-weight: bold;
+      }
+
+      &.is-valid {
+        color: #059669;
+        font-weight: 600;
+
+        &::before {
+          content: '✓';
+          color: #10b981;
+        }
+      }
+    }
+  }
+}
+
+.password-form-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+@media (max-width: 900px) {
+  .admin-profile-grid {
+    grid-template-columns: 1fr;
+  }
+  .password-form-fields {
+    grid-template-columns: 1fr;
+  }
+  .password-requirements .req-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .profile-info-grid,
+  .profile-form-row {
+    grid-template-columns: 1fr;
+  }
+  .admin-profile-card {
+    padding: 18px 16px;
+  }
+}
+
+
 
 

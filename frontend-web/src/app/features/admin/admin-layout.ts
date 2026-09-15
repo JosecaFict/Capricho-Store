@@ -75,7 +75,7 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
         <div class="admin-sidebar-footer">
           <a
             class="admin-sidebar-footer__link"
-            routerLink="/cuenta"
+            routerLink="/admin/perfil"
             routerLinkActive="active"
             (click)="menuOpen.set(false)"
             title="Mi cuenta"

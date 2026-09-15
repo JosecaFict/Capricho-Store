@@ -113,5 +113,16 @@ class PasswordResetRequest(BaseModel):
         return value
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: SecretStr = Field(min_length=1)
+    new_password: SecretStr = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, value: SecretStr) -> SecretStr:
+        validate_password_strength(value.get_secret_value())
+        return value
+
+
 class MessageResponse(BaseModel):
     message: str

@@ -14,6 +14,7 @@ from app.modules.auth.exceptions import (
 from app.modules.auth.models import Usuario
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
     TokenResponse,
@@ -109,6 +110,22 @@ class AuthService:
                 telefono=payload.telefono,
                 ci=payload.ci,
             )
+
+    async def change_password(
+        self,
+        user_id: int,
+        payload: ChangePasswordRequest,
+        audit_context: AuditContext,
+    ) -> None:
+        async with self.session.begin():
+            await apply_audit_context(self.session, audit_context)
+            user = await self.repository.get_user_by_id(user_id)
+            if user is None or user.estado != "ACTIVO":
+                raise InactiveUserError("User not found or inactive")
+            if not verify_password(payload.current_password.get_secret_value(), user.password_hash):
+                raise InvalidCredentialsError("Current password is incorrect")
+            new_hash = hash_password(payload.new_password.get_secret_value())
+            await self.repository.update_password(user, new_hash)
 
     @staticmethod
     def _user_response(

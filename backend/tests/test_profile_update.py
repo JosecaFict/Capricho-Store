@@ -115,3 +115,101 @@ async def test_update_profile_empty_name_returns_422() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_change_password_success() -> None:
+    principal = CurrentPrincipal(
+        user=make_user(),
+        roles=frozenset({"ADMIN"}),
+        permissions=frozenset({"admin.total"}),
+        session_id="session-1",
+    )
+
+    mock_service = AsyncMock()
+    mock_service.change_password.return_value = None
+
+    async def override_service() -> AsyncIterator[AsyncMock]:
+        yield mock_service
+
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    app.dependency_overrides[get_auth_service] = override_service
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/change-password",
+                json={
+                    "current_password": "Password123!",
+                    "new_password": "NewSecret456!",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Contraseña actualizada exitosamente"}
+
+
+@pytest.mark.asyncio
+async def test_change_password_invalid_current_returns_401() -> None:
+    from app.modules.auth.exceptions import InvalidCredentialsError
+
+    principal = CurrentPrincipal(
+        user=make_user(),
+        roles=frozenset({"ADMIN"}),
+        permissions=frozenset({"admin.total"}),
+        session_id="session-1",
+    )
+
+    mock_service = AsyncMock()
+    mock_service.change_password.side_effect = InvalidCredentialsError("Current password is incorrect")
+
+    async def override_service() -> AsyncIterator[AsyncMock]:
+        yield mock_service
+
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    app.dependency_overrides[get_auth_service] = override_service
+
+    try:
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/change-password",
+                json={
+                    "current_password": "WrongPassword123!",
+                    "new_password": "NewSecret456!",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_change_password_weak_new_password_returns_422() -> None:
+    principal = CurrentPrincipal(
+        user=make_user(),
+        roles=frozenset({"ADMIN"}),
+        permissions=frozenset(),
+        session_id="session-1",
+    )
+
+    app.dependency_overrides[get_current_principal] = lambda: principal
+    try:
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/change-password",
+                json={
+                    "current_password": "Password123!",
+                    "new_password": "weak",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+

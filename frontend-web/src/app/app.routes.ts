@@ -110,6 +110,12 @@ export const routes: Routes = [
           import('./features/admin/admin-status-pages').then((m) => m.AdminForbidden),
       },
       {
+        path: 'perfil',
+        title: 'Mi Perfil | Capricho Store',
+        loadComponent: () =>
+          import('./features/admin/profile-admin').then((m) => m.ProfileAdmin),
+      },
+      {
         path: '',
         pathMatch: 'full',
         canActivate: [adminGuard],

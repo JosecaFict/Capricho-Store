@@ -3,6 +3,7 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { API_BASE_URL } from '../config/api.config';
 import {
+  ChangePasswordRequest,
   LoginRequest,
   MessageResponse,
   PasswordRecoveryRequest,
@@ -11,6 +12,7 @@ import {
   PasswordResetRequest,
   RegisterRequest,
   TokenResponse,
+  UpdateProfileRequest,
   UserResponse,
 } from '../models/auth.model';
 import { TokenStorageService } from './token-storage.service';
@@ -54,6 +56,16 @@ export class AuthService {
 
   resetPassword(payload: PasswordResetRequest): Observable<MessageResponse> {
     return this.http.post<MessageResponse>(`${API_BASE_URL}/auth/password-recovery/reset`, payload);
+  }
+
+  updateProfile(payload: UpdateProfileRequest): Observable<UserResponse> {
+    return this.http
+      .patch<UserResponse>(`${API_BASE_URL}/auth/me`, payload)
+      .pipe(tap((user) => this.currentUserState.set(user)));
+  }
+
+  changePassword(payload: ChangePasswordRequest): Observable<MessageResponse> {
+    return this.http.post<MessageResponse>(`${API_BASE_URL}/auth/change-password`, payload);
   }
 
   loadCurrentUser(): Observable<UserResponse> {

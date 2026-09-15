@@ -11,6 +11,7 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.password_recovery_service import PasswordRecoveryService
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
     LoginRequest,
     MessageResponse,
     PasswordRecoveryRequest,
@@ -125,4 +126,21 @@ async def update_profile(
         id_sucursal=principal.id_sucursal,
         sucursal=principal.sucursal,
     )
+
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    payload: ChangePasswordRequest,
+    principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+    request: Request,
+) -> MessageResponse:
+    audit_context = build_request_audit_context(
+        request,
+        user_id=principal.user.id_usuario,
+        session_id=principal.session_id,
+    )
+    await service.change_password(principal.user.id_usuario, payload, audit_context)
+    return MessageResponse(message="Contraseña actualizada exitosamente")
+
 
