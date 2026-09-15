@@ -6658,7 +6658,8 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 14px;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 20px;
@@ -6965,6 +6966,21 @@ textarea {
   }
   .admin-profile-card {
     padding: 18px 16px;
+  }
+  .admin-profile-card__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+
+    button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+  .password-form-actions button,
+  .profile-form-actions button {
+    width: 100%;
+    justify-content: center;
   }
 }
 
