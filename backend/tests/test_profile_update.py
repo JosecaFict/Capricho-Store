@@ -213,3 +213,57 @@ async def test_change_password_weak_new_password_returns_422() -> None:
 
     assert response.status_code == 422
 
+
+@pytest.mark.asyncio
+async def test_auth_service_update_profile_commits_transaction() -> None:
+    from app.db.audit_context import AuditContext
+    from app.modules.auth.schemas import UpdateProfileRequest
+    from app.modules.auth.service import AuthService
+
+    mock_session = AsyncMock()
+    mock_repository = AsyncMock()
+    updated_user = make_user(nombres="Carlos", apellidos="Dueñas")
+    mock_repository.update_profile.return_value = updated_user
+
+    service = AuthService(session=mock_session, repository=mock_repository)
+    audit = AuditContext(usuario_id=1, sesion_id="s1")
+
+    result = await service.update_profile(
+        user_id=1,
+        payload=UpdateProfileRequest(
+            nombres="Carlos",
+            apellidos="Dueñas",
+            telefono="70011223",
+            ci="6339300",
+        ),
+        audit_context=audit,
+    )
+
+    assert result == updated_user
+    mock_session.commit.assert_awaited_once()
+    mock_session.begin.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_auth_service_update_profile_rolls_back_on_error() -> None:
+    from app.db.audit_context import AuditContext
+    from app.modules.auth.schemas import UpdateProfileRequest
+    from app.modules.auth.service import AuthService
+
+    mock_session = AsyncMock()
+    mock_repository = AsyncMock()
+    mock_repository.update_profile.side_effect = RuntimeError("DB error")
+
+    service = AuthService(session=mock_session, repository=mock_repository)
+    audit = AuditContext(usuario_id=1, sesion_id="s1")
+
+    with pytest.raises(RuntimeError, match="DB error"):
+        await service.update_profile(
+            user_id=1,
+            payload=UpdateProfileRequest(nombres="Carlos", apellidos="Dueñas"),
+            audit_context=audit,
+        )
+
+    mock_session.rollback.assert_awaited_once()
+    mock_session.commit.assert_not_called()
+

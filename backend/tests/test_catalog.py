@@ -857,6 +857,7 @@ def test_no_physical_delete_for_catalog_resources() -> None:
         "/api/v1/product-images/{image_id}",
         "/api/v1/suppliers/{supplier_id}/products/{product_id}",
         "/api/v1/employees/{employee_id}/permissions/{permission_id}",
+        "/api/v1/admin/promotions/{promotion_id}",
     }
     for path, operations in app.openapi()["paths"].items():
         if path.startswith("/api/v1/") and "delete" in operations:

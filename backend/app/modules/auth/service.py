@@ -39,28 +39,32 @@ class AuthService:
     ) -> UserResponse:
         email = normalize_email(str(payload.correo))
         try:
-            async with self.session.begin():
-                await apply_audit_context(self.session, audit_context)
-                if await self.repository.get_user_by_email(email) is not None:
-                    raise EmailAlreadyRegisteredError
+            await apply_audit_context(self.session, audit_context)
+            if await self.repository.get_user_by_email(email) is not None:
+                raise EmailAlreadyRegisteredError
 
-                client_role = await self.repository.get_active_role_by_name("CLIENTE")
-                if client_role is None:
-                    raise SecurityConfigurationError("Active CLIENTE role is missing")
+            client_role = await self.repository.get_active_role_by_name("CLIENTE")
+            if client_role is None:
+                raise SecurityConfigurationError("Active CLIENTE role is missing")
 
-                user = Usuario(
-                    nombres=payload.nombres,
-                    apellidos=payload.apellidos,
-                    correo=email,
-                    telefono=payload.telefono,
-                    ci=payload.ci,
-                    password_hash=hash_password(payload.password.get_secret_value()),
-                    estado="ACTIVO",
-                )
-                await self.repository.create_customer_user(user=user, client_role=client_role)
+            user = Usuario(
+                nombres=payload.nombres,
+                apellidos=payload.apellidos,
+                correo=email,
+                telefono=payload.telefono,
+                ci=payload.ci,
+                password_hash=hash_password(payload.password.get_secret_value()),
+                estado="ACTIVO",
+            )
+            await self.repository.create_customer_user(user=user, client_role=client_role)
+            await self.session.commit()
         except IntegrityError as exc:
+            await self.session.rollback()
             if getattr(exc.orig, "sqlstate", None) == "23505" and "correo" in str(exc).lower():
                 raise EmailAlreadyRegisteredError from exc
+            raise
+        except Exception:
+            await self.session.rollback()
             raise
 
         return self._user_response(user, roles={"CLIENTE"}, permissions=set())
@@ -71,7 +75,7 @@ class AuthService:
         audit_context: AuditContext,
     ) -> TokenResponse:
         email = normalize_email(str(payload.correo))
-        async with self.session.begin():
+        try:
             user = await self.repository.get_user_by_email(email)
             if user is None or not verify_password(
                 payload.password.get_secret_value(), user.password_hash
@@ -91,6 +95,10 @@ class AuthService:
             await apply_audit_context(self.session, authenticated_context)
             user.ultimo_acceso = datetime.now(UTC)
             await self.repository.update_last_access(user)
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
 
         token, expires_in = create_access_token(user.id_usuario)
         return TokenResponse(access_token=token, expires_in=expires_in)
@@ -101,15 +109,20 @@ class AuthService:
         payload: UpdateProfileRequest,
         audit_context: AuditContext,
     ) -> Usuario:
-        async with self.session.begin():
+        try:
             await apply_audit_context(self.session, audit_context)
-            return await self.repository.update_profile(
+            user = await self.repository.update_profile(
                 user_id,
                 nombres=payload.nombres,
                 apellidos=payload.apellidos,
                 telefono=payload.telefono,
                 ci=payload.ci,
             )
+            await self.session.commit()
+            return user
+        except Exception:
+            await self.session.rollback()
+            raise
 
     async def change_password(
         self,
@@ -117,7 +130,7 @@ class AuthService:
         payload: ChangePasswordRequest,
         audit_context: AuditContext,
     ) -> None:
-        async with self.session.begin():
+        try:
             await apply_audit_context(self.session, audit_context)
             user = await self.repository.get_user_by_id(user_id)
             if user is None or user.estado != "ACTIVO":
@@ -126,6 +139,10 @@ class AuthService:
                 raise InvalidCredentialsError("Current password is incorrect")
             new_hash = hash_password(payload.new_password.get_secret_value())
             await self.repository.update_password(user, new_hash)
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
 
     @staticmethod
     def _user_response(
