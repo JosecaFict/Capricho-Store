@@ -28,18 +28,31 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
   selector: 'app-catalog',
   imports: [ReactiveFormsModule, ProductCard, StatusPanel],
   template: `
-    <section class="catalog-page page-shell">
+    <section class="catalog-page page-shell" [formGroup]="form">
       <header class="catalog-heading">
-        <div>
+        <div class="catalog-heading__text">
           <h1>Catálogo</h1>
-          <p>Poleras, camisas, polos y blusas disponibles en la API.</p>
+          <p>Prendas exclusivas disponibles en tienda.</p>
         </div>
-        <p class="catalog-count">
-          {{ page().total }} {{ page().total === 1 ? 'producto' : 'productos' }}
-        </p>
+
+        <div class="catalog-branch-selector">
+          <label for="branch-filter" class="catalog-branch-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            <span>Sucursal</span>
+          </label>
+          <select id="branch-filter" formControlName="sucursal" (change)="onFilterChange()">
+            <option value="">Todas las sucursales</option>
+            @for (item of options().branches; track item.id_sucursal) {
+              <option [value]="item.id_sucursal">{{ item.nombre }}</option>
+            }
+          </select>
+        </div>
       </header>
 
-      <form class="catalog-controls" [formGroup]="form" (ngSubmit)="applyFilters()">
+      <div class="catalog-controls">
         <div class="catalog-mobile-bar">
           <button
             #mobileFilterTrigger
@@ -57,7 +70,7 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
 
           <label class="sort-field" for="sort-filter">
             <span class="sort-field__caption">Ordenar</span>
-            <select id="sort-filter" formControlName="sort" (change)="applySort()">
+            <select id="sort-filter" formControlName="sort" (change)="onFilterChange()">
               <option value="nombre">Nombre A a Z</option>
               <option value="-nombre">Nombre Z a A</option>
               <option value="precio">Precio menor</option>
@@ -89,9 +102,22 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
           </header>
 
           <div class="primary-filter-row">
+            <!-- 1. Público -->
             <div class="field field--compact">
-              <label for="category-filter">Categoría</label
-              ><select
+              <label for="audience-filter">Público</label>
+              <select id="audience-filter" formControlName="publico_objetivo" (change)="onFilterChange()">
+                <option value="">Todos</option>
+                <option value="HOMBRE" [disabled]="form.controls.categoria.value === 'BLUSA'">
+                  Hombre
+                </option>
+                <option value="MUJER">Mujer</option>
+              </select>
+            </div>
+
+            <!-- 2. Categoría -->
+            <div class="field field--compact">
+              <label for="category-filter">Categoría</label>
+              <select
                 id="category-filter"
                 formControlName="categoria"
                 (change)="onCategoryChange()"
@@ -102,100 +128,84 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
                 }
               </select>
             </div>
+
+            <!-- 3. Marca -->
             <div class="field field--compact">
-              <label for="audience-filter">Público</label
-              ><select id="audience-filter" formControlName="publico_objetivo">
-                <option value="">Todos</option>
-                <option value="HOMBRE" [disabled]="form.controls.categoria.value === 'BLUSA'">
-                  Hombre
-                </option>
-                <option value="MUJER">Mujer</option>
-              </select>
-            </div>
-            <div class="field field--compact">
-              <label for="brand-filter">Marca</label
-              ><select id="brand-filter" formControlName="marca">
+              <label for="brand-filter">Marca</label>
+              <select id="brand-filter" formControlName="marca" (change)="onFilterChange()">
                 <option value="">Todas</option>
                 @for (item of options().brands; track item.id_marca) {
                   <option [value]="item.nombre">{{ item.nombre }}</option>
                 }
               </select>
             </div>
+
+            <!-- 4. Talla -->
             <div class="field field--compact">
-              <label for="size-filter">Talla</label
-              ><select id="size-filter" formControlName="talla">
+              <label for="size-filter">Talla</label>
+              <select id="size-filter" formControlName="talla" (change)="onFilterChange()">
                 <option value="">Todas</option>
                 @for (item of options().sizes; track item.id_talla) {
                   <option [value]="item.codigo">{{ item.codigo }}</option>
                 }
               </select>
             </div>
+
+            <!-- 5. Color -->
+            <div class="field field--compact">
+              <label for="color-filter">Color</label>
+              <select id="color-filter" formControlName="color" (change)="onFilterChange()">
+                <option value="">Todos</option>
+                @for (item of options().colors; track item.id_color) {
+                  <option [value]="item.nombre">{{ item.nombre }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- 6. Temporada -->
+            <div class="field field--compact">
+              <label for="season-filter">Temporada</label>
+              <select id="season-filter" formControlName="temporada" (change)="onFilterChange()">
+                <option value="">Todas</option>
+                @for (item of options().seasons; track item.id_temporada) {
+                  <option [value]="item.nombre">
+                    {{ item.nombre }}{{ item.anio ? ' ' + item.anio : '' }}
+                  </option>
+                }
+              </select>
+            </div>
           </div>
 
-          <details class="more-filters" [open]="mobileFiltersOpen()">
-            <summary>
-              Más filtros
-              @if (secondaryFilterCount() > 0) {
-                <span>{{ secondaryFilterCount() }}</span>
-              }
-            </summary>
-            <div class="more-filters__panel">
-              <div class="field field--compact">
-                <label for="color-filter">Color</label
-                ><select id="color-filter" formControlName="color">
+          <div class="catalog-subfilters">
+            <div class="catalog-subfilters__left">
+              <div class="field field--compact field--inline-compact">
+                <label for="fitting-filter">Vestidor</label>
+                <select id="fitting-filter" formControlName="permite_vestidor" (change)="onFilterChange()">
                   <option value="">Todos</option>
-                  @for (item of options().colors; track item.id_color) {
-                    <option [value]="item.nombre">{{ item.nombre }}</option>
-                  }
+                  <option value="true">Habilitado</option>
+                  <option value="false">Sin vestidor</option>
                 </select>
               </div>
-              <div class="field field--compact">
-                <label for="season-filter">Temporada</label
-                ><select id="season-filter" formControlName="temporada">
-                  <option value="">Todas</option>
-                  @for (item of options().seasons; track item.id_temporada) {
-                    <option [value]="item.nombre">
-                      {{ item.nombre }}{{ item.anio ? ' ' + item.anio : '' }}
-                    </option>
-                  }
-                </select>
-              </div>
-              <div class="field field--compact">
-                <label for="fitting-filter">Vestidor habilitado</label
-                ><select id="fitting-filter" formControlName="permite_vestidor">
-                  <option value="">Todos</option>
-                  <option value="true">Sí</option>
-                  <option value="false">No</option>
-                </select>
-              </div>
-              <div class="field field--compact">
-                <label for="branch-filter">Sucursal</label
-                ><select id="branch-filter" formControlName="sucursal">
-                  <option value="">Todas</option>
-                  @for (item of options().branches; track item.id_sucursal) {
-                    <option [value]="item.id_sucursal">{{ item.nombre }}</option>
-                  }
-                </select>
-              </div>
-              <div class="field field--compact">
-                <label for="status-filter">Estado</label
-                ><select id="status-filter" formControlName="activo">
-                  <option value="true">Solo activos</option>
-                  <option value="">Todos</option>
-                  <option value="false">Inactivos</option>
-                </select>
-              </div>
-            </div>
-          </details>
 
-          <div class="filter-actions">
-            <button class="button button--primary" type="submit">Aplicar</button
-            ><button class="button button--quiet" type="button" (click)="clearFilters()">
-              Limpiar filtros
-            </button>
+              @if (activeFilterCount() > 0) {
+                <button
+                  class="button button--quiet button--clear-filters"
+                  type="button"
+                  (click)="clearFilters()"
+                >
+                  ✕ Limpiar filtros ({{ activeFilterCount() }})
+                </button>
+              }
+            </div>
+
+            <div class="catalog-subfilters__right">
+              <p class="catalog-count">
+                {{ page().total }} {{ page().total === 1 ? 'producto' : 'productos' }}
+              </p>
+            </div>
           </div>
         </div>
-      </form>
+      </div>
 
       @if (mobileFiltersOpen()) {
         <button
@@ -296,29 +306,38 @@ export class Catalog {
     this.loadProducts(Number(this.query.get('page') ?? 1));
   }
 
-  applyFilters(): void {
+  onFilterChange(): void {
     this.normalizeCategoryAudience();
     this.closeMobileFilters();
     this.currentPage.set(1);
     this.syncUrl(1);
     this.loadProducts(1);
   }
-  applySort(): void {
-    this.applyFilters();
+
+  applyFilters(): void {
+    this.onFilterChange();
   }
+
+  applySort(): void {
+    this.onFilterChange();
+  }
+
   openMobileFilters(): void {
     this.mobileFiltersOpen.set(true);
     setTimeout(() => this.drawerCloseButton()?.nativeElement.focus());
   }
+
   closeMobileFilters(): void {
     if (!this.mobileFiltersOpen()) return;
     this.mobileFiltersOpen.set(false);
     setTimeout(() => this.mobileFilterTrigger()?.nativeElement.focus());
   }
+
   @HostListener('window:keydown.escape')
   closeFiltersOnEscape(): void {
     this.closeMobileFilters();
   }
+
   secondaryFilterCount(): number {
     const value = this.form.getRawValue();
     return [
@@ -329,11 +348,12 @@ export class Catalog {
       value.activo !== 'true',
     ].filter(Boolean).length;
   }
+
   activeFilterCount(): number {
     const value = this.form.getRawValue();
     return [
-      value.categoria,
       value.publico_objetivo,
+      value.categoria,
       value.marca,
       value.talla,
       value.color,
@@ -343,9 +363,12 @@ export class Catalog {
       value.activo !== 'true',
     ].filter(Boolean).length;
   }
+
   onCategoryChange(): void {
     this.normalizeCategoryAudience();
+    this.onFilterChange();
   }
+
   clearFilters(): void {
     this.form.reset({
       categoria: '',
@@ -359,7 +382,7 @@ export class Catalog {
       activo: 'true',
       sort: 'nombre',
     });
-    this.applyFilters();
+    this.onFilterChange();
   }
   changePage(page: number): void {
     this.currentPage.set(page);
