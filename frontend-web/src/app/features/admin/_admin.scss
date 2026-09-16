@@ -3489,6 +3489,12 @@ textarea {
 .supplier-history-filters {
   display: grid;
   grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
+
+  .supplier-date-presets {
+    grid-column: 1 / -1;
+    margin-bottom: 0.35rem;
+    align-self: center;
+  }
 }
 .supplier-history-filters .field {
   max-width: none;
@@ -4833,6 +4839,61 @@ textarea {
   flex-direction: column;
   gap: 1.5rem;
   width: 100%;
+}
+
+.sales-history-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.button--export-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.3);
+  background: rgba(185, 28, 28, 0.05);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+
+  &:hover:not(:disabled) {
+    background: #b91c1c;
+    color: #ffffff;
+    border-color: #b91c1c;
+    box-shadow: 0 2px 8px rgba(185, 28, 28, 0.25);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.button--export-excel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #15803d;
+  border-color: rgba(21, 128, 61, 0.3);
+  background: rgba(21, 128, 61, 0.05);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+
+  &:hover:not(:disabled) {
+    background: #15803d;
+    color: #ffffff;
+    border-color: #15803d;
+    box-shadow: 0 2px 8px rgba(21, 128, 61, 0.25);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 }
 
 .sales-kpi-grid {

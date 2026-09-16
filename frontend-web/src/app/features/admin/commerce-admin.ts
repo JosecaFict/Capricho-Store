@@ -1,8 +1,9 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { finalize, forkJoin } from 'rxjs';
+import { finalize, firstValueFrom, forkJoin } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
+import { ExportService, PurchasesFilterInfo, SalesFilterInfo } from '../../core/services/export.service';
 import { Branch, Product, ProductVariant } from '../../core/models/catalog.model';
 import {
   CustomerAdminSummary,
@@ -3168,12 +3169,67 @@ export class ReturnsAdmin {
   template: `<section>
     <header class="admin-page-heading">
       <div>
+        <p class="eyebrow">Historiales</p>
         <h1>Compras a proveedores</h1>
         <p>Costos históricos por recepción y lote, sin recalcular precios pasados.</p>
       </div>
-      <strong>{{ total() }} registros</strong>
+      <div class="sales-history-top-actions">
+        <strong>{{ total() }} registros</strong>
+        <button
+          type="button"
+          class="button button--secondary button--export-pdf"
+          (click)="exportPdf()"
+          [disabled]="loading() || items().length === 0"
+          title="Exportar reporte de compras en PDF con logo oficial"
+        >
+          📄 PDF
+        </button>
+        <button
+          type="button"
+          class="button button--secondary button--export-excel"
+          (click)="exportExcel()"
+          [disabled]="loading() || items().length === 0"
+          title="Descargar compras filtradas en Excel (.xlsx) con logo"
+        >
+          📊 Excel
+        </button>
+      </div>
     </header>
     <form class="admin-filterbar supplier-history-filters" [formGroup]="form" (ngSubmit)="load(1)">
+      <div class="sales-date-presets supplier-date-presets">
+        <button
+          type="button"
+          class="date-preset-btn"
+          [class.date-preset-btn--active]="datePreset() === 'TODOS'"
+          (click)="applyPreset('TODOS')"
+        >
+          Todo
+        </button>
+        <button
+          type="button"
+          class="date-preset-btn"
+          [class.date-preset-btn--active]="datePreset() === 'HOY'"
+          (click)="applyPreset('HOY')"
+        >
+          Hoy
+        </button>
+        <button
+          type="button"
+          class="date-preset-btn"
+          [class.date-preset-btn--active]="datePreset() === 'SEMANA'"
+          (click)="applyPreset('SEMANA')"
+        >
+          Esta semana
+        </button>
+        <button
+          type="button"
+          class="date-preset-btn"
+          [class.date-preset-btn--active]="datePreset() === 'MES'"
+          (click)="applyPreset('MES')"
+        >
+          Este mes
+        </button>
+      </div>
       <label class="field"
         ><span>Proveedor</span
         ><select formControlName="proveedor">
@@ -3191,9 +3247,9 @@ export class ReturnsAdmin {
           }
         </select></label
       ><label class="field"
-        ><span>Desde</span><input type="date" formControlName="fecha_desde" /></label
+        ><span>Desde</span><input type="date" formControlName="fecha_desde" (change)="onDateInputChange()" /></label
       ><label class="field"
-        ><span>Hasta</span><input type="date" formControlName="fecha_hasta" /></label
+        ><span>Hasta</span><input type="date" formControlName="fecha_hasta" (change)="onDateInputChange()" /></label
       ><button class="button button--primary" type="submit">Filtrar</button>
     </form>
     @if (error()) {
@@ -3267,6 +3323,8 @@ export class SupplierHistoryAdmin {
   private readonly catalog = inject(CatalogService);
   private readonly admin = inject(AdminApiService);
   private readonly errors = inject(ApiErrorService);
+  private readonly exportService = inject(ExportService);
+
   readonly suppliers = signal<Entity[]>([]);
   readonly branches = signal<Branch[]>([]);
   readonly items = signal<Array<Record<string, string | number | null>>>([]);
@@ -3274,12 +3332,15 @@ export class SupplierHistoryAdmin {
   readonly page = signal(1);
   readonly loading = signal(true);
   readonly error = signal('');
+  readonly datePreset = signal<'TODOS' | 'HOY' | 'SEMANA' | 'MES'>('TODOS');
+
   readonly form = this.fb.nonNullable.group({
     proveedor: [''],
     sucursal: [''],
     fecha_desde: [''],
     fecha_hasta: [''],
   });
+
   constructor() {
     forkJoin({
       suppliers: this.admin.list('suppliers'),
@@ -3294,6 +3355,36 @@ export class SupplierHistoryAdmin {
         this.error.set(this.errors.message(error, 'No pudimos cargar los filtros.')),
     });
   }
+
+  applyPreset(preset: 'TODOS' | 'HOY' | 'SEMANA' | 'MES'): void {
+    this.datePreset.set(preset);
+    if (preset === 'TODOS') {
+      this.form.patchValue({ fecha_desde: '', fecha_hasta: '' });
+    } else if (preset === 'HOY') {
+      const today = new Date().toISOString().slice(0, 10);
+      this.form.patchValue({ fecha_desde: today, fecha_hasta: today });
+    } else if (preset === 'SEMANA') {
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      this.form.patchValue({
+        fecha_desde: weekAgo.toISOString().slice(0, 10),
+        fecha_hasta: now.toISOString().slice(0, 10),
+      });
+    } else if (preset === 'MES') {
+      const now = new Date();
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      this.form.patchValue({
+        fecha_desde: monthAgo.toISOString().slice(0, 10),
+        fecha_hasta: now.toISOString().slice(0, 10),
+      });
+    }
+    this.load(1);
+  }
+
+  onDateInputChange(): void {
+    this.datePreset.set('TODOS');
+  }
+
   load(page = 1): void {
     this.loading.set(true);
     const value = this.form.getRawValue();
@@ -3309,6 +3400,67 @@ export class SupplierHistoryAdmin {
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos cargar el historial.')),
       });
+  }
+
+  async getPurchasesForExport(): Promise<Array<Record<string, string | number | null>>> {
+    if (this.total() <= this.items().length) {
+      return this.items();
+    }
+    try {
+      const value = this.form.getRawValue();
+      const res = await firstValueFrom(
+        this.commerce.supplierPurchaseHistory({
+          page: 1,
+          page_size: Math.min(this.total(), 100),
+          ...value,
+        })
+      );
+      return res.items.length ? res.items : this.items();
+    } catch {
+      return this.items();
+    }
+  }
+
+  private getPurchasesFilterInfo(): PurchasesFilterInfo {
+    const value = this.form.getRawValue();
+    const preset = this.datePreset();
+    let periodLabel = 'Histórico completo';
+    if (preset === 'HOY') {
+      periodLabel = 'Hoy';
+    } else if (preset === 'SEMANA') {
+      periodLabel = 'Últimos 7 días';
+    } else if (preset === 'MES') {
+      periodLabel = 'Últimos 30 días';
+    } else if (value.fecha_desde || value.fecha_hasta) {
+      periodLabel = `${value.fecha_desde || 'Inicio'} al ${value.fecha_hasta || 'Actual'}`;
+    }
+
+    const supplierObj = this.suppliers().find(
+      (s) => String(s['id_proveedor']) === String(value.proveedor)
+    );
+    const branchObj = this.branches().find(
+      (b) => String(b.id_sucursal) === String(value.sucursal)
+    );
+
+    return {
+      period: periodLabel,
+      supplier: supplierObj ? String(supplierObj['razon_social']) : 'Todos los proveedores',
+      branch: branchObj ? branchObj.nombre : 'Todas las sucursales',
+      dateFrom: value.fecha_desde || undefined,
+      dateTo: value.fecha_hasta || undefined,
+    };
+  }
+
+  async exportPdf(): Promise<void> {
+    const exportItems = await this.getPurchasesForExport();
+    const filters = this.getPurchasesFilterInfo();
+    this.exportService.exportPurchasesToPdf(exportItems, filters);
+  }
+
+  async exportExcel(): Promise<void> {
+    const exportItems = await this.getPurchasesForExport();
+    const filters = this.getPurchasesFilterInfo();
+    await this.exportService.exportPurchasesToExcel(exportItems, filters);
   }
 }
 
@@ -3326,6 +3478,24 @@ export class SupplierHistoryAdmin {
         <div class="sales-history-top-actions">
           <button type="button" class="button button--quiet" (click)="loadSales()">
             🔄 Actualizar
+          </button>
+          <button
+            type="button"
+            class="button button--secondary button--export-pdf"
+            (click)="exportPdf()"
+            [disabled]="loading() || filteredSales().length === 0"
+            title="Exportar reporte en PDF para imprimir o guardar"
+          >
+            📄 PDF
+          </button>
+          <button
+            type="button"
+            class="button button--secondary button--export-excel"
+            (click)="exportExcel()"
+            [disabled]="loading() || filteredSales().length === 0"
+            title="Descargar datos filtrados en formato Excel (.xlsx)"
+          >
+            📊 Excel
           </button>
         </div>
       </header>
@@ -3659,6 +3829,7 @@ export class SalesHistoryAdmin {
   private readonly catalog = inject(CatalogService);
   private readonly auth = inject(AuthService);
   private readonly errors = inject(ApiErrorService);
+  private readonly exportService = inject(ExportService);
 
   readonly sales = signal<Sale[]>([]);
   readonly branches = signal<Branch[]>([]);
@@ -3842,5 +4013,43 @@ export class SalesHistoryAdmin {
       error: (err) =>
         this.error.set(this.errors.message(err, 'No se pudo descargar la factura.')),
     });
+  }
+
+  private getActiveSalesFilters(): SalesFilterInfo {
+    const periodMap = {
+      TODOS: 'Histórico completo',
+      HOY: 'Hoy',
+      SEMANA: 'Últimos 7 días',
+      MES: 'Últimos 30 días',
+    };
+    const channelMap = {
+      TODAS: 'Todos los canales',
+      PRESENCIAL: 'Presencial (POS)',
+      WEB: 'Online (Web Stripe)',
+    };
+    const branchName = this.selectedBranchId()
+      ? this.branches().find((b) => b.id_sucursal === this.selectedBranchId())?.nombre || 'Sucursal'
+      : 'Todas las sucursales';
+
+    return {
+      period: periodMap[this.datePreset()],
+      branch: branchName,
+      channel: channelMap[this.channelTab()],
+      search: this.searchQuery().trim() || undefined,
+    };
+  }
+
+  exportPdf(): void {
+    const sales = this.filteredSales();
+    const kpis = this.kpis();
+    const filters = this.getActiveSalesFilters();
+    this.exportService.exportSalesToPdf(sales, kpis, filters);
+  }
+
+  async exportExcel(): Promise<void> {
+    const sales = this.filteredSales();
+    const kpis = this.kpis();
+    const filters = this.getActiveSalesFilters();
+    await this.exportService.exportSalesToExcel(sales, kpis, filters);
   }
 }

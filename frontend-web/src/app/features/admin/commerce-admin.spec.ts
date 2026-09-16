@@ -8,7 +8,9 @@ import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
 import { ReturnRequest, Sale } from '../../core/models/commerce.model';
-import { PosSalesAdmin, ReturnsAdmin, SalesHistoryAdmin } from './commerce-admin';
+import { ExportService } from '../../core/services/export.service';
+import { AdminApiService } from './admin-api.service';
+import { PosSalesAdmin, ReturnsAdmin, SalesHistoryAdmin, SupplierHistoryAdmin } from './commerce-admin';
 
 const mockBranches: Branch[] = [
   { id_sucursal: 1, nombre: 'Sucursal Central', direccion: 'Av. Principal 100' },
@@ -353,7 +355,7 @@ const mockSales: Sale[] = [
 ];
 
 describe('SalesHistoryAdmin', () => {
-  it('renders sales history, computes KPIs, filters by channel and toggles item review', () => {
+  it('renders sales history, computes KPIs, filters by channel and toggles item review', async () => {
     const adminSignal = signal({
       id_usuario: 1,
       nombres: 'Admin',
@@ -378,12 +380,18 @@ describe('SalesHistoryAdmin', () => {
       saleInvoice: vi.fn(() => of(new Blob(['dummy pdf'], { type: 'application/pdf' }))),
     };
 
+    const exportService = {
+      exportSalesToPdf: vi.fn(),
+      exportSalesToExcel: vi.fn().mockResolvedValue(undefined),
+    };
+
     TestBed.configureTestingModule({
       imports: [SalesHistoryAdmin],
       providers: [
         { provide: AuthService, useValue: { currentUser: adminSignal.asReadonly() } },
         { provide: CatalogService, useValue: catalog },
         { provide: CommerceService, useValue: commerce },
+        { provide: ExportService, useValue: exportService },
         { provide: ApiErrorService, useValue: { message: () => 'Error' } },
       ],
     });
@@ -455,6 +463,13 @@ describe('SalesHistoryAdmin', () => {
     // 7. Invoice download trigger
     component.downloadInvoice(101);
     expect(commerce.saleInvoice).toHaveBeenCalledWith(101);
+
+    // 8. Export PDF and Excel triggers
+    component.exportPdf();
+    expect(exportService.exportSalesToPdf).toHaveBeenCalled();
+
+    await component.exportExcel();
+    expect(exportService.exportSalesToExcel).toHaveBeenCalled();
   });
 });
 
@@ -609,6 +624,95 @@ describe('ReturnsAdmin', () => {
     expect(commerce.createAdminReturn).toHaveBeenCalled();
     expect(component.showModal()).toBe(false);
     expect(component.items().length).toBe(3);
+  });
+});
+
+describe('SupplierHistoryAdmin', () => {
+  it('loads purchases, switches date presets and triggers PDF and Excel exports', async () => {
+    const mockPurchases = [
+      {
+        id_recepcion: 1,
+        id_orden_compra: 10,
+        proveedor: 'Textiles La Paz',
+        producto: 'Camisa Formal',
+        color: 'Blanco',
+        talla: 'L',
+        cantidad: 5,
+        precio_unitario: 120,
+        subtotal: 600,
+        total_compra: 600,
+        sucursal: 'Central',
+        usuario_responsable: 'Admin',
+        fecha_recepcion: '2026-09-16T11:00:00Z',
+      },
+    ];
+
+    const adminApi = {
+      list: vi.fn(() => of([{ id_proveedor: 1, razon_social: 'Textiles La Paz' }])),
+    };
+
+    const catalog = {
+      branches: vi.fn(() => of(mockBranches)),
+    };
+
+    const commerce = {
+      supplierPurchaseHistory: vi.fn(() =>
+        of({
+          items: mockPurchases,
+          total: 1,
+          page: 1,
+          page_size: 25,
+        })
+      ),
+    };
+
+    const exportService = {
+      exportPurchasesToPdf: vi.fn(),
+      exportPurchasesToExcel: vi.fn().mockResolvedValue(undefined),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [SupplierHistoryAdmin],
+      providers: [
+        { provide: AdminApiService, useValue: adminApi },
+        { provide: CatalogService, useValue: catalog },
+        { provide: CommerceService, useValue: commerce },
+        { provide: ExportService, useValue: exportService },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SupplierHistoryAdmin);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    expect(adminApi.list).toHaveBeenCalledWith('suppliers');
+    expect(catalog.branches).toHaveBeenCalled();
+    expect(commerce.supplierPurchaseHistory).toHaveBeenCalled();
+    expect(component.items().length).toBe(1);
+    expect(component.total()).toBe(1);
+
+    // Date presets
+    component.applyPreset('HOY');
+    expect(component.datePreset()).toBe('HOY');
+    expect(component.form.value.fecha_desde).toBe(new Date().toISOString().slice(0, 10));
+
+    component.applyPreset('SEMANA');
+    expect(component.datePreset()).toBe('SEMANA');
+
+    component.applyPreset('MES');
+    expect(component.datePreset()).toBe('MES');
+
+    component.applyPreset('TODOS');
+    expect(component.datePreset()).toBe('TODOS');
+    expect(component.form.value.fecha_desde).toBe('');
+
+    // Export triggers
+    await component.exportPdf();
+    expect(exportService.exportPurchasesToPdf).toHaveBeenCalled();
+
+    await component.exportExcel();
+    expect(exportService.exportPurchasesToExcel).toHaveBeenCalled();
   });
 });
 
