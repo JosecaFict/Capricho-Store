@@ -10,7 +10,7 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
   template: `
     <header class="site-header">
       <a class="brand" routerLink="/" aria-label="Capricho Store, ir al inicio">
-        <span>CAPRICHO</span><small>STORE</small>
+        <img src="/images/logo-capricho.png" alt="Capricho Store" class="brand-logo" />
       </a>
       <button
         class="menu-button"

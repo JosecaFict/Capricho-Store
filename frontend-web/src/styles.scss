@@ -212,14 +212,23 @@ h3 {
 }
 .brand {
   display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   color: var(--ink);
-  font-size: 1.55rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 0.9;
   text-decoration: none;
+  line-height: 1;
+}
+.brand-logo {
+  height: 48px;
+  width: auto;
+  max-width: 150px;
+  object-fit: contain;
+  display: block;
+  transition: opacity 140ms ease, transform 140ms ease;
+
+  &:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+  }
 }
 .brand small {
   margin-top: 0.35rem;

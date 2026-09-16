@@ -49,19 +49,17 @@
   }
 }
 .admin-brand {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
+  align-items: center;
   margin: 0;
-  font-size: 1.4rem;
-  font-weight: 700;
-  line-height: 0.9;
   text-decoration: none;
 }
-.admin-brand small {
-  margin-top: 0.45rem;
-  color: #8eb0ff;
-  font-size: 0.62rem;
-  letter-spacing: 0.22em;
+.admin-brand-logo {
+  height: 44px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+  display: block;
 }
 .admin-nav-group {
   margin-bottom: 8px;

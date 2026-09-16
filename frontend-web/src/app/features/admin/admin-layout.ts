@@ -23,9 +23,9 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
         aria-label="Navegación administrativa"
       >
         <div class="admin-brand-row">
-          <a class="admin-brand" routerLink="/admin" (click)="menuOpen.set(false)"
-            ><span>CAPRICHO</span><small>OPERACIONES</small></a
-          >
+          <a class="admin-brand" routerLink="/admin" (click)="menuOpen.set(false)" aria-label="Capricho Store, ir al panel operativo">
+            <img src="/images/logo-capricho-white.png" alt="Capricho Store" class="admin-brand-logo" />
+          </a>
           <button
             type="button"
             class="admin-sidebar-collapse-btn"
