@@ -160,9 +160,9 @@ describe('Catalog Component', () => {
     const filterRow = fixture.nativeElement.querySelector('.primary-filter-row');
     expect(filterRow).not.toBeNull();
 
-    const labels = Array.from(filterRow.querySelectorAll('label')).map((el: any) =>
-      el.textContent?.trim(),
-    );
+    const labels = Array.from(filterRow.querySelectorAll('label'))
+      .map((el: any) => el.textContent?.trim())
+      .filter((text: string) => text && text !== '\u00a0');
     expect(labels).toEqual([
       'Público',
       'Categoría',
@@ -170,6 +170,7 @@ describe('Catalog Component', () => {
       'Talla',
       'Color',
       'Temporada',
+      'Vestidor',
     ]);
   });
 
@@ -216,7 +217,7 @@ describe('Catalog Component', () => {
     expect(count?.textContent?.trim()).toBe('1 producto');
   });
 
-  it('shows clear filters button when active filters exist and clears them on click', () => {
+  it('shows clear filters button with filter icon and badge when active filters exist and clears them on click', () => {
     const { fixture, component, catalogService } = setupTest();
 
     // Initially no active filter button
@@ -229,10 +230,12 @@ describe('Catalog Component', () => {
     sizeSelect.dispatchEvent(new Event('change'));
     fixture.detectChanges();
 
-    // Clear filters button should now be visible
+    // Clear filters button should now be visible with badge '1' and svg icon
     clearBtn = fixture.nativeElement.querySelector('.button--clear-filters');
     expect(clearBtn).not.toBeNull();
-    expect(clearBtn.textContent).toContain('Limpiar filtros (1)');
+    expect(clearBtn.querySelector('svg')).not.toBeNull();
+    expect(clearBtn.textContent).toContain('1');
+    expect(clearBtn.getAttribute('title')).toContain('Quitar filtros');
 
     // Click clear filters button
     clearBtn.click();

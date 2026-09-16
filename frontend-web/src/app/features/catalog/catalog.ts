@@ -68,9 +68,9 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
             }
           </button>
 
-          <label class="sort-field" for="sort-filter">
+          <label class="sort-field sort-field--mobile" for="sort-filter-mobile">
             <span class="sort-field__caption">Ordenar</span>
-            <select id="sort-filter" formControlName="sort" (change)="onFilterChange()">
+            <select id="sort-filter-mobile" formControlName="sort" (change)="onFilterChange()">
               <option value="nombre">Nombre A a Z</option>
               <option value="-nombre">Nombre Z a A</option>
               <option value="precio">Precio menor</option>
@@ -102,8 +102,8 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
           </header>
 
           <div class="primary-filter-row">
-            <!-- 1. Público -->
-            <div class="field field--compact">
+            <!-- 1. Público (ancho compacto para Todos/Hombre/Mujer) -->
+            <div class="field field--compact field--audience">
               <label for="audience-filter">Público</label>
               <select id="audience-filter" formControlName="publico_objetivo" (change)="onFilterChange()">
                 <option value="">Todos</option>
@@ -114,8 +114,8 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
               </select>
             </div>
 
-            <!-- 2. Categoría -->
-            <div class="field field--compact">
+            <!-- 2. Categoría (ancho compacto para Blusa/Polo/Camisa) -->
+            <div class="field field--compact field--category">
               <label for="category-filter">Categoría</label>
               <select
                 id="category-filter"
@@ -130,7 +130,7 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
             </div>
 
             <!-- 3. Marca -->
-            <div class="field field--compact">
+            <div class="field field--compact field--brand">
               <label for="brand-filter">Marca</label>
               <select id="brand-filter" formControlName="marca" (change)="onFilterChange()">
                 <option value="">Todas</option>
@@ -140,8 +140,8 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
               </select>
             </div>
 
-            <!-- 4. Talla -->
-            <div class="field field--compact">
+            <!-- 4. Talla (ancho ultra-compacto para S/M/L/XL) -->
+            <div class="field field--compact field--size">
               <label for="size-filter">Talla</label>
               <select id="size-filter" formControlName="talla" (change)="onFilterChange()">
                 <option value="">Todas</option>
@@ -152,7 +152,7 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
             </div>
 
             <!-- 5. Color -->
-            <div class="field field--compact">
+            <div class="field field--compact field--color">
               <label for="color-filter">Color</label>
               <select id="color-filter" formControlName="color" (change)="onFilterChange()">
                 <option value="">Todos</option>
@@ -162,8 +162,8 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
               </select>
             </div>
 
-            <!-- 6. Temporada -->
-            <div class="field field--compact">
+            <!-- 6. Temporada (ancho amplio para no truncar Primavera-Verano) -->
+            <div class="field field--compact field--season">
               <label for="season-filter">Temporada</label>
               <select id="season-filter" formControlName="temporada" (change)="onFilterChange()">
                 <option value="">Todas</option>
@@ -174,35 +174,53 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
                 }
               </select>
             </div>
+
+            <!-- 7. Vestidor (integrado en la fila) -->
+            <div class="field field--compact field--fitting">
+              <label for="fitting-filter">Vestidor</label>
+              <select id="fitting-filter" formControlName="permite_vestidor" (change)="onFilterChange()">
+                <option value="">Todos</option>
+                <option value="true">Habilitado</option>
+                <option value="false">Sin vestidor</option>
+              </select>
+            </div>
+
+            <!-- Botón Icono de Filtro (Quitar filtros al apretar) -->
+            @if (activeFilterCount() > 0) {
+              <div class="field field--compact field--clear-btn">
+                <label class="filter-clear-label" aria-hidden="true">&nbsp;</label>
+                <button
+                  type="button"
+                  class="filter-icon-btn button--clear-filters"
+                  [attr.title]="'Quitar filtros (' + activeFilterCount() + ' activos)'"
+                  [attr.aria-label]="'Quitar filtros (' + activeFilterCount() + ' activos)'"
+                  (click)="clearFilters()"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                  </svg>
+                  <span class="filter-icon-btn__badge">{{ activeFilterCount() }}</span>
+                </button>
+              </div>
+            }
           </div>
 
           <div class="catalog-subfilters">
-            <div class="catalog-subfilters__left">
-              <div class="field field--compact field--inline-compact">
-                <label for="fitting-filter">Vestidor</label>
-                <select id="fitting-filter" formControlName="permite_vestidor" (change)="onFilterChange()">
-                  <option value="">Todos</option>
-                  <option value="true">Habilitado</option>
-                  <option value="false">Sin vestidor</option>
-                </select>
-              </div>
+            <p class="catalog-count">
+              {{ page().total }} {{ page().total === 1 ? 'producto' : 'productos' }}
+            </p>
 
-              @if (activeFilterCount() > 0) {
-                <button
-                  class="button button--quiet button--clear-filters"
-                  type="button"
-                  (click)="clearFilters()"
-                >
-                  ✕ Limpiar filtros ({{ activeFilterCount() }})
-                </button>
-              }
-            </div>
-
-            <div class="catalog-subfilters__right">
-              <p class="catalog-count">
-                {{ page().total }} {{ page().total === 1 ? 'producto' : 'productos' }}
-              </p>
-            </div>
+            <label class="sort-field sort-field--desktop" for="sort-filter-desktop">
+              <span class="sort-field__caption">Ordenar</span>
+              <select id="sort-filter-desktop" formControlName="sort" (change)="onFilterChange()">
+                <option value="nombre">Nombre A a Z</option>
+                <option value="-nombre">Nombre Z a A</option>
+                <option value="precio">Precio menor</option>
+                <option value="-precio">Precio mayor</option>
+                <option value="-created_at">Más recientes</option>
+                <option value="created_at">Más antiguos</option>
+              </select>
+            </label>
           </div>
         </div>
       </div>
