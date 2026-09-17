@@ -4,17 +4,38 @@ import Vision
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var poseChannel: FlutterMethodChannel?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    let controller = window?.rootViewController as! FlutterViewController
-    let poseChannel = FlutterMethodChannel(
+    let appResult = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    
+    // Registrar el canal de pose de forma segura si el rootViewController ya está disponible
+    if let controller = window?.rootViewController as? FlutterViewController, poseChannel == nil {
+      registerPoseChannel(messenger: controller.binaryMessenger)
+    }
+    
+    return appResult
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    
+    if poseChannel == nil {
+      let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "CaprichoBodyPosePlugin")
+      registerPoseChannel(messenger: registrar.messenger())
+    }
+  }
+
+  private func registerPoseChannel(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
       name: "com.capricho.store/body_pose",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     
-    poseChannel.setMethodCallHandler({ [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
+    channel.setMethodCallHandler({ [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
       if call.method == "detectPose" {
         guard let args = call.arguments as? [String: Any],
               let imagePath = args["imagePath"] as? String else {
@@ -28,7 +49,7 @@ import Vision
       }
     })
     
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    self.poseChannel = channel
   }
 
   private func analyzePose(imagePath: String, result: @escaping FlutterResult) {
@@ -200,10 +221,6 @@ import Vision
         "message": "Requiere iOS 14 o superior para Apple Vision"
       ])
     }
-  }
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 }
 
