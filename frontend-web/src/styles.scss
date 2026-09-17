@@ -1014,17 +1014,17 @@ input[aria-invalid='true'] {
   }
 
   .field--brand {
-    flex: 1 1 145px;
-    min-width: 125px;
+    flex: 0 0 135px;
+    width: 135px;
   }
 
   .field--size {
-    flex: 0 0 80px;
-    width: 80px;
+    flex: 0 0 98px;
+    width: 98px;
 
     select {
-      padding-left: 0.55rem;
-      padding-right: 1.45rem;
+      padding-left: 0.65rem;
+      padding-right: 1.55rem;
       font-weight: 700;
     }
   }
@@ -1035,8 +1035,8 @@ input[aria-invalid='true'] {
   }
 
   .field--season {
-    flex: 1.5 1 190px;
-    min-width: 175px;
+    flex: 0 0 170px;
+    width: 170px;
   }
 
   .field--fitting {
@@ -1113,20 +1113,15 @@ input[aria-invalid='true'] {
 .catalog-subfilters {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: flex-start;
   width: 100%;
-  padding-top: 0.35rem;
+  padding-top: 0.25rem;
 
   .catalog-count {
     margin: 0;
     color: var(--ink-soft);
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     font-weight: 600;
-  }
-
-  .sort-field--desktop {
-    margin-left: auto;
   }
 }
 .field--compact {

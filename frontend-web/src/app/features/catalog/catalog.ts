@@ -67,18 +67,6 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
               <span>{{ activeFilterCount() }}</span>
             }
           </button>
-
-          <label class="sort-field sort-field--mobile" for="sort-filter-mobile">
-            <span class="sort-field__caption">Ordenar</span>
-            <select id="sort-filter-mobile" formControlName="sort" (change)="onFilterChange()">
-              <option value="nombre">Nombre A a Z</option>
-              <option value="-nombre">Nombre Z a A</option>
-              <option value="precio">Precio menor</option>
-              <option value="-precio">Precio mayor</option>
-              <option value="-created_at">Más recientes</option>
-              <option value="created_at">Más antiguos</option>
-            </select>
-          </label>
         </div>
 
         <div
@@ -129,7 +117,7 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
               </select>
             </div>
 
-            <!-- 3. Marca -->
+            <!-- 3. Marca (ancho compacto) -->
             <div class="field field--compact field--brand">
               <label for="brand-filter">Marca</label>
               <select id="brand-filter" formControlName="marca" (change)="onFilterChange()">
@@ -140,7 +128,7 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
               </select>
             </div>
 
-            <!-- 4. Talla (ancho ultra-compacto para S/M/L/XL) -->
+            <!-- 4. Talla (ancho adaptado para 'Todas' y S/M/L/XL) -->
             <div class="field field--compact field--size">
               <label for="size-filter">Talla</label>
               <select id="size-filter" formControlName="talla" (change)="onFilterChange()">
@@ -162,7 +150,7 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
               </select>
             </div>
 
-            <!-- 6. Temporada (ancho amplio para no truncar Primavera-Verano) -->
+            <!-- 6. Temporada (ancho compacto) -->
             <div class="field field--compact field--season">
               <label for="season-filter">Temporada</label>
               <select id="season-filter" formControlName="temporada" (change)="onFilterChange()">
@@ -209,18 +197,6 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
             <p class="catalog-count">
               {{ page().total }} {{ page().total === 1 ? 'producto' : 'productos' }}
             </p>
-
-            <label class="sort-field sort-field--desktop" for="sort-filter-desktop">
-              <span class="sort-field__caption">Ordenar</span>
-              <select id="sort-filter-desktop" formControlName="sort" (change)="onFilterChange()">
-                <option value="nombre">Nombre A a Z</option>
-                <option value="-nombre">Nombre Z a A</option>
-                <option value="precio">Precio menor</option>
-                <option value="-precio">Precio mayor</option>
-                <option value="-created_at">Más recientes</option>
-                <option value="created_at">Más antiguos</option>
-              </select>
-            </label>
           </div>
         </div>
       </div>
