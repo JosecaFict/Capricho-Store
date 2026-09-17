@@ -5,11 +5,13 @@ import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/features/fitting/domain/fitting_engine.dart';
+import 'package:capricho_store/features/fitting/domain/fitting_telemetry.dart';
 import 'package:capricho_store/features/fitting/presentation/fitting_overlay_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 enum FittingStep {
   scanning,      // Paso 1: Escaneo activo con la cámara (3s)
@@ -45,6 +47,14 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   bool _isFlashOn = false;
   bool _showGuides = true;
 
+  // Telemetría de Vuelo (iPhone 15 Pro Max CoreMotion + Distancia)
+  StreamSubscription<AccelerometerEvent>? _accelerometerSub;
+  DeviceAngleState _angleState = DeviceAngleState.alignedDefault;
+  UserDistanceState _distanceState = UserDistanceState.optimalDefault;
+  bool _wasAngleAligned = true;
+  int _handsFreeHoldMs = 0;
+  Timer? _handsFreeTimer;
+
   // Máquina de estados del vestidor
   FittingStep _currentStep = FittingStep.scanning;
 
@@ -71,8 +81,66 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     super.initState();
     _initPrendaState();
     _initAnimation();
+    _initSensors();
     _initCamera();
     _startScanSequence();
+  }
+
+  void _initSensors() {
+    try {
+      _accelerometerSub = accelerometerEventStream().listen(
+        (event) {
+          if (!mounted) return;
+          final newAngle = DeviceAngleState.fromAccelerometer(
+            x: event.x,
+            y: event.y,
+            z: event.z,
+          );
+
+          // Taptic Engine feedback al alcanzar 90° (vertical recto)
+          if (newAngle.isVerticalAligned && !_wasAngleAligned) {
+            HapticFeedback.mediumImpact();
+            _wasAngleAligned = true;
+          } else if (!newAngle.isVerticalAligned) {
+            _wasAngleAligned = false;
+          }
+
+          setState(() {
+            _angleState = newAngle;
+          });
+        },
+        onError: (e) {
+          debugPrint('Error en acelerómetro CoreMotion: $e');
+        },
+      );
+    } catch (e) {
+      debugPrint('No se pudo inicializar stream de acelerómetro: $e');
+    }
+
+    // Timer periódico para hands-free auto lock
+    _handsFreeTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (!mounted) return;
+      if (_currentStep != FittingStep.scanning) {
+        if (_handsFreeHoldMs != 0) setState(() => _handsFreeHoldMs = 0);
+        return;
+      }
+
+      final isCalibrated =
+          _angleState.isVerticalAligned && _distanceState.isDistanceOptimal;
+      if (isCalibrated) {
+        _handsFreeHoldMs += 100;
+        if (_handsFreeHoldMs >= 1500) {
+          _handsFreeHoldMs = 0;
+          HapticFeedback.heavyImpact(); // Taptic Engine Lock
+          _completeScan();
+        }
+        setState(() {});
+      } else {
+        if (_handsFreeHoldMs > 0) {
+          setState(() => _handsFreeHoldMs = 0);
+        }
+      }
+    });
   }
 
   void _initAnimation() {
@@ -250,6 +318,8 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     _scanTimer?.cancel();
     _scanAnimationController.dispose();
     _cameraController?.dispose();
+    _accelerometerSub?.cancel();
+    _handsFreeTimer?.cancel();
     super.dispose();
   }
 
@@ -581,6 +651,13 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           AnimatedBuilder(
             animation: _scanAnimation,
             builder: (context, _) {
+              final isCalibrated =
+                  _angleState.isVerticalAligned && _distanceState.isDistanceOptimal;
+              final headline = FittingTelemetry.evaluate(
+                angle: _angleState,
+                distance: _distanceState,
+              ).guidanceHeadline;
+
               return CustomPaint(
                 painter: FittingOverlayPainter(
                   scaleMultiplier: _currentScaleMultiplier,
@@ -588,6 +665,13 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                   isScanning: _currentStep == FittingStep.scanning,
                   scanLinePosition: _scanAnimation.value,
                   isLocked: _currentStep != FittingStep.scanning,
+                  pitchDegrees: _angleState.pitchDegrees,
+                  rollDegrees: _angleState.rollDegrees,
+                  isAngleOk: _angleState.isVerticalAligned,
+                  estimatedDistanceMeters: _distanceState.estimatedDistanceMeters,
+                  isDistanceOk: _distanceState.isDistanceOptimal,
+                  isCalibrated: isCalibrated,
+                  guidanceHeadline: headline,
                 ),
               );
             },
@@ -689,6 +773,10 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
             ),
           ),
 
+          // 4.5. HUD de Telemetría iPhone 15 Pro Max (Ángulo 90° + Distancia)
+          if (_showGuides && _currentStep == FittingStep.scanning)
+            _buildTelemetryHUD(),
+
           // 5. Contenido dinámico según el paso:
           // A) MODO ESCANEO (Scanning Step)
           if (_currentStep == FittingStep.scanning)
@@ -710,8 +798,179 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
   // --- SUB-WIDGETS PARA CADA PASO ---
 
+  /// HUD de Telemetría Pro para iPhone 15 Pro Max (Ángulo 90° CoreMotion + Distancia)
+  Widget _buildTelemetryHUD() {
+    final telemetry = FittingTelemetry.evaluate(
+      angle: _angleState,
+      distance: _distanceState,
+    );
+
+    final isCalibrated = telemetry.isCalibrated;
+    final angleOk = _angleState.isVerticalAligned;
+    final distOk = _distanceState.isDistanceOptimal;
+
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 52,
+      left: 16,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A).withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isCalibrated
+                ? const Color(0xFF10B981).withValues(alpha: 0.8)
+                : (!angleOk
+                    ? const Color(0xFFF59E0B).withValues(alpha: 0.7)
+                    : Colors.white.withValues(alpha: 0.2)),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isCalibrated
+                  ? const Color(0xFF10B981).withValues(alpha: 0.25)
+                  : Colors.black.withValues(alpha: 0.4),
+              blurRadius: 16,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // Inclinación vertical (Pitch a 90°)
+                _telemetryChip(
+                  icon: Icons.screen_rotation_rounded,
+                  label: 'Ángulo',
+                  value: '${_angleState.pitchDegrees.toStringAsFixed(1)}°',
+                  status: angleOk
+                      ? '90° [OK]'
+                      : (_angleState.pitchDegrees < 87.0
+                          ? '▲ INCLINAR'
+                          : '▼ INCLINAR'),
+                  isOk: angleOk,
+                ),
+                Container(
+                  width: 1,
+                  height: 26,
+                  color: Colors.white.withValues(alpha: 0.15),
+                ),
+                // Distancia (~1.7m)
+                _telemetryChip(
+                  icon: Icons.straighten_rounded,
+                  label: 'Distancia',
+                  value: _distanceState.estimatedDistanceMeters > 0
+                      ? '~${_distanceState.estimatedDistanceMeters.toStringAsFixed(1)}m'
+                      : '--',
+                  status: distOk
+                      ? 'ÓPTIMA'
+                      : (_distanceState.estimatedDistanceMeters < 1.50
+                          ? 'ALÉJATE'
+                          : 'ACÉRCATE'),
+                  isOk: distOk,
+                ),
+              ],
+            ),
+            if (_handsFreeHoldMs > 0 && isCalibrated) ...[
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Fijando posición (${((1500 - _handsFreeHoldMs) / 1000).toStringAsFixed(1)}s)...',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF34D399),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _telemetryChip({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String status,
+    required bool isOk,
+  }) {
+    final color = isOk ? const Color(0xFF10B981) : const Color(0xFFF59E0B);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                color: Colors.white.withValues(alpha: 0.5),
+                letterSpacing: 0.8,
+              ),
+            ),
+            Row(
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   /// Overlay de Escaneo (Paso 1)
   Widget _buildScanningOverlay(BuildContext context) {
+    final telemetry = FittingTelemetry.evaluate(
+      angle: _angleState,
+      distance: _distanceState,
+    );
+
     return Positioned.fill(
       child: SafeArea(
         child: Column(
@@ -780,10 +1039,10 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'Párate a ~1.8 metros y alinea tus hombros',
+                    Text(
+                      telemetry.guidanceHeadline,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -809,10 +1068,15 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Detectando torso...',
+                          telemetry.isCalibrated ? '¡Alineación fija!' : 'Detectando torso...',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
+                            color: telemetry.isCalibrated
+                                ? const Color(0xFF34D399)
+                                : Colors.white.withValues(alpha: 0.6),
                             fontSize: 12,
+                            fontWeight: telemetry.isCalibrated
+                                ? FontWeight.w800
+                                : FontWeight.w500,
                           ),
                         ),
                         Text(

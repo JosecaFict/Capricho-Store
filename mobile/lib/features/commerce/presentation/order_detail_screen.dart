@@ -119,7 +119,7 @@ class OrderDetailScreen extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.qr_code_rounded, color: AppColors.cobaltDark, size: 22),
+                      const Icon(Icons.storefront_rounded, color: AppColors.cobaltDark, size: 22),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(

@@ -1453,16 +1453,6 @@ type ReservationTab =
                     <strong class="payment-method-title">Tarjeta (POS)</strong>
                     <span class="payment-method-desc">Débito / Crédito</span>
                   </button>
-                  <button
-                    type="button"
-                    class="payment-method-card"
-                    [class.is-selected]="paymentMethod() === 'QR'"
-                    (click)="paymentMethod.set('QR')"
-                  >
-                    <span class="payment-method-icon">📱</span>
-                    <strong class="payment-method-title">Pago QR</strong>
-                    <span class="payment-method-desc">Simple / Transferencia</span>
-                  </button>
                 </div>
               </div>
 
@@ -1534,27 +1524,6 @@ type ReservationTab =
                     />
                   </div>
                 </div>
-              } @else if (paymentMethod() === 'QR') {
-                <div class="checkout-method-detail qr-detail-box">
-                  <div class="qr-info-banner">
-                    <span class="qr-icon">📱</span>
-                    <div>
-                      <strong>Cobro vía Código QR (Simple / Banco)</strong>
-                      <p>Muestre el código QR al cliente para que realice la transferencia por el total exacto ({{ totalEstimated(res) | bolivianos }}). Compruebe la recepción en la app del banco antes de confirmar.</p>
-                    </div>
-                  </div>
-                  <div class="ref-input-group">
-                    <label for="qr-reference-input">Referencia o N° de Comprobante QR (Opcional)</label>
-                    <input
-                      id="qr-reference-input"
-                      type="text"
-                      class="ref-input"
-                      placeholder="Ej: TRANSF-55829 o N° de operación bancaria"
-                      [ngModel]="qrReference()"
-                      (ngModelChange)="qrReference.set($event)"
-                    />
-                  </div>
-                </div>
               }
             </div>
 
@@ -1604,10 +1573,9 @@ export class ReservationsAdmin {
   readonly formatBranchName = formatBranchName;
 
   readonly checkoutReservation = signal<Reservation | null>(null);
-  readonly paymentMethod = signal<'EFECTIVO' | 'TARJETA' | 'QR'>('EFECTIVO');
+  readonly paymentMethod = signal<'EFECTIVO' | 'TARJETA'>('EFECTIVO');
   readonly amountReceived = signal<number>(0);
   readonly cardReference = signal<string>('');
-  readonly qrReference = signal<string>('');
 
   readonly changeAmount = computed(() => {
     const res = this.checkoutReservation();
@@ -1843,7 +1811,6 @@ export class ReservationsAdmin {
     const total = this.totalEstimated(res);
     this.amountReceived.set(total);
     this.cardReference.set('');
-    this.qrReference.set('');
     this.error.set('');
   }
 
@@ -1863,14 +1830,12 @@ export class ReservationsAdmin {
     this.amountReceived.set(current + extra);
   }
 
-  paymentMethodLabel(m: 'EFECTIVO' | 'TARJETA' | 'QR'): string {
+  paymentMethodLabel(m: 'EFECTIVO' | 'TARJETA'): string {
     switch (m) {
       case 'EFECTIVO':
         return 'Efectivo';
       case 'TARJETA':
         return 'Tarjeta (POS)';
-      case 'QR':
-        return 'Pago QR';
     }
   }
 
@@ -1892,8 +1857,6 @@ export class ReservationsAdmin {
     let ref: string | null = null;
     if (method === 'TARJETA') {
       ref = this.cardReference().trim() || null;
-    } else if (method === 'QR') {
-      ref = this.qrReference().trim() || null;
     }
 
     const payload = {
