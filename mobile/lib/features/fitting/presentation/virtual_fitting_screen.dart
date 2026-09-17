@@ -84,11 +84,22 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     _initCamera();
   }
 
+  DateTime _lastAngleUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _initSensors() {
     try {
       _accelerometerSub = accelerometerEventStream().listen(
         (event) {
           if (!mounted) return;
+          // Si ya no está en escaneo, no consumir recursos de UI
+          if (_currentStep != FittingStep.scanning) return;
+
+          final now = DateTime.now();
+          if (now.difference(_lastAngleUpdate).inMilliseconds < 90) {
+            return; // Throttling a ~11 FPS para evitar congelar la interfaz
+          }
+          _lastAngleUpdate = now;
+
           final newAngle = DeviceAngleState.fromAccelerometer(
             x: event.x,
             y: event.y,
@@ -97,7 +108,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
           // Taptic Engine feedback al alcanzar 90° (vertical recto)
           if (newAngle.isVerticalAligned && !_wasAngleAligned) {
-            HapticFeedback.mediumImpact();
+            HapticFeedback.selectionClick();
             _wasAngleAligned = true;
           } else if (!newAngle.isVerticalAligned) {
             _wasAngleAligned = false;
@@ -164,6 +175,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   void _startScanSequence() {
     if (_isAnalyzingPose) return;
     _scanTimer?.cancel();
+    _scanAnimationController.repeat(reverse: true);
     setState(() {
       _currentStep = FittingStep.scanning;
       _scanProgress = 0.0;
@@ -236,6 +248,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           final ratio = (rawResult['shoulderRatio'] as num?)?.toDouble() ?? 0.45;
 
           HapticFeedback.heavyImpact(); // Taptic Engine Success
+          _scanAnimationController.stop();
           setState(() {
             _userShouldersCm = estimatedCm;
             _distanceState = UserDistanceState.fromShoulderRatio(ratio);
