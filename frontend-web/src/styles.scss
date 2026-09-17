@@ -653,6 +653,26 @@ h3 {
   margin-inline: auto;
   padding-block: 3rem;
 }
+.auth-brand-header {
+  margin-bottom: 1.25rem;
+}
+.auth-brand-link {
+  display: inline-block;
+  text-decoration: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+
+  &:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+  }
+}
+.auth-brand-logo {
+  height: 64px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+  display: block;
+}
 .auth-panel h1 {
   margin-bottom: 1rem;
   font-size: clamp(2.6rem, 5vw, 4rem);

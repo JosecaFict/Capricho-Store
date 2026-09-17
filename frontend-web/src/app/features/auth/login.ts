@@ -27,8 +27,12 @@ export function resolveLoginDestination(user: UserResponse, returnUrl: string | 
       </div>
       <div class="auth-panel">
         <a class="back-link" routerLink="/">Volver al inicio</a>
-        <h1>Bienvenido de nuevo</h1>
-        <p>Ingresa para consultar tu cuenta de Capricho Store.</p>
+        <div class="auth-brand-header">
+          <a routerLink="/" class="auth-brand-link" aria-label="Capricho Store">
+            <img src="/images/logo-capricho.png" alt="Capricho Store" class="auth-brand-logo" />
+          </a>
+        </div>
+        <h1>Bienvenido a Capricho Store</h1>
         @if (registrationComplete()) {
           <div class="notice notice--success" role="status">
             Tu cuenta fue creada. Ya puedes ingresar.
