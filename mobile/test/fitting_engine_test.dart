@@ -31,7 +31,7 @@ void main() {
       ),
     ];
 
-    test('recomienda talla M con alta confianza para hombros de 44cm', () {
+    test('recomienda talla M directamente para hombros de 44cm', () {
       final rec = FittingEngine.evaluate(
         measurements: sampleMeasurements,
         availableSizes: ['S', 'M', 'L'],
@@ -40,8 +40,6 @@ void main() {
 
       expect(rec.recommendedSize, 'M');
       expect(rec.confidence, greaterThanOrEqualTo(90));
-      expect(rec.alternativeSize, 'L');
-      expect(rec.alternativeNote, contains('look holgado / oversize'));
       expect(rec.sizeScales['M'], 1.0);
       expect(rec.sizeScales['L'], greaterThan(1.0));
       expect(rec.sizeScales['S'], lessThan(1.0));
@@ -66,7 +64,7 @@ void main() {
       );
 
       expect(rec.recommendedSize, 'S');
-      expect(rec.alternativeSize, 'M');
+      expect(rec.confidence, greaterThanOrEqualTo(90));
     });
 
     test('maneja lista vacía de medidas usando hombros estándar', () {

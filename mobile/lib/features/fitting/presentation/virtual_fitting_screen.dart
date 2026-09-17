@@ -69,7 +69,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
   // Parámetros de anatomía y calce
   double _userShouldersCm = 44.0;
-  String _preferredFit = 'REGULAR'; // SLIM, REGULAR, OVERSIZE
 
   late String _activeSize;
   late String _activeColor;
@@ -124,11 +123,11 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
         return;
       }
 
-      final isCalibrated =
-          _angleState.isVerticalAligned && _distanceState.isDistanceOptimal;
+      if (_isAnalyzingPose) return;
+      final isCalibrated = _angleState.isVerticalAligned;
       if (isCalibrated) {
         _handsFreeHoldMs += 100;
-        if (_handsFreeHoldMs >= 1500) {
+        if (_handsFreeHoldMs >= 2000) {
           _handsFreeHoldMs = 0;
           HapticFeedback.heavyImpact(); // Taptic Engine Lock
           _analyzeRealPoseFromCamera();
@@ -163,6 +162,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   String? _poseDetectionError;
 
   void _startScanSequence() {
+    if (_isAnalyzingPose) return;
     _scanTimer?.cancel();
     setState(() {
       _currentStep = FittingStep.scanning;
@@ -176,11 +176,17 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     int elapsedMs = 0;
 
     _scanTimer = Timer.periodic(tickDuration, (timer) {
-      elapsedMs += tickDuration.inMilliseconds;
       if (!mounted) {
         timer.cancel();
         return;
       }
+
+      // Solo avanzar la cuenta si el visto bueno verde está activo
+      if (!_angleState.isVerticalAligned) {
+        return;
+      }
+
+      elapsedMs += tickDuration.inMilliseconds;
 
       final progress = (elapsedMs / totalDurationMs).clamp(0.0, 1.0);
       final remaining = ((totalDurationMs - elapsedMs) / 1000).ceil();
@@ -312,7 +318,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
       measurements: widget.measurements,
       availableSizes: sizes,
       userShouldersCm: _userShouldersCm,
-      preferredFit: _preferredFit,
     );
 
     _activeSize = _recommendation.recommendedSize;
@@ -607,40 +612,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       },
                     ),
 
-                    const SizedBox(height: 16),
-
-                    // Selector de Fit preferido
-                    const Text(
-                      'Preferencia de Calce / Estilo:',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        _fitChip(
-                          label: 'Slim / Ceñido',
-                          value: 'SLIM',
-                          setModalState: setModalState,
-                        ),
-                        const SizedBox(width: 8),
-                        _fitChip(
-                          label: 'Regular',
-                          value: 'REGULAR',
-                          setModalState: setModalState,
-                        ),
-                        const SizedBox(width: 8),
-                        _fitChip(
-                          label: 'Oversize',
-                          value: 'OVERSIZE',
-                          setModalState: setModalState,
-                        ),
-                      ],
-                    ),
-
                     const SizedBox(height: 24),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
@@ -653,7 +624,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       onPressed: () => Navigator.pop(ctx),
                       icon: const Icon(Icons.check_circle_rounded, size: 18),
                       label: const Text(
-                        'Aplicar Calibración',
+                        'Aplicar Medidas',
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -664,50 +635,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           },
         );
       },
-    );
-  }
-
-  Widget _fitChip({
-    required String label,
-    required String value,
-    required StateSetter setModalState,
-  }) {
-    final isSelected = _preferredFit == value;
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          setModalState(() => _preferredFit = value);
-          setState(() {
-            _preferredFit = value;
-            _recalculateFit();
-          });
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.cobalt
-                : Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected ? Colors.white : Colors.transparent,
-              width: 1.2,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white70,
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -1056,10 +983,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
   /// Overlay de Escaneo (Paso 1)
   Widget _buildScanningOverlay(BuildContext context) {
-    final telemetry = FittingTelemetry.evaluate(
-      angle: _angleState,
-      distance: _distanceState,
-    );
+    final isGreen = _angleState.isVerticalAligned;
 
     return Positioned.fill(
       child: SafeArea(
@@ -1067,39 +991,53 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           children: [
             const SizedBox(height: 70),
 
-            // Badge de Escaneo Activo
+            // Badge Superior de Estado Dinámico (Verde cuando está listo)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.7),
+                color: isGreen
+                    ? const Color(0xFF0F172A).withValues(alpha: 0.9)
+                    : Colors.black.withValues(alpha: 0.75),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF38BDF8), width: 1.5),
+                border: Border.all(
+                  color: isGreen
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B),
+                  width: 1.5,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+                    color: isGreen
+                        ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                        : const Color(0xFFF59E0B).withValues(alpha: 0.2),
                     blurRadius: 14,
                   ),
                 ],
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF38BDF8),
-                    ),
+                  Icon(
+                    isGreen
+                        ? Icons.check_circle_rounded
+                        : Icons.screen_rotation_rounded,
+                    color: isGreen
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFF59E0B),
+                    size: 16,
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Text(
-                    'ESCANEANDO PROPORCIONES',
+                    isGreen
+                        ? 'VISTO BUENO: TELÉFONO A 90° LISTO'
+                        : '1. COLOCA EL TELÉFONO VERTICAL A 90°',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: isGreen
+                          ? const Color(0xFF34D399)
+                          : Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 1.1,
+                      letterSpacing: 0.9,
                     ),
                   ),
                 ],
@@ -1108,20 +1046,25 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
             const Spacer(),
 
-            // Tarjeta inferior de estado de escaneo
+            // Tarjeta inferior de estado y control de escaneo
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A).withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(22),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    color: isGreen
+                        ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                        : Colors.white.withValues(alpha: 0.15),
+                    width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.6),
+                      color: isGreen
+                          ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                          : Colors.black.withValues(alpha: 0.6),
                       blurRadius: 20,
                     ),
                   ],
@@ -1129,8 +1072,11 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Texto guía principal
                     Text(
-                      telemetry.guidanceHeadline,
+                      isGreen
+                          ? '¡Posición lista! Persona de pie a ~1.7 metros'
+                          : 'Alinea el teléfono a 90° para habilitar el escaneo',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white,
@@ -1138,7 +1084,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
                     // Estado de análisis con Apple Vision
                     if (_isAnalyzingPose) ...[
@@ -1157,7 +1103,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                             ),
                             SizedBox(width: 12),
                             Text(
-                              'Analizando silueta con Apple Vision...',
+                              'Analizando silueta en Apple Neural Engine...',
                               style: TextStyle(
                                 color: Color(0xFF38BDF8),
                                 fontSize: 13,
@@ -1207,8 +1153,30 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       ),
                     ],
 
-                    // Barra de progreso si temporizador está activo
-                    if (_scanProgress > 0) ...[
+                    // Progreso automático manos libres o temporizador activo
+                    if (isGreen && _handsFreeHoldMs > 0) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: (_handsFreeHoldMs / 2000).clamp(0.0, 1.0),
+                          minHeight: 8,
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF10B981),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Mantén la postura: ${((2000 - _handsFreeHoldMs) / 1000).toStringAsFixed(1)}s para disparo automático...',
+                        style: const TextStyle(
+                          color: Color(0xFF34D399),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ] else if (_scanProgress > 0) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: LinearProgressIndicator(
@@ -1220,40 +1188,37 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            telemetry.isCalibrated ? '¡Alineación fija!' : 'Detectando torso...',
-                            style: TextStyle(
-                              color: telemetry.isCalibrated
-                                  ? const Color(0xFF34D399)
-                                  : Colors.white.withValues(alpha: 0.6),
-                              fontSize: 12,
-                              fontWeight: telemetry.isCalibrated
-                                  ? FontWeight.w800
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            '${_scanSecondsRemaining}s',
-                            style: const TextStyle(
-                              color: Color(0xFF38BDF8),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 6),
+                      Text(
+                        'Escaneando en ${_scanSecondsRemaining}s...',
+                        style: const TextStyle(
+                          color: Color(0xFF38BDF8),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                     ],
 
-                    // Botón Principal de Captura y Análisis
+                    // Botón Principal de Escaneo
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: _isAnalyzingPose ? null : _analyzeRealPoseFromCamera,
+                        onPressed: _isAnalyzingPose
+                            ? null
+                            : () {
+                                if (!isGreen) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Coloca el teléfono vertical a 90° para obtener el visto bueno.'),
+                                      backgroundColor: Color(0xFF0F172A),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                _analyzeRealPoseFromCamera();
+                              },
                         icon: _isAnalyzingPose
                             ? const SizedBox(
                                 width: 16,
@@ -1263,13 +1228,18 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                                   color: Colors.white,
                                 ),
                               )
-                            : const Icon(Icons.camera_rounded, size: 20),
+                            : Icon(
+                                isGreen
+                                    ? Icons.camera_rounded
+                                    : Icons.screen_rotation_rounded,
+                                size: 20,
+                              ),
                         label: Text(
                           _isAnalyzingPose
                               ? 'Procesando en A17 Pro...'
-                              : (_poseDetectionError != null
-                                  ? 'Reintentar Captura'
-                                  : 'Capturar y Medir Silueta'),
+                              : (isGreen
+                                  ? 'Escanear Silueta Ahora'
+                                  : 'Esperando Posición a 90°...'),
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
@@ -1277,8 +1247,10 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                           ),
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.cobalt,
-                          disabledBackgroundColor: AppColors.cobalt.withValues(alpha: 0.5),
+                          backgroundColor: isGreen
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF334155),
+                          disabledBackgroundColor: const Color(0xFF334155),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -1287,14 +1259,28 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       ),
                     ),
 
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
 
                     // Opciones secundarias
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         TextButton.icon(
-                          onPressed: _isAnalyzingPose ? null : _startScanSequence,
+                          onPressed: _isAnalyzingPose
+                              ? null
+                              : () {
+                                  if (!isGreen) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Coloca el teléfono a 90° para iniciar el temporizador.'),
+                                        backgroundColor: Color(0xFF0F172A),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  _startScanSequence();
+                                },
                           icon: const Icon(Icons.timer_outlined, size: 16, color: Colors.white70),
                           label: const Text(
                             'Temporizador (3s)',
@@ -1376,7 +1362,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          '¡Detección Completada!',
+                          '¡Talla Confirmada!',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -1384,7 +1370,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                           ),
                         ),
                         Text(
-                          'Calculado con las medidas de la prenda',
+                          'Medida exacta para esta polera',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.65),
                             fontSize: 11.5,
@@ -1420,7 +1406,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'TALLA RECOMENDADA',
+                          'TALLA CONFIRMADA',
                           style: TextStyle(
                             color: Color(0xFF34D399),
                             fontSize: 11,
@@ -1472,18 +1458,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                   height: 1.3,
                 ),
               ),
-
-              if (_recommendation.alternativeNote != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '• ${_recommendation.alternativeNote}',
-                  style: const TextStyle(
-                    color: Color(0xFF38BDF8),
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-              ],
 
               const SizedBox(height: 20),
 
