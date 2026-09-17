@@ -21,7 +21,7 @@ export function resolveLoginDestination(user: UserResponse, returnUrl: string | 
   selector: 'app-login',
   imports: [ReactiveFormsModule, RouterLink, PasswordField],
   template: `
-    <section class="auth-page">
+    <section class="auth-page auth-page--login">
       <div class="auth-visual" aria-hidden="true">
         <img src="/images/acceso-hombre-polo.jpg" alt="" />
       </div>
