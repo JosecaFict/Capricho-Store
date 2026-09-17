@@ -83,7 +83,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     _initAnimation();
     _initSensors();
     _initCamera();
-    _startScanSequence();
   }
 
   void _initSensors() {
@@ -132,7 +131,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
         if (_handsFreeHoldMs >= 1500) {
           _handsFreeHoldMs = 0;
           HapticFeedback.heavyImpact(); // Taptic Engine Lock
-          _completeScan();
+          _analyzeRealPoseFromCamera();
         }
         setState(() {});
       } else {
@@ -159,12 +158,17 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     _scanAnimationController.repeat(reverse: true);
   }
 
+  static const _poseChannel = MethodChannel('com.capricho.store/body_pose');
+  bool _isAnalyzingPose = false;
+  String? _poseDetectionError;
+
   void _startScanSequence() {
     _scanTimer?.cancel();
     setState(() {
       _currentStep = FittingStep.scanning;
       _scanProgress = 0.0;
       _scanSecondsRemaining = 3;
+      _poseDetectionError = null;
     });
 
     const tickDuration = Duration(milliseconds: 100);
@@ -192,13 +196,99 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
       if (elapsedMs >= totalDurationMs) {
         timer.cancel();
-        _completeScan();
+        _analyzeRealPoseFromCamera();
       }
     });
   }
 
-  void _completeScan() {
-    HapticFeedback.heavyImpact();
+  Future<void> _analyzeRealPoseFromCamera() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+    if (_isAnalyzingPose) return;
+
+    setState(() {
+      _isAnalyzingPose = true;
+      _poseDetectionError = null;
+    });
+
+    try {
+      // 1. Capturar un cuadro de alta fidelidad con la cámara del iPhone
+      final xfile = await _cameraController!.takePicture();
+
+      // 2. Ejecutar Apple Vision Framework nativo en el A17 Pro
+      final dynamic rawResult = await _poseChannel.invokeMethod('detectPose', {
+        'imagePath': xfile.path,
+      });
+
+      if (!mounted) return;
+
+      if (rawResult is Map) {
+        final detected = rawResult['detected'] as bool? ?? false;
+        if (detected) {
+          final estimatedCm = (rawResult['estimatedShouldersCm'] as num?)?.toDouble() ?? 44.0;
+          final ratio = (rawResult['shoulderRatio'] as num?)?.toDouble() ?? 0.45;
+
+          HapticFeedback.heavyImpact(); // Taptic Engine Success
+          setState(() {
+            _userShouldersCm = estimatedCm;
+            _distanceState = UserDistanceState.fromShoulderRatio(ratio);
+            _currentStep = FittingStep.diagnosis;
+            _recalculateFit();
+            _isAnalyzingPose = false;
+            _poseDetectionError = null;
+          });
+          return;
+        } else {
+          // No se detectó persona (ej. piso, zapatos, pared vacía o persona sentada de lado)
+          final message = rawResult['message'] as String? ??
+              'No se detectó un torso humano de frente. Párate erguido a ~1.7 metros.';
+          HapticFeedback.mediumImpact();
+
+          setState(() {
+            _isAnalyzingPose = false;
+            _poseDetectionError = message;
+            _scanProgress = 0.0;
+            _scanSecondsRemaining = 3;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF0F172A),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error analizando silueta con Apple Vision: $e');
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isAnalyzingPose = false;
+        _poseDetectionError =
+            'No se pudo completar el análisis de silueta ($e). Asegúrate de encuadrar de pie a ~1.7m.';
+      });
+    }
+  }
+
+  void _skipScanManual() {
+    _scanTimer?.cancel();
+    HapticFeedback.selectionClick();
     setState(() {
       _currentStep = FittingStep.diagnosis;
       _recalculateFit();
@@ -1048,55 +1138,184 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
 
-                    // Barra de progreso animada
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: _scanProgress,
-                        minHeight: 8,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF38BDF8),
+                    // Estado de análisis con Apple Vision
+                    if (_isAnalyzingPose) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Color(0xFF38BDF8),
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              'Analizando silueta con Apple Vision...',
+                              style: TextStyle(
+                                color: Color(0xFF38BDF8),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // Alerta si falló la detección (ej. piso, zapatos, sin persona)
+                    if (_poseDetectionError != null) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.6),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Color(0xFFF87171),
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _poseDetectionError!,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // Barra de progreso si temporizador está activo
+                    if (_scanProgress > 0) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: _scanProgress,
+                          minHeight: 8,
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF38BDF8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            telemetry.isCalibrated ? '¡Alineación fija!' : 'Detectando torso...',
+                            style: TextStyle(
+                              color: telemetry.isCalibrated
+                                  ? const Color(0xFF34D399)
+                                  : Colors.white.withValues(alpha: 0.6),
+                              fontSize: 12,
+                              fontWeight: telemetry.isCalibrated
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            '${_scanSecondsRemaining}s',
+                            style: const TextStyle(
+                              color: Color(0xFF38BDF8),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+
+                    // Botón Principal de Captura y Análisis
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _isAnalyzingPose ? null : _analyzeRealPoseFromCamera,
+                        icon: _isAnalyzingPose
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.camera_rounded, size: 20),
+                        label: Text(
+                          _isAnalyzingPose
+                              ? 'Procesando en A17 Pro...'
+                              : (_poseDetectionError != null
+                                  ? 'Reintentar Captura'
+                                  : 'Capturar y Medir Silueta'),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.cobalt,
+                          disabledBackgroundColor: AppColors.cobalt.withValues(alpha: 0.5),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
+
+                    // Opciones secundarias
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          telemetry.isCalibrated ? '¡Alineación fija!' : 'Detectando torso...',
-                          style: TextStyle(
-                            color: telemetry.isCalibrated
-                                ? const Color(0xFF34D399)
-                                : Colors.white.withValues(alpha: 0.6),
-                            fontSize: 12,
-                            fontWeight: telemetry.isCalibrated
-                                ? FontWeight.w800
-                                : FontWeight.w500,
+                        TextButton.icon(
+                          onPressed: _isAnalyzingPose ? null : _startScanSequence,
+                          icon: const Icon(Icons.timer_outlined, size: 16, color: Colors.white70),
+                          label: const Text(
+                            'Temporizador (3s)',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
                           ),
                         ),
-                        Text(
-                          '${_scanSecondsRemaining}s',
-                          style: const TextStyle(
-                            color: Color(0xFF38BDF8),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                        TextButton(
+                          onPressed: _skipScanManual,
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            foregroundColor: Colors.white60,
+                          ),
+                          child: const Text(
+                            'Calibrar manual',
+                            style: TextStyle(fontSize: 12),
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: _completeScan,
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: Colors.white70,
-                      ),
-                      child: const Text('Omitir escaneo'),
                     ),
                   ],
                 ),

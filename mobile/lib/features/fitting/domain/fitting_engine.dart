@@ -96,13 +96,25 @@ class FittingEngine {
       bestConfidence = 82;
     }
 
-    // Evaluar alternativa oversize
+    // Evaluar alternativa oversize (siempre la siguiente talla MAYOR en la escala)
     String? altSize;
     String? altNote;
-    final currentIndex = availableSizes.indexOf(bestSize);
-    if (currentIndex != -1 && currentIndex + 1 < availableSizes.length) {
-      altSize = availableSizes[currentIndex + 1];
-      altNote = 'Si prefieres un look holgado / oversize, prueba la talla $altSize.';
+    const sizeHierarchy = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    final bestUpper = bestSize.toUpperCase();
+    final hierarchyIndex = sizeHierarchy.indexOf(bestUpper);
+    if (hierarchyIndex != -1) {
+      for (int i = hierarchyIndex + 1; i < sizeHierarchy.length; i++) {
+        final target = sizeHierarchy[i];
+        final match = availableSizes.firstWhere(
+          (s) => s.toUpperCase() == target,
+          orElse: () => '',
+        );
+        if (match.isNotEmpty) {
+          altSize = match;
+          altNote = 'Si prefieres un look holgado / oversize, prueba la talla $altSize.';
+          break;
+        }
+      }
     }
 
     // Armar escalas relativas para visualización en vivo
