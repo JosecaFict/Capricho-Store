@@ -8,7 +8,11 @@ import {
   OnInit,
   signal,
   computed,
+  DestroyRef,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { timer } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 import { RouterLink } from '@angular/router';
 import { OperationalNotification } from '../../../core/models/commerce.model';
 import { CommerceService } from '../../../core/services/commerce.service';
@@ -137,6 +141,7 @@ import { CommerceService } from '../../../core/services/commerce.service';
 export class NotificationBell implements OnInit {
   private readonly commerce = inject(CommerceService);
   private readonly elementRef = inject(ElementRef);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly mode = input<'public' | 'admin'>('public');
 
@@ -146,9 +151,10 @@ export class NotificationBell implements OnInit {
 
   readonly recentItems = computed(() => this.items().slice(0, 5));
   readonly unreadCount = computed(() => {
-    // Cuenta elementos recibidos en las últimas 48 horas como recientes
+    // Cuenta elementos no leídos recibidos en las últimas 48 horas como recientes
     const cutoff = Date.now() - 48 * 60 * 60 * 1000;
     return this.items().filter((item) => {
+      if (item.estado === 'LEIDO') return false;
       const ts = new Date(item.fecha_creacion).getTime();
       return ts > cutoff;
     }).length;
@@ -159,7 +165,18 @@ export class NotificationBell implements OnInit {
   );
 
   ngOnInit(): void {
-    this.loadNotifications();
+    // Sondeo periódico cada 15 segundos para refrescar la campana en vivo sin recargar página
+    timer(0, 15000)
+      .pipe(
+        switchMap(() => this.commerce.notifications()),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (list) => {
+          this.items.set(list || []);
+        },
+        error: () => {},
+      });
   }
 
   toggle(): void {
