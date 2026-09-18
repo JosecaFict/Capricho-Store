@@ -85,6 +85,9 @@ class FcmService {
             debugPrint('🔥 FCM Token: $_fcmToken');
             debugPrint('====================================');
           }
+          if (_cachedApi != null) {
+            await syncTokenWithBackend(_cachedApi!);
+          }
         }
       } catch (tokenError) {
         developer.log('Error al obtener FCM token: $tokenError', name: 'FCM');
@@ -152,8 +155,19 @@ class FcmService {
   /// Sincroniza el token del dispositivo con el backend
   Future<void> syncTokenWithBackend(CommerceApi api) async {
     _cachedApi = api;
-    final token = _fcmToken;
-    if (token == null || token.isEmpty) return;
+    var token = _fcmToken;
+    if (token == null || token.isEmpty) {
+      try {
+        token = await FirebaseMessaging.instance.getToken();
+        _fcmToken = token;
+      } catch (e) {
+        developer.log('Esperando resolución de token FCM: $e', name: 'FCM');
+      }
+    }
+    if (token == null || token.isEmpty) {
+      developer.log('Token FCM aún no disponible para sincronizar', name: 'FCM');
+      return;
+    }
 
     try {
       final platform =
@@ -164,7 +178,7 @@ class FcmService {
         deviceInfo: '${defaultTargetPlatform.name.toUpperCase()} Device',
       );
       developer.log(
-        'Token FCM registrado en backend correctamente',
+        'Token FCM registrado en backend correctamente: ${token.substring(0, token.length > 15 ? 15 : token.length)}...',
         name: 'FCM',
       );
     } catch (e) {

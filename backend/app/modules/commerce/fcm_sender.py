@@ -25,6 +25,16 @@ class FcmPushSender:
                 self._initialized = True
                 logger.info("Firebase Admin inicializado con certificado: %s", self.service_account_path)
                 return True
+            elif os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"):
+                import json
+                raw_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+                if raw_json:
+                    cred_dict = json.loads(raw_json)
+                    cred = credentials.Certificate(cred_dict)
+                    firebase_admin.initialize_app(cred)
+                    self._initialized = True
+                    logger.info("Firebase Admin inicializado desde FIREBASE_SERVICE_ACCOUNT_JSON")
+                    return True
             elif os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
                 firebase_admin.initialize_app()
                 self._initialized = True

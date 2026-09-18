@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:capricho_store/core/notifications/fcm_service.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/commerce/data/commerce_api.dart';
 import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
@@ -7,11 +11,43 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class OrdersScreen extends ConsumerWidget {
+class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends ConsumerState<OrdersScreen> {
+  Timer? _pollingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sondeo automático cada 5 segundos para actualizar el estado del pedido en tiempo real
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) {
+        ref.read(ordersProvider.notifier).refresh();
+      }
+    });
+
+    // Asegurar registro de token FCM en backend si aún no se había enviado
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final api = ref.read(commerceApiProvider);
+        FcmService().syncTokenWithBackend(api);
+      } catch (_) {}
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ordersAsync = ref.watch(ordersProvider);
 
     return Scaffold(

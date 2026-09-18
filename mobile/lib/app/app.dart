@@ -37,6 +37,7 @@ class _CaprichoStoreAppState extends ConsumerState<CaprichoStoreApp> {
     _foregroundMessageSub = FcmService().onForegroundMessage.listen((message) {
       HapticFeedback.mediumImpact();
       ref.read(notificationsProvider.notifier).refresh();
+      ref.read(ordersProvider.notifier).refresh();
 
       final route = FcmService.extractRoute(message);
       final title = message.notification?.title ?? 'Notificación';
