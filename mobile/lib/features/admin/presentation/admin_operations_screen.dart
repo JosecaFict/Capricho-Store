@@ -676,7 +676,7 @@ class _AdminOperationsScreenState extends ConsumerState<AdminOperationsScreen> {
   Widget _buildStoreOrdersTab(AppUser user) {
     final filter = AdminOrderFilter(
       estado: _orderStatusFilter,
-      sucursal: user.isAdmin ? _orderBranchFilter : null,
+      sucursal: user.isAdmin ? _orderBranchFilter : user.idSucursal,
     );
     final ordersAsync = ref.watch(adminOrdersProvider(filter));
     final branchesAsync = user.isAdmin ? ref.watch(adminBranchesProvider) : null;
@@ -710,6 +710,51 @@ class _AdminOperationsScreenState extends ConsumerState<AdminOperationsScreen> {
           ),
           const SizedBox(height: 10),
 
+          // Badge de sucursal asignada para colaboradores
+          if (!user.isAdmin && user.hasBranchAssigned)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lock_outline_rounded, size: 16, color: AppColors.cobalt),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Pedidos de ${user.branchName ?? 'Sucursal #${user.idSucursal}'}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.cobalt.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'Asignada',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.cobalt,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Selector de sucursal para Administrador (soporte multisucursal en saturación)
           if (user.isAdmin && branchesAsync != null)
             branchesAsync.when(
@@ -735,12 +780,12 @@ class _AdminOperationsScreenState extends ConsumerState<AdminOperationsScreen> {
                           isDense: true,
                         ),
                         items: [
-                          const DropdownMenuItem<int?>(
+                          const DropdownMenuItem(
                             value: null,
-                            child: Text('Todas las sucursales (Global)'),
+                            child: Text('Todas las sucursales'),
                           ),
                           ...branches.map(
-                            (b) => DropdownMenuItem<int?>(
+                            (b) => DropdownMenuItem(
                               value: b.id,
                               child: Text(
                                 b.name,

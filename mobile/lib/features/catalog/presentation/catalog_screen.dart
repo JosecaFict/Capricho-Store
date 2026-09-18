@@ -1,4 +1,5 @@
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/catalog/data/catalog_repository.dart';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_card_pressable.dart';
@@ -32,6 +33,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   @override
   void initState() {
     super.initState();
+    final user = ref.read(authControllerProvider).user;
+    if (user != null && user.isBranchLocked) {
+      query = CatalogQuery(branchId: user.idSucursal);
+    }
     _loadMetadata();
     request = _load();
   }
@@ -79,13 +84,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   Future<void> _openFiltersSheet() async {
+    final user = ref.read(authControllerProvider).user;
+    final isLocked = user != null && user.isBranchLocked;
     var tempCategory = query.category;
     var tempAudience = query.audience;
     var tempBrand = query.brand;
     var tempSize = query.size;
     var tempColor = query.color;
     var tempSeason = query.season;
-    var tempBranchId = query.branchId;
+    var tempBranchId = isLocked ? user.idSucursal : query.branchId;
     var tempFittingEnabled = query.fittingEnabled;
 
     final result = await showModalBottomSheet<CatalogQuery>(
@@ -124,7 +131,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           tempSize = null;
                           tempColor = null;
                           tempSeason = null;
-                          tempBranchId = null;
+                          tempBranchId = isLocked ? user.idSucursal : null;
                           tempFittingEnabled = null;
                         });
                       },
@@ -176,34 +183,85 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 // Sucursal (Filtro por tienda física)
                 if (_availableBranches.isNotEmpty) ...[
                   _buildFilterLabel('Sucursal'),
-                  DropdownButtonFormField<int?>(
-                    initialValue: tempBranchId,
-                    decoration: const InputDecoration(
-                      hintText: 'Todas las sucursales',
-                      prefixIcon: Icon(Icons.storefront_outlined),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Todas las sucursales'),
+                  if (isLocked)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
                       ),
-                      ..._availableBranches.map(
-                        (b) => DropdownMenuItem(
-                          value: b.id,
-                          child: Text(
-                            b.address.isNotEmpty
-                                ? '${b.name} (${b.address})'
-                                : b.name,
-                            overflow: TextOverflow.ellipsis,
+                      decoration: BoxDecoration(
+                        color: AppColors.canvas,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.line),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.lock_outline_rounded,
+                            size: 18,
+                            color: AppColors.inkSoft,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              user.branchName ?? 'Sucursal #${user.idSucursal}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.cobalt.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'Asignada',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.cobalt,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<int?>(
+                      initialValue: tempBranchId,
+                      decoration: const InputDecoration(
+                        hintText: 'Todas las sucursales',
+                        prefixIcon: Icon(Icons.storefront_outlined),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: null,
+                          child: Text('Todas las sucursales'),
+                        ),
+                        ..._availableBranches.map(
+                          (b) => DropdownMenuItem(
+                            value: b.id,
+                            child: Text(
+                              b.address.isNotEmpty
+                                  ? '${b.name} (${b.address})'
+                                  : b.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      HapticFeedback.selectionClick();
-                      setSheetState(() => tempBranchId = val);
-                    },
-                  ),
+                      ],
+                      onChanged: (val) {
+                        HapticFeedback.selectionClick();
+                        setSheetState(() => tempBranchId = val);
+                      },
+                    ),
                   const SizedBox(height: 18),
                 ],
 
@@ -770,6 +828,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           if (query.branchId != null) ...[
             Builder(
               builder: (context) {
+                final user = ref.watch(authControllerProvider).user;
+                final isLocked = user != null && user.isBranchLocked;
                 final match = _availableBranches.cast<BranchItem?>().firstWhere(
                   (b) => b?.id == query.branchId,
                   orElse: () => null,
@@ -780,10 +840,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Chip(
-                    avatar: const Icon(Icons.storefront_outlined, size: 16),
-                    label: Text(name),
-                    onDeleted: () =>
-                        _setQuery(query.copyWith(clearBranch: true, page: 1)),
+                    avatar: Icon(
+                      isLocked
+                          ? Icons.lock_outline_rounded
+                          : Icons.storefront_outlined,
+                      size: 16,
+                      color: isLocked ? AppColors.cobalt : null,
+                    ),
+                    label: Text(isLocked ? '$name (Asignada)' : name),
+                    onDeleted: isLocked
+                        ? null
+                        : () => _setQuery(
+                            query.copyWith(clearBranch: true, page: 1),
+                          ),
                   ),
                 );
               },

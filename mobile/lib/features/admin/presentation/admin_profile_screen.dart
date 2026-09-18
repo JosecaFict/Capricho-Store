@@ -151,6 +151,12 @@ class AdminProfileScreen extends ConsumerWidget {
                 _InfoRow(label: 'Nombres', value: user.names),
                 _InfoRow(label: 'Apellidos', value: user.surnames),
                 _InfoRow(
+                  label: 'Sucursal asignada',
+                  value: user.isAdmin
+                      ? 'Acceso Global (Todas)'
+                      : user.assignedBranchLabel,
+                ),
+                _InfoRow(
                   label: 'Teléfono',
                   value: user.phone ?? 'No registrado',
                 ),

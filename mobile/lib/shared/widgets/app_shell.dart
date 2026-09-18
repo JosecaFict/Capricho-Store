@@ -1,5 +1,7 @@
 import 'package:capricho_store/app/navigation_memory.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/admin/domain/operational_access.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,8 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     NavigationMemory.rememberStore(location);
     final cartCount = ref.watch(cartItemCountProvider);
+    final user = ref.watch(authControllerProvider).user;
+    final isStaff = user != null && user.canAccessOperationalPanel;
 
     int selectedIndex = 0;
     if (location.startsWith('/cuenta')) {
@@ -41,7 +45,11 @@ class AppShell extends ConsumerWidget {
                 context.go('/catalogo');
                 break;
               case 2:
-                context.go('/carrito');
+                if (isStaff) {
+                  context.go(NavigationMemory.panelTarget(user));
+                } else {
+                  context.go('/carrito');
+                }
                 break;
               case 3:
                 context.go('/cuenta');
@@ -59,25 +67,32 @@ class AppShell extends ConsumerWidget {
               selectedIcon: Icon(Icons.grid_view_rounded),
               label: 'Catálogo',
             ),
+            if (isStaff)
+              const NavigationDestination(
+                icon: Icon(Icons.shield_outlined),
+                selectedIcon: Icon(Icons.shield_rounded),
+                label: 'Panel',
+              )
+            else
+              NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: cartCount > 0,
+                  label: Text('$cartCount'),
+                  backgroundColor: AppColors.cobalt,
+                  child: const Icon(Icons.shopping_bag_outlined),
+                ),
+                selectedIcon: Badge(
+                  isLabelVisible: cartCount > 0,
+                  label: Text('$cartCount'),
+                  backgroundColor: AppColors.cobalt,
+                  child: const Icon(Icons.shopping_bag_rounded),
+                ),
+                label: 'Carrito',
+              ),
             NavigationDestination(
-              icon: Badge(
-                isLabelVisible: cartCount > 0,
-                label: Text('$cartCount'),
-                backgroundColor: AppColors.cobalt,
-                child: const Icon(Icons.shopping_bag_outlined),
-              ),
-              selectedIcon: Badge(
-                isLabelVisible: cartCount > 0,
-                label: Text('$cartCount'),
-                backgroundColor: AppColors.cobalt,
-                child: const Icon(Icons.shopping_bag_rounded),
-              ),
-              label: 'Carrito',
-            ),
-            const NavigationDestination(
-              icon: Icon(Icons.person_outline_rounded),
-              selectedIcon: Icon(Icons.person_rounded),
-              label: 'Mi cuenta',
+              icon: const Icon(Icons.person_outline_rounded),
+              selectedIcon: const Icon(Icons.person_rounded),
+              label: isStaff ? 'Perfil' : 'Mi cuenta',
             ),
           ],
         ),

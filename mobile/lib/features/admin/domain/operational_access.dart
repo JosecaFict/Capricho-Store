@@ -78,6 +78,12 @@ extension OperationalAccess on AppUser {
   };
 
   String get operationalContextLabel {
+    if (branchName != null && !isAdmin) {
+      if (roles.contains('ENCARGADO_SUCURSAL')) return '$branchName · Encargado';
+      if (roles.contains('AUXILIAR_INVENTARIO')) return '$branchName · Inventario';
+      if (roles.contains('CAJERO')) return '$branchName · Operaciones';
+      return '$branchName · $roleName';
+    }
     if (roles.contains('ENCARGADO_SUCURSAL')) return 'Operaciones de sucursal';
     if (roles.contains('AUXILIAR_INVENTARIO')) return 'Inventario';
     if (roles.contains('CAJERO')) return 'Operaciones';

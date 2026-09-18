@@ -1,3 +1,5 @@
+import 'package:capricho_store/app/navigation_memory.dart';
+import 'package:capricho_store/features/admin/domain/operational_access.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
 import 'package:flutter/material.dart';
@@ -60,7 +62,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               !requestedLocation.startsWith('//')
           ? requestedLocation
           : null;
-      context.go(safeReturnUrl ?? '/cuenta');
+      final loggedUser = ref.read(authControllerProvider).user;
+      if (safeReturnUrl != null) {
+        context.go(safeReturnUrl);
+      } else if (loggedUser != null && loggedUser.canAccessOperationalPanel) {
+        context.go(NavigationMemory.panelTarget(loggedUser));
+      } else {
+        context.go('/cuenta');
+      }
     } else {
       HapticFeedback.mediumImpact();
     }

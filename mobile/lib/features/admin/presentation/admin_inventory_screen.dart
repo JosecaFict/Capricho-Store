@@ -1,6 +1,7 @@
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/admin/domain/admin_models.dart';
 import 'package:capricho_store/features/admin/presentation/admin_controller.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/shared/widgets/message_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,33 +72,37 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
   }
 
   Widget _buildLowStockTab() {
-    final asyncItems = ref.watch(adminLowStockProvider(null));
+    final user = ref.watch(authControllerProvider).user;
+    final lowStockBranchId =
+        user?.isBranchLocked == true ? user!.idSucursal : null;
+    final asyncItems = ref.watch(adminLowStockProvider(lowStockBranchId));
 
     return RefreshIndicator(
-      onRefresh: () async => ref.refresh(adminLowStockProvider(null).future),
+      onRefresh: () async =>
+          ref.refresh(adminLowStockProvider(lowStockBranchId).future),
       color: AppColors.cobalt,
       child: asyncItems.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => MessageState(
           title: 'Error al consultar stock bajo',
           message: err.toString(),
-          onRetry: () => ref.refresh(adminLowStockProvider(null)),
+          onRetry: () => ref.refresh(adminLowStockProvider(lowStockBranchId)),
         ),
         data: (items) {
           if (items.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.check_circle_outline_rounded,
                       color: Color(0xFF10B981),
                       size: 48,
                     ),
-                    SizedBox(height: 12),
-                    Text(
+                    const SizedBox(height: 12),
+                    const Text(
                       'No hay variantes en stock crítico',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
@@ -105,10 +110,12 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                         color: AppColors.ink,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      'Todas las prendas tienen existencias por encima de su umbral mínimo.',
-                      style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                      user?.isBranchLocked == true
+                          ? 'Todas las prendas de ${user?.branchName ?? 'tu sucursal'} tienen existencias por encima de su umbral mínimo.'
+                          : 'Todas las prendas tienen existencias por encima de su umbral mínimo.',
+                      style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -129,6 +136,8 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
   }
 
   Widget _buildBranchStockTab() {
+    final user = ref.watch(authControllerProvider).user;
+    final isLocked = user?.isBranchLocked == true;
     final branchesAsync = ref.watch(adminBranchesProvider);
 
     return branchesAsync.when(
@@ -145,7 +154,9 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
           );
         }
 
-        final effectiveBranchId = _selectedBranchId ?? branches.first.id;
+        final defaultBranchId =
+            (isLocked ? user!.idSucursal : null) ?? branches.first.id;
+        final effectiveBranchId = _selectedBranchId ?? defaultBranchId;
         final stockAsync = ref.watch(
           adminBranchInventoryProvider(effectiveBranchId),
         );
@@ -179,39 +190,93 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.canvas,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.line),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: effectiveBranchId,
-                          isExpanded: true,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.ink,
-                          ),
-                          items: branches.map((b) {
-                            return DropdownMenuItem<int>(
-                              value: b.id,
-                              child: Text(
-                                b.name,
-                                overflow: TextOverflow.ellipsis,
+                    child: isLocked
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.canvas,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.line),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 15,
+                                  color: AppColors.inkSoft,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    user.branchName ??
+                                        'Sucursal #${user.idSucursal}',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.ink,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.cobalt.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Asignada',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.cobalt,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.canvas,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.line),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: effectiveBranchId,
+                                isExpanded: true,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.ink,
+                                ),
+                                items: branches.map((b) {
+                                  return DropdownMenuItem<int>(
+                                    value: b.id,
+                                    child: Text(
+                                      b.name,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => _selectedBranchId = val);
+                                  }
+                                },
                               ),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedBranchId = val);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
+                            ),
+                          ),
                   ),
                 ],
               ),

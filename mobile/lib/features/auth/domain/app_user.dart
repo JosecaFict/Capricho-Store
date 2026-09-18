@@ -9,6 +9,8 @@ class AppUser {
     required this.permissions,
     this.phone,
     this.ci,
+    this.idSucursal,
+    this.branchName,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
@@ -21,6 +23,8 @@ class AppUser {
     status: json['estado'] as String,
     roles: List<String>.from(json['roles'] as List? ?? const []),
     permissions: List<String>.from(json['permisos'] as List? ?? const []),
+    idSucursal: json['id_sucursal'] as int?,
+    branchName: json['sucursal'] as String?,
   );
 
   final int id;
@@ -32,6 +36,8 @@ class AppUser {
   final String status;
   final List<String> roles;
   final List<String> permissions;
+  final int? idSucursal;
+  final String? branchName;
 
   String get fullName => '$names $surnames';
 
@@ -44,6 +50,11 @@ class AppUser {
       roles.contains('CAJERO') ||
       roles.contains('AUXILIAR_INVENTARIO') ||
       permissions.any((p) => p.startsWith('inventario.') || p.startsWith('empleados.'));
+
+  bool get hasBranchAssigned => idSucursal != null;
+  bool get isBranchLocked => !isAdmin && hasBranchAssigned;
+  String get assignedBranchLabel =>
+      branchName ?? (idSucursal != null ? 'Sucursal #$idSucursal' : 'Todas las sucursales');
 
   String get roleName {
     if (isAdmin) return 'Administrador';
