@@ -52,6 +52,13 @@ class FcmService {
         sound: true,
       );
 
+      // Mostrar banners con sonido y badge incluso con la app abierta (igual que WhatsApp/Instagram)
+      await messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
       developer.log(
         'Permiso de notificaciones: ${settings.authorizationStatus}',
         name: 'FCM',
