@@ -160,78 +160,11 @@ class AdminProfileScreen extends ConsumerWidget {
                   label: 'Teléfono',
                   value: user.phone ?? 'No registrado',
                 ),
-                _InfoRow(label: 'CI', value: user.ci ?? 'No registrado'),
                 _InfoRow(
-                  label: 'ID de Usuario',
-                  value: '#${user.id}',
+                  label: 'CI',
+                  value: user.ci ?? 'No registrado',
                   last: true,
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // 4. Permisos Operativos
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.line),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.lock_outline_rounded,
-                      size: 18,
-                      color: AppColors.cobalt,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Permisos en el sistema',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13.5,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (user.permissions.isEmpty)
-                  const Text(
-                    'Sin permisos especiales asignados.',
-                    style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
-                  )
-                else
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: user.permissions.map((p) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.muted,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: AppColors.line),
-                        ),
-                        child: Text(
-                          p,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.ink,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
               ],
             ),
           ),

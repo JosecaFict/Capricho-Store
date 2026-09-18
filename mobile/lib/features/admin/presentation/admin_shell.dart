@@ -2,6 +2,7 @@ import 'package:capricho_store/app/navigation_memory.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/admin/domain/operational_access.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
+import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -78,6 +79,27 @@ class AdminShell extends ConsumerWidget {
         ),
         centerTitle: false,
         actions: [
+          Consumer(
+            builder: (context, ref, _) {
+              final unreadCount = ref.watch(unreadNotificationsCountProvider);
+              return IconButton(
+                tooltip: 'Notificaciones',
+                icon: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  label: Text(
+                    unreadCount > 99 ? '99+' : '$unreadCount',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  backgroundColor: AppColors.cobalt,
+                  child: const Icon(Icons.notifications_outlined),
+                ),
+                onPressed: () => context.push('/notificaciones'),
+              );
+            },
+          ),
           TextButton.icon(
             onPressed: () => context.go(NavigationMemory.storeTarget),
             icon: const Icon(Icons.storefront_outlined, size: 20),

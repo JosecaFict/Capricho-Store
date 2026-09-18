@@ -28,6 +28,30 @@ class ProfileScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const BrandWordmark(compact: true),
         centerTitle: false,
+        actions: [
+          if (user != null)
+            Consumer(
+              builder: (context, ref, _) {
+                final unreadCount = ref.watch(unreadNotificationsCountProvider);
+                return IconButton(
+                  tooltip: 'Notificaciones',
+                  icon: Badge(
+                    isLabelVisible: unreadCount > 0,
+                    label: Text(
+                      unreadCount > 99 ? '99+' : '$unreadCount',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    backgroundColor: AppColors.cobalt,
+                    child: const Icon(Icons.notifications_outlined),
+                  ),
+                  onPressed: () => context.push('/notificaciones'),
+                );
+              },
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(color: AppColors.line, height: 1),
@@ -397,12 +421,9 @@ class ProfileScreen extends ConsumerWidget {
               _InfoRow(label: 'Apellidos', value: user.surnames),
               _InfoRow(label: 'Correo', value: user.email),
               _InfoRow(label: 'Teléfono', value: user.phone ?? 'No registrado'),
-              _InfoRow(label: 'CI', value: user.ci ?? 'No registrado'),
               _InfoRow(
-                label: user.hasOperationalRole
-                    ? 'ID de Colaborador'
-                    : 'ID de Cliente',
-                value: '#${user.id}',
+                label: 'CI',
+                value: user.ci ?? 'No registrado',
                 last: true,
               ),
             ],
