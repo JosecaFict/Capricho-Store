@@ -86,7 +86,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   void initState() {
     super.initState();
     final isWomenProduct =
-        widget.product.targetAudience?.toUpperCase() == 'MUJER' ||
+        widget.product.audience.toUpperCase() == 'MUJER' ||
             widget.product.category.toUpperCase() == 'BLUSA';
     _selectedGender = isWomenProduct ? 'MUJER' : 'HOMBRE';
     _userShouldersCm = isWomenProduct ? 38.0 : 44.0;

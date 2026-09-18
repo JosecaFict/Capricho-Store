@@ -12,8 +12,11 @@ import Vision
   ) -> Bool {
     let appResult = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     
-    // Registrar el canal de pose de forma segura si el rootViewController ya está disponible
-    if let controller = window?.rootViewController as? FlutterViewController, poseChannel == nil {
+    // Registrar el canal de pose mediante el plugin registrar oficial
+    if poseChannel == nil,
+       let registrar = self.registrar(forPlugin: "CaprichoBodyPosePlugin") {
+      registerPoseChannel(messenger: registrar.messenger())
+    } else if let controller = window?.rootViewController as? FlutterViewController, poseChannel == nil {
       registerPoseChannel(messenger: controller.binaryMessenger)
     }
     
