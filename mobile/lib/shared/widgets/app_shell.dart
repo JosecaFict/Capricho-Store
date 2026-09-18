@@ -19,8 +19,19 @@ class AppShell extends ConsumerWidget {
     final user = ref.watch(authControllerProvider).user;
     final isStaff = user != null && user.canAccessOperationalPanel;
 
+    final orders = ref.watch(ordersProvider).valueOrNull ?? [];
+    final activeOrdersCount = orders.where((o) =>
+        o.estado == 'PENDIENTE' ||
+        o.estado == 'PREPARANDO' ||
+        o.estado == 'LISTO_PARA_RETIRO' ||
+        o.estado == 'LISTO_PARA_ENVIO' ||
+        o.estado == 'EN_CAMINO'
+    ).length;
+
     int selectedIndex = 0;
     if (location.startsWith('/cuenta')) {
+      selectedIndex = 4;
+    } else if (location.startsWith('/pedidos')) {
       selectedIndex = 3;
     } else if (location.startsWith('/carrito')) {
       selectedIndex = 2;
@@ -52,6 +63,9 @@ class AppShell extends ConsumerWidget {
                 }
                 break;
               case 3:
+                context.go('/pedidos');
+                break;
+              case 4:
                 context.go('/cuenta');
                 break;
             }
@@ -89,6 +103,21 @@ class AppShell extends ConsumerWidget {
                 ),
                 label: 'Carrito',
               ),
+            NavigationDestination(
+              icon: Badge(
+                isLabelVisible: activeOrdersCount > 0,
+                label: Text('$activeOrdersCount'),
+                backgroundColor: AppColors.cobalt,
+                child: const Icon(Icons.inventory_2_outlined),
+              ),
+              selectedIcon: Badge(
+                isLabelVisible: activeOrdersCount > 0,
+                label: Text('$activeOrdersCount'),
+                backgroundColor: AppColors.cobalt,
+                child: const Icon(Icons.inventory_2_rounded),
+              ),
+              label: 'Pedidos',
+            ),
             NavigationDestination(
               icon: const Icon(Icons.person_outline_rounded),
               selectedIcon: const Icon(Icons.person_rounded),

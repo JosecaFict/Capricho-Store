@@ -95,6 +95,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const CartScreen(),
           ),
           GoRoute(
+            path: '/pedidos',
+            builder: (context, state) => const OrdersScreen(),
+          ),
+          GoRoute(
             path: '/cuenta',
             builder: (context, state) => const ProfileScreen(),
           ),
@@ -174,13 +178,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _adaptivePage(
           key: state.pageKey,
           child: const ReservationsScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/pedidos',
-        pageBuilder: (context, state) => _adaptivePage(
-          key: state.pageKey,
-          child: const OrdersScreen(),
         ),
       ),
       GoRoute(
