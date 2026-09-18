@@ -131,6 +131,12 @@ export class CommerceService {
   notifications() {
     return this.http.get<OperationalNotification[]>(`${API_BASE_URL}/notifications`);
   }
+  markNotificationAsRead(id: number) {
+    return this.http.patch(`${API_BASE_URL}/notifications/${id}/read`, {});
+  }
+  markAllNotificationsAsRead() {
+    return this.http.patch(`${API_BASE_URL}/notifications/read-all`, {});
+  }
   adminNotifications(params?: Params) {
     return this.http.get<AdminNotificationPage>(`${API_BASE_URL}/admin/notifications`, {
       params: this.params(params),
