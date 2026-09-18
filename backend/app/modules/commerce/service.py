@@ -462,13 +462,32 @@ class CommerceService:
             if active_cart:
                 await self.repository.clear_cart_items(active_cart.id_carrito)
                 active_cart.id_sucursal = None
+            branch = await self.repository.get(Sucursal, payload.id_sucursal)
+            branch_name = getattr(branch, "nombre", None) or f"Sucursal #{payload.id_sucursal}"
+            cust_user = await self.repository.get(Usuario, user_id)
+            cust_name = (
+                f"{getattr(cust_user, 'nombres', '')} {getattr(cust_user, 'apellidos', '')}".strip()
+                if cust_user and hasattr(cust_user, "nombres")
+                else "Cliente"
+            ) or "Cliente"
             await self._notify(
                 user_id,
                 "RESERVA_CREADA",
-                "Reserva recibida",
-                f"Tu reserva #{reservation.id_reserva} fue registrada.",
+                "¡Reserva confirmada! 📋",
+                f"Tu reserva #{reservation.id_reserva} fue registrada en {branch_name}.",
                 data={
                     "type": "RESERVA",
+                    "id": str(reservation.id_reserva),
+                    "route": "/reservas",
+                },
+            )
+            await self._notify_staff_and_admins(
+                payload.id_sucursal,
+                "NUEVA_RESERVA",
+                f"Nueva Reserva #{reservation.id_reserva} de prendas 📋",
+                f"{cust_name} apartó {len(payload.items)} prenda(s) en {branch_name} para prueba o retiro.",
+                data={
+                    "type": "NUEVA_RESERVA",
                     "id": str(reservation.id_reserva),
                     "route": "/reservas",
                 },
@@ -1089,20 +1108,40 @@ class CommerceService:
                 cart.estado = "CONVERTIDO"
                 cart.id_sucursal = None
                 await self.repository.clear_cart_items(cart.id_carrito)
+        customer_name = "Cliente"
         if sale.id_cliente:
             customer = await self.repository.get(Cliente, sale.id_cliente)
             if customer and customer.id_usuario:
+                cust_user = await self.repository.get(Usuario, customer.id_usuario)
+                if cust_user and hasattr(cust_user, "nombres"):
+                    nombres = getattr(cust_user, "nombres", "")
+                    apellidos = getattr(cust_user, "apellidos", "")
+                    customer_name = f"{nombres} {apellidos}".strip() or "Cliente"
                 await self._notify(
                     customer.id_usuario,
                     "PAGO_CONFIRMADO",
-                    "Compra confirmada",
-                    f"Stripe confirmó el pago de tu pedido #{order.id_pedido}.",
+                    "¡Compra confirmada! 💳",
+                    f"Recibimos tu pago por Bs {sale.total:,.2f} para el Pedido #{order.id_pedido}. Te avisaremos cuando comencemos a prepararlo.",
                     data={
                         "type": "PEDIDO",
                         "id": str(order.id_pedido),
                         "route": f"/pedidos/{order.id_pedido}",
                     },
                 )
+        branch = await self.repository.get(Sucursal, sale.id_sucursal)
+        branch_name = getattr(branch, "nombre", None) or f"Sucursal #{sale.id_sucursal}"
+        mode_label = "Retiro en tienda" if sale.modalidad_entrega == "RETIRO_SUCURSAL" else "Delivery"
+        await self._notify_staff_and_admins(
+            sale.id_sucursal,
+            "NUEVO_PEDIDO",
+            f"Nuevo Pedido #{order.id_pedido} por preparar 🛍️",
+            f"{customer_name} realizó un pedido por Bs {sale.total:,.2f} ({mode_label} - {branch_name}). Requiere preparación.",
+            data={
+                "type": "NUEVO_PEDIDO",
+                "id": str(order.id_pedido),
+                "route": "/pedidos",
+            },
+        )
         if sale.modalidad_entrega == "DELIVERY":
             await self._dispatch_order_invoice_email(order, sale)
         await self.session.commit()
@@ -1699,14 +1738,55 @@ class CommerceService:
             sale.estado = "ANULADA"
         customer = await self.repository.get(Cliente, sale.id_cliente) if sale.id_cliente else None
         if customer:
+            branch = await self.repository.get(Sucursal, sale.id_sucursal)
+            branch_name = getattr(branch, "nombre", None) or "Capricho Store"
+            branch_dir = getattr(branch, "direccion", None)
+            branch_address = f" ({branch_dir})" if branch_dir else ""
+
+            status_messages = {
+                "PREPARANDO": (
+                    "Tu pedido está en preparación 📦",
+                    f"Nuestro equipo en {branch_name} está alistando y empaquetando tus prendas del Pedido #{order.id_pedido}.",
+                ),
+                "LISTO_PARA_RETIRO": (
+                    "¡Tu pedido está listo para retirar! 🎉",
+                    f"Tu Pedido #{order.id_pedido} ya está listo en {branch_name}{branch_address}. ¡Ya puedes pasar a recogerlo con tu CI!",
+                ),
+                "LISTO_PARA_ENVIO": (
+                    "Pedido empaquetado para envío 📦",
+                    f"Tu Pedido #{order.id_pedido} está empaquetado y listo para ser recogido por el repartidor.",
+                ),
+                "EN_CAMINO": (
+                    "Tu pedido va en camino 🛵",
+                    f"El repartidor está llevando tu Pedido #{order.id_pedido} hacia tu dirección de entrega.",
+                ),
+                "RETIRADO": (
+                    "¡Pedido retirado con éxito! ✨",
+                    f"Has retirado tu Pedido #{order.id_pedido} en {branch_name}. Te enviamos tu factura oficial por correo. ¡Gracias por tu compra!",
+                ),
+                "ENTREGADO": (
+                    "¡Pedido entregado con éxito! ✨",
+                    f"Tu Pedido #{order.id_pedido} ha sido entregado en tu dirección. ¡Gracias por confiar en Capricho Store!",
+                ),
+                "CANCELADO": (
+                    "Pedido cancelado",
+                    f"Tu Pedido #{order.id_pedido} ha sido cancelado. Si tienes alguna consulta, contáctanos.",
+                ),
+            }
+
+            title, content = status_messages.get(
+                payload.estado,
+                (
+                    "Estado de pedido actualizado",
+                    f"Tu pedido #{order.id_pedido} ahora está {payload.estado.lower().replace('_', ' ')}.",
+                ),
+            )
+
             await self._notify(
                 customer.id_usuario,
                 f"PEDIDO_{payload.estado}",
-                "Estado de pedido actualizado",
-                (
-                    f"Tu pedido #{order.id_pedido} ahora está "
-                    f"{payload.estado.lower().replace('_', ' ')}."
-                ),
+                title,
+                content,
                 data={
                     "type": f"PEDIDO_{payload.estado}",
                     "id": str(order.id_pedido),
@@ -2263,10 +2343,61 @@ class CommerceService:
                 Empleado.estado_laboral == "ACTIVO",
             )
             res = await self.session.execute(stmt)
-            for row in res.all():
+            rows = res.all() if res else []
+            if hasattr(rows, "__await__"):
+                rows = await rows
+            for row in (rows or []):
                 await self._notify(row[0], "STOCK_CRITICO", title, content, data=data)
         except Exception as exc:
             logger.warning("No se pudo notificar al personal de sucursal: %s", exc)
+
+    async def _notify_staff_and_admins(
+        self,
+        branch_id: int | None,
+        kind: str,
+        title: str,
+        content: str,
+        data: dict | None = None,
+    ) -> None:
+        try:
+            from app.modules.auth.models import Empleado, Rol, Usuario, UsuarioRol
+
+            user_ids_to_notify: set[int] = set()
+
+            # 1. Colaboradores activos de la sucursal asignada (Cajero, Encargado, Auxiliar)
+            if branch_id:
+                stmt_branch = select(Empleado.id_usuario).where(
+                    Empleado.id_sucursal == branch_id,
+                    Empleado.estado_laboral == "ACTIVO",
+                )
+                res_branch = await self.session.execute(stmt_branch)
+                rows_branch = res_branch.all() if res_branch else []
+                if hasattr(rows_branch, "__await__"):
+                    rows_branch = await rows_branch
+                for row in (rows_branch or []):
+                    user_ids_to_notify.add(row[0])
+
+            # 2. Administradores y propietarios globales activos
+            stmt_admin = (
+                select(UsuarioRol.id_usuario)
+                .join(Rol, Rol.id_rol == UsuarioRol.id_rol)
+                .join(Usuario, Usuario.id_usuario == UsuarioRol.id_usuario)
+                .where(
+                    Rol.nombre.in_(["ADMINISTRADOR", "PROPIETARIO"]),
+                    Usuario.estado == "ACTIVO",
+                )
+            )
+            res_admin = await self.session.execute(stmt_admin)
+            rows_admin = res_admin.all() if res_admin else []
+            if hasattr(rows_admin, "__await__"):
+                rows_admin = await rows_admin
+            for row in (rows_admin or []):
+                user_ids_to_notify.add(row[0])
+
+            for uid in user_ids_to_notify:
+                await self._notify(uid, kind, title, content, data=data)
+        except Exception as exc:
+            logger.warning("No se pudo notificar al personal y administradores: %s", exc)
 
     async def register_device_token(
         self, user_id: int, payload: DeviceTokenRegisterRequest

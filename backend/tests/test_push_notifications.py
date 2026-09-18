@@ -162,3 +162,137 @@ async def test_notify_branch_staff_stock_alert() -> None:
     assert call_kwargs["title"] == "Alerta de Stock Crítico"
     assert call_kwargs["data"]["route"] == "/admin/inventario"
 
+
+@pytest.mark.asyncio
+async def test_notify_staff_and_admins_new_order() -> None:
+    from app.modules.commerce.service import CommerceService
+    from unittest.mock import MagicMock
+
+    mock_session = AsyncMock()
+    mock_repo = AsyncMock()
+    mock_fcm = AsyncMock()
+
+    # Mock execute: 1st call for branch staff, 2nd call for global admins
+    mock_res_branch = MagicMock()
+    mock_res_branch.all.return_value = [(20,)]  # Branch staff user #20
+
+    mock_res_admin = MagicMock()
+    mock_res_admin.all.return_value = [(2,)]   # Admin user #2 (Jose Carlos)
+
+    mock_session.execute.side_effect = [mock_res_branch, mock_res_admin]
+
+    # Mock tokens
+    mock_repo.get_user_device_tokens.side_effect = lambda uid: [f"token-user-{uid}"]
+    mock_repo.add.return_value = None
+
+    service = CommerceService(mock_session, mock_repo, fcm_sender=mock_fcm)
+
+    await service._notify_staff_and_admins(
+        branch_id=1,
+        kind="NUEVO_PEDIDO",
+        title="Nuevo Pedido #19 por preparar 🛍️",
+        content="Flabia Domínguez realizó un pedido por Bs 200,00.",
+        data={"type": "NUEVO_PEDIDO", "id": "19", "route": "/pedidos"},
+    )
+
+    # Repository should add 2 notifications (one for user 20, one for user 2)
+    assert mock_repo.add.await_count == 2
+    # FCM push sender called for both
+    assert mock_fcm.send_push_notification.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_update_order_status_notifies_customer_lifecycle() -> None:
+    from decimal import Decimal
+    from unittest.mock import MagicMock
+    from app.modules.commerce.service import CommerceService
+    from app.modules.commerce.schemas import OrderStatusUpdate, OrderResponse
+    from app.modules.commerce.models import Pedido, Venta
+    from app.modules.auth.models import Empleado, Cliente, Sucursal
+
+    mock_session = AsyncMock()
+    mock_repo = AsyncMock()
+    mock_fcm = AsyncMock()
+
+    order = Pedido(
+        id_pedido=19,
+        id_venta=10,
+        estado="PENDIENTE",
+        fecha_creacion=datetime.now(UTC),
+    )
+    sale = Venta(
+        id_venta=10,
+        id_cliente=5,
+        id_sucursal=1,
+        total=Decimal("250.00"),
+        modalidad_entrega="RETIRO_SUCURSAL",
+    )
+    customer = Cliente(id_cliente=5, id_usuario=42, estado="ACTIVO")
+    branch = Sucursal(id_sucursal=1, nombre="Sucursal Central", direccion="Av. San Martín 456")
+    employee = Empleado(id_empleado=3, id_usuario=2, id_sucursal=1, cargo_descriptivo="ENCARGADO", estado_laboral="ACTIVO")
+
+    def get_side_effect(model, ident):
+        if model is Pedido:
+            return order
+        if model is Venta:
+            return sale
+        if model is Cliente:
+            return customer
+        if model is Sucursal:
+            return branch
+        return None
+
+    mock_repo.get.side_effect = get_side_effect
+    mock_repo.employee_by_user.return_value = employee
+    mock_repo.get_user_device_tokens.return_value = ["cust-fcm-token"]
+    mock_repo.add.return_value = None
+
+    service = CommerceService(mock_session, mock_repo, fcm_sender=mock_fcm)
+    service._order_response = AsyncMock(return_value=OrderResponse(
+        id_pedido=19,
+        id_venta=10,
+        estado="PREPARANDO",
+        modalidad_entrega="RETIRO_SUCURSAL",
+        id_sucursal=1,
+        sucursal="Sucursal Central",
+        direccion_sucursal="Av. San Martín 456",
+        id_direccion=None,
+        direccion_entrega=None,
+        total=Decimal("250.00"),
+        fecha_creacion=datetime.now(UTC),
+        fecha_preparacion=None,
+        fecha_finalizacion=None,
+        items=[],
+        receipt_url=None,
+    ))
+
+    # 1. Transition to PREPARANDO
+    await service.update_order_status(
+        user_id=2,
+        order_id=19,
+        payload=OrderStatusUpdate(estado="PREPARANDO"),
+        all_branches=True,
+    )
+
+    assert mock_fcm.send_push_notification.await_count == 1
+    call_kwargs = mock_fcm.send_push_notification.await_args.kwargs
+    assert call_kwargs["tokens"] == ["cust-fcm-token"]
+    assert "en preparación" in call_kwargs["title"]
+    assert "Sucursal Central" in call_kwargs["body"]
+    assert call_kwargs["data"]["route"] == "/pedidos/19"
+
+    # 2. Transition to LISTO_PARA_RETIRO
+    order.estado = "PREPARANDO"
+    await service.update_order_status(
+        user_id=2,
+        order_id=19,
+        payload=OrderStatusUpdate(estado="LISTO_PARA_RETIRO"),
+        all_branches=True,
+    )
+    assert mock_fcm.send_push_notification.await_count == 2
+    call_kwargs = mock_fcm.send_push_notification.await_args.kwargs
+    assert "listo para retirar" in call_kwargs["title"]
+    assert "Av. San Martín 456" in call_kwargs["body"]
+
+
+

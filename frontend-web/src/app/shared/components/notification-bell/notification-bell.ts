@@ -96,7 +96,14 @@ import { CommerceService } from '../../../core/services/commerce.service';
               </div>
             } @else {
               @for (item of recentItems(); track item.id_notificacion) {
-                <article class="notification-item" [attr.data-type]="categorize(item.tipo)">
+                <article
+                  class="notification-item"
+                  [attr.data-type]="categorize(item.tipo)"
+                  [routerLink]="itemRoute(item)"
+                  (click)="close()"
+                  style="cursor: pointer;"
+                  title="Ir al detalle"
+                >
                   <div class="notification-item__icon-wrap">
                     <span class="notification-item__icon">{{ iconFor(item.tipo) }}</span>
                   </div>
@@ -180,8 +187,25 @@ export class NotificationBell implements OnInit {
     });
   }
 
+  itemRoute(item: OperationalNotification): string {
+    const t = (item.tipo || '').toUpperCase();
+    if (this.mode() === 'admin') {
+      if (t.includes('PEDIDO') || t.includes('VENTA') || t.includes('COMPRA')) return '/admin/pedidos';
+      if (t.includes('RESERVA')) return '/admin/reservas';
+      if (t.includes('STOCK') || t.includes('INVENTARIO')) return '/admin/inventario';
+      if (t.includes('DEVOLUCION')) return '/admin/devoluciones';
+      return '/admin/notificaciones';
+    } else {
+      if (t.includes('PEDIDO') || t.includes('PAGO')) return '/cuenta/pedidos';
+      if (t.includes('RESERVA')) return '/cuenta/reservas';
+      return '/notificaciones';
+    }
+  }
+
   categorize(tipo: string): string {
     const t = (tipo || '').toUpperCase();
+    if (t.includes('NUEVO_PEDIDO')) return 'nuevo_pedido';
+    if (t.includes('STOCK')) return 'stock';
     if (t.includes('PAGO') || t.includes('COMPRA')) return 'pago';
     if (t.includes('PEDIDO') || t.includes('CAMINO') || t.includes('ENTREGA')) return 'delivery';
     if (t.includes('RESERVA')) return 'reserva';
@@ -193,6 +217,10 @@ export class NotificationBell implements OnInit {
   iconFor(tipo: string): string {
     const cat = this.categorize(tipo);
     switch (cat) {
+      case 'nuevo_pedido':
+        return '🛍️';
+      case 'stock':
+        return '⚠️';
       case 'pago':
         return '💳';
       case 'delivery':
@@ -211,6 +239,10 @@ export class NotificationBell implements OnInit {
   badgeFor(tipo: string): string {
     const cat = this.categorize(tipo);
     switch (cat) {
+      case 'nuevo_pedido':
+        return 'Nuevo Pedido';
+      case 'stock':
+        return 'Stock Crítico';
       case 'pago':
         return 'Compra Confirmada';
       case 'delivery':
