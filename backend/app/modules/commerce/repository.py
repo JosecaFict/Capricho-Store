@@ -569,7 +569,10 @@ class CommerceRepository:
             func.count(Notificacion.id_notificacion)
             .filter(Notificacion.estado == "FALLIDO")
             .label("fallidas"),
-        ).where(Notificacion.id_campania.is_(None))
+        ).where(
+            Notificacion.id_campania.is_(None),
+            Notificacion.tipo != "REGISTRO_DISPOSITIVO",
+        )
         kpi_row = (await self.session.execute(kpi_statement)).one()
         kpis = {
             "total": int(kpi_row.total or 0),
@@ -578,7 +581,10 @@ class CommerceRepository:
             "fallidas": int(kpi_row.fallidas or 0),
         }
 
-        conditions = [Notificacion.id_campania.is_(None)]
+        conditions = [
+            Notificacion.id_campania.is_(None),
+            Notificacion.tipo != "REGISTRO_DISPOSITIVO",
+        ]
         if estado:
             conditions.append(Notificacion.estado == estado.upper())
         if canal:

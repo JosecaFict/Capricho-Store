@@ -2303,29 +2303,34 @@ class CommerceService:
         data: dict | None = None,
     ) -> None:
         try:
-            await self.repository.add(
-                Notificacion(
-                    id_usuario=user_id,
-                    id_campania=None,
-                    tipo=kind,
-                    canal="PUSH",
-                    proveedor="SISTEMA",
-                    titulo=title,
-                    contenido=content,
-                    estado="PENDIENTE",
-                )
+            now = datetime.now(UTC)
+            notif = Notificacion(
+                id_usuario=user_id,
+                id_campania=None,
+                tipo=kind,
+                canal="PUSH",
+                proveedor="SISTEMA",
+                titulo=title,
+                contenido=content,
+                estado="ENVIADO",
+                fecha_creacion=now,
+                fecha_envio=now,
+                fecha_entrega=now,
             )
+            await self.repository.add(notif)
             # Despachar push a los dispositivos registrados
             device_tokens = await self.repository.get_user_device_tokens(user_id)
             if device_tokens:
                 push_data = dict(data or {})
                 push_data.setdefault("type", kind)
-                await self.fcm_sender.send_push_notification(
+                delivered = await self.fcm_sender.send_push_notification(
                     tokens=device_tokens,
                     title=title,
                     body=content,
                     data=push_data,
                 )
+                if delivered == 0 and len(device_tokens) > 0:
+                    notif.error_mensaje = "FCM no pudo entregar el push a los dispositivos registrados"
         except Exception as exc:
             logger.warning("No se pudo registrar la notificacion: %s", exc)
 
