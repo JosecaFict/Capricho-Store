@@ -6,7 +6,9 @@ import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/features/fitting/domain/fitting_engine.dart';
 import 'package:capricho_store/features/fitting/domain/fitting_telemetry.dart';
+import 'package:capricho_store/features/fitting/domain/pose_smoother.dart';
 import 'package:capricho_store/features/fitting/presentation/fitting_overlay_painter.dart';
+import 'package:capricho_store/features/fitting/presentation/garment_ar_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -67,8 +69,13 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   double _scanProgress = 0.0;
   int _scanSecondsRemaining = 3;
 
-  // Parámetros de anatomía y calce
+  // Parámetros de anatomía y calce (Hito 5.2)
   double _userShouldersCm = 44.0;
+  late String _selectedGender;
+  final PoseSmoother _poseSmoother = PoseSmoother(alpha: 0.35);
+  Offset _detectedNeck = const Offset(0.50, 0.34);
+  double _detectedShoulderAngle = 0.0;
+  double _detectedShoulderRatio = 0.45;
 
   late String _activeSize;
   late String _activeColor;
@@ -78,6 +85,11 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   @override
   void initState() {
     super.initState();
+    final isWomenProduct =
+        widget.product.targetAudience?.toUpperCase() == 'MUJER' ||
+            widget.product.category.toUpperCase() == 'BLUSA';
+    _selectedGender = isWomenProduct ? 'MUJER' : 'HOMBRE';
+    _userShouldersCm = isWomenProduct ? 38.0 : 44.0;
     _initPrendaState();
     _initAnimation();
     _initSensors();
@@ -138,7 +150,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
       final isCalibrated = _angleState.isVerticalAligned;
       if (isCalibrated) {
         _handsFreeHoldMs += 100;
-        if (_handsFreeHoldMs >= 2000) {
+        if (_handsFreeHoldMs >= 3500) {
           _handsFreeHoldMs = 0;
           HapticFeedback.heavyImpact(); // Taptic Engine Lock
           _analyzeRealPoseFromCamera();
@@ -234,9 +246,10 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
       // 1. Capturar un cuadro de alta fidelidad con la cámara del iPhone
       final xfile = await _cameraController!.takePicture();
 
-      // 2. Ejecutar Apple Vision Framework nativo en el A17 Pro
+      // 2. Ejecutar Apple Vision Framework nativo en el A17 Pro con calibración de género
       final dynamic rawResult = await _poseChannel.invokeMethod('detectPose', {
         'imagePath': xfile.path,
+        'gender': _selectedGender,
       });
 
       if (!mounted) return;
@@ -246,12 +259,32 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
         if (detected) {
           final estimatedCm = (rawResult['estimatedShouldersCm'] as num?)?.toDouble() ?? 44.0;
           final ratio = (rawResult['shoulderRatio'] as num?)?.toDouble() ?? 0.45;
+          final angle = (rawResult['shoulderAngle'] as num?)?.toDouble() ?? 0.0;
+
+          Offset neck = const Offset(0.50, 0.34);
+          if (rawResult['neck'] is Map) {
+            final nMap = rawResult['neck'] as Map;
+            neck = Offset(
+              (nMap['x'] as num?)?.toDouble() ?? 0.50,
+              (nMap['y'] as num?)?.toDouble() ?? 0.34,
+            );
+          }
 
           HapticFeedback.heavyImpact(); // Taptic Engine Success
           _scanAnimationController.stop();
           setState(() {
             _userShouldersCm = estimatedCm;
             _distanceState = UserDistanceState.fromShoulderRatio(ratio);
+            _detectedNeck = neck;
+            _detectedShoulderAngle = angle;
+            _detectedShoulderRatio = ratio;
+            _poseSmoother.reset();
+            _poseSmoother.update(
+              neck: neck,
+              shoulderAngle: angle,
+              shoulderRatio: ratio,
+              scaleMultiplier: _currentScaleMultiplier,
+            );
             _currentStep = FittingStep.diagnosis;
             _recalculateFit();
             _isAnalyzingPose = false;
@@ -331,6 +364,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
       measurements: widget.measurements,
       availableSizes: sizes,
       userShouldersCm: _userShouldersCm,
+      gender: _selectedGender,
     );
 
     _activeSize = _recommendation.recommendedSize;
@@ -707,40 +741,15 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
             },
           ),
 
-          // 3. Prenda proyectada (SOLO visible en activeFitting o con preview en diagnosis)
+          // 3. Prenda proyectada reactiva anclada a cuello y hombros (Hito 5.2)
           if (_currentStep == FittingStep.activeFitting)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 60),
-                child: AnimatedScale(
-                  scale: _currentScaleMultiplier,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  child: Opacity(
-                    opacity: 0.88,
-                    child: SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.62,
-                      height: MediaQuery.of(context).size.width * 0.72,
-                      child: _activeImageUrl != null &&
-                              _activeImageUrl!.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: _activeImageUrl!,
-                              fit: BoxFit.contain,
-                              placeholder: (_, __) => const SizedBox(),
-                              errorWidget: (_, __, ___) => const Icon(
-                                Icons.checkroom_rounded,
-                                size: 100,
-                                color: Colors.white70,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.checkroom_rounded,
-                              size: 100,
-                              color: Colors.white70,
-                            ),
-                    ),
-                  ),
-                ),
+            GarmentArOverlay(
+              imageUrl: _activeImageUrl,
+              pose: _poseSmoother.update(
+                neck: _detectedNeck,
+                shoulderAngle: _detectedShoulderAngle,
+                shoulderRatio: _detectedShoulderRatio,
+                scaleMultiplier: _currentScaleMultiplier,
               ),
             ),
 
@@ -757,6 +766,8 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       icon: Icons.arrow_back_ios_new_rounded,
                       onTap: () => context.pop(),
                     ),
+                    if (_currentStep == FittingStep.scanning)
+                      _buildGenderSelector(),
                     Row(
                       children: [
                         // Botón de Re-escanear (visible cuando no está escaneando)
@@ -1472,6 +1483,36 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 ),
               ),
 
+              if (_recommendation.isBorderline &&
+                  _recommendation.alternativeSize != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.compare_arrows_rounded,
+                          color: Colors.amberAccent, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Tus hombros están en la frontera entre ${_recommendation.recommendedSize} y ${_recommendation.alternativeSize}. En el espejo interactivo podrás probar ambas y comparar su caída.',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 20),
 
               // Botón Principal para entrar al vestidor
@@ -1638,7 +1679,39 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              if (_recommendation.isBorderline &&
+                  _recommendation.alternativeSize != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.compare_arrows_rounded,
+                            color: Colors.amberAccent, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Talla frontera: Compara $_activeSize con ${_recommendation.alternativeSize} en el espejo',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 8),
 
               // Selector de Tallas (con estrella en la recomendada)
               SingleChildScrollView(
@@ -1660,6 +1733,12 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                           setState(() {
                             _activeSize = size;
                             _findActiveVariant();
+                            _poseSmoother.update(
+                              neck: _detectedNeck,
+                              shoulderAngle: _detectedShoulderAngle,
+                              shoulderRatio: _detectedShoulderRatio,
+                              scaleMultiplier: _currentScaleMultiplier,
+                            );
                           });
                         },
                         borderRadius: BorderRadius.circular(10),
@@ -1830,6 +1909,54 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     if (lower.contains('beige') || lower.contains('crema')) return const Color(0xFFF5F5DC);
     if (lower.contains('gris') || lower.contains('gray')) return Colors.grey;
     return AppColors.cobalt;
+  }
+
+  Widget _buildGenderSelector() {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _genderButton('HOMBRE', '👨 Hombre'),
+          _genderButton('MUJER', '👩 Mujer'),
+        ],
+      ),
+    );
+  }
+
+  Widget _genderButton(String genderKey, String label) {
+    final isSelected = _selectedGender == genderKey;
+    return GestureDetector(
+      onTap: () {
+        if (_selectedGender == genderKey) return;
+        HapticFeedback.selectionClick();
+        setState(() {
+          _selectedGender = genderKey;
+          _userShouldersCm = genderKey == 'MUJER' ? 38.0 : 44.0;
+          _recalculateFit();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.cobalt : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
   }
 }
 

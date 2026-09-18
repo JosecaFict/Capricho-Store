@@ -7,6 +7,9 @@ class FittingRecommendation {
     required this.verdict,
     this.estimatedShouldersCm = 44.0,
     this.sizeScales = const {},
+    this.isBorderline = false,
+    this.alternativeSize,
+    this.gender = 'HOMBRE',
   });
 
   final String recommendedSize;
@@ -14,11 +17,14 @@ class FittingRecommendation {
   final String verdict;
   final double estimatedShouldersCm;
   final Map<String, double> sizeScales;
+  final bool isBorderline;
+  final String? alternativeSize;
+  final String gender;
 }
 
 class FittingEngine {
-  /// Tamaños de hombros estándar de referencia (cm) si la prenda no tiene medidas explícitas
-  static const Map<String, double> _standardShoulders = {
+  /// Hombros estándar de referencia para Hombres (cm)
+  static const Map<String, double> _standardShouldersMen = {
     'XS': 38.0,
     'S': 41.0,
     'M': 44.0,
@@ -28,28 +34,46 @@ class FittingEngine {
     '3XL': 56.0,
   };
 
+  /// Hombros estándar de referencia para Mujeres (cm)
+  static const Map<String, double> _standardShouldersWomen = {
+    'XS': 33.0,
+    'S': 35.5,
+    'M': 38.0,
+    'L': 40.5,
+    'XL': 43.0,
+    'XXL': 46.0,
+    '3XL': 49.0,
+  };
+
   /// Factores de escala visual relativa para cada talla en el vestidor
   static const Map<String, double> _defaultScales = {
     'XS': 0.88,
     'S': 0.94,
     'M': 1.00,
-    'L': 1.07,
-    'XL': 1.15,
-    'XXL': 1.22,
-    '3XL': 1.30,
+    'L': 1.08,
+    'XL': 1.16,
+    'XXL': 1.24,
+    '3XL': 1.32,
   };
 
-  /// Calcula directamente la talla óptima de la polera comparando las medidas de hombros.
+  /// Calcula la talla óptima de la prenda comparando las medidas de hombros,
+  /// diferenciando silueta masculina y femenina y detectando tallas fronterizas.
   static FittingRecommendation evaluate({
     required List<ProductMeasurement> measurements,
     required List<String> availableSizes,
     double userShouldersCm = 44.0,
+    String gender = 'HOMBRE',
   }) {
+    final isFemale = gender.toUpperCase() == 'MUJER';
+    final fallbackShoulders =
+        isFemale ? _standardShouldersWomen : _standardShouldersMen;
+
     if (availableSizes.isEmpty) {
-      return const FittingRecommendation(
+      return FittingRecommendation(
         recommendedSize: 'M',
         confidence: 85,
         verdict: 'Talla estándar recomendada',
+        gender: isFemale ? 'MUJER' : 'HOMBRE',
       );
     }
 
@@ -59,30 +83,43 @@ class FittingEngine {
       measurementMap[m.size.toUpperCase()] = m;
     }
 
-    String bestSize = availableSizes.first;
-    double minDiff = 999.0;
-    int bestConfidence = 90;
-
+    // Calcular la diferencia absoluta para cada talla disponible
+    final evaluatedList = <MapEntry<String, double>>[];
     for (final size in availableSizes) {
       final sizeUpper = size.toUpperCase();
       final garmentShoulders = measurementMap[sizeUpper]?.shouldersCm ??
-          _standardShoulders[sizeUpper] ??
-          44.0;
+          fallbackShoulders[sizeUpper] ??
+          (isFemale ? 38.0 : 44.0);
 
       final diff = (garmentShoulders - userShouldersCm).abs();
-      if (diff < minDiff) {
-        minDiff = diff;
-        bestSize = size;
+      evaluatedList.add(MapEntry(size, diff));
+    }
+
+    // Ordenar de menor a mayor diferencia (la más cercana primero)
+    evaluatedList.sort((a, b) => a.value.compareTo(b.value));
+
+    final bestSize = evaluatedList.first.key;
+    final bestDiff = evaluatedList.first.value;
+
+    // Detectar si está en la frontera entre dos tallas (ej. M y L a <= 1.2 cm)
+    bool isBorderline = false;
+    String? alternativeSize;
+    if (evaluatedList.length > 1) {
+      final secondBest = evaluatedList[1];
+      if ((secondBest.value - bestDiff) <= 1.2) {
+        isBorderline = true;
+        alternativeSize = secondBest.key;
       }
     }
 
     // Calcular nivel de confianza basado en la cercanía de hombros
-    if (minDiff <= 1.5) {
-      bestConfidence = 96;
-    } else if (minDiff <= 3.0) {
-      bestConfidence = 90;
+    int confidence;
+    if (bestDiff <= 1.5) {
+      confidence = 96;
+    } else if (bestDiff <= 3.0) {
+      confidence = 90;
     } else {
-      bestConfidence = 82;
+      confidence = 82;
     }
 
     // Armar escalas relativas para visualización en vivo
@@ -92,12 +129,19 @@ class FittingEngine {
       scales[s] = _defaultScales[sUpper] ?? 1.0;
     }
 
+    final verdict = isBorderline && alternativeSize != null
+        ? 'Talla $bestSize sugerida (~${userShouldersCm.toStringAsFixed(1)} cm). Talla intermedia con $alternativeSize; pruébalas en el espejo.'
+        : 'Ajuste exacto para tus proporciones (~${userShouldersCm.toStringAsFixed(1)} cm de hombros)';
+
     return FittingRecommendation(
       recommendedSize: bestSize,
-      confidence: bestConfidence,
-      verdict: 'Ajuste exacto para tus proporciones (~${userShouldersCm.toStringAsFixed(1)} cm de hombros)',
+      confidence: confidence,
+      verdict: verdict,
       estimatedShouldersCm: userShouldersCm,
       sizeScales: scales,
+      isBorderline: isBorderline,
+      alternativeSize: alternativeSize,
+      gender: isFemale ? 'MUJER' : 'HOMBRE',
     );
   }
 }

@@ -43,8 +43,8 @@ import Vision
           result(FlutterError(code: "INVALID_ARGS", message: "Falta imagePath", details: nil))
           return
         }
-        
-        self?.analyzePose(imagePath: imagePath, result: result)
+        let gender = args["gender"] as? String ?? "HOMBRE"
+        self?.analyzePose(imagePath: imagePath, gender: gender, result: result)
       } else {
         result(FlutterMethodNotImplemented)
       }
@@ -53,7 +53,7 @@ import Vision
     self.poseChannel = channel
   }
 
-  private func analyzePose(imagePath: String, result: @escaping FlutterResult) {
+  private func analyzePose(imagePath: String, gender: String, result: @escaping FlutterResult) {
     let fileURL = URL(fileURLWithPath: imagePath)
     guard FileManager.default.fileExists(atPath: imagePath) else {
       result([
@@ -100,6 +100,7 @@ import Vision
         let dx = abs(rsX - lsX)
         let dy = abs(rsY - lsY)
         let shoulderDist = sqrt(dx * dx + dy * dy)
+        let shoulderAngle = atan2(rsY - lsY, rsX - lsX)
         
         // Validar inclinación: hombros excesivamente desnivelados (cuerpo de lado o acostado)
         if dy > dx || (shoulderDist > 0 && (dy / shoulderDist) > 0.38) {
@@ -148,39 +149,46 @@ import Vision
           return
         }
         
-        // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO ---
-        var estimatedCm: Double = 44.0
+        // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO DIFERENCIADO POR GÉNERO ---
+        let isFemale = gender.uppercased() == "MUJER"
+        let baseCm = isFemale ? 37.0 : 43.0
+        let refIpd = isFemale ? 6.1 : 6.3
+        let refHeadH = isFemale ? 15.0 : 16.5
+        let minRange = isFemale ? 32.0 : 37.0
+        let maxRange = isFemale ? 46.0 : 54.0
+
+        var estimatedCm: Double = baseCm
         var estimationMethod = "calibrated_fov"
         
         let leftEye = recognizedPoints[.leftEye]
         let rightEye = recognizedPoints[.rightEye]
         let nose = recognizedPoints[.nose]
         
-        // 1. Método Interpupilar: Invariante a distancia (distancia media entre ojos = 6.3 cm)
+        // 1. Método Interpupilar: Invariante a distancia
         if let le = leftEye, le.confidence > 0.3,
            let re = rightEye, re.confidence > 0.3 {
           let eyeDx = abs(Double(le.location.x) - Double(re.location.x))
           let eyeDy = abs(Double(le.location.y) - Double(re.location.y))
           let eyeDist = sqrt(eyeDx * eyeDx + eyeDy * eyeDy)
           if eyeDist > 0.018 {
-            let anthropometricScale = 6.3 / eyeDist
+            let anthropometricScale = refIpd / eyeDist
             let rawCm = shoulderDist * anthropometricScale
-            if rawCm >= 36.0 && rawCm <= 56.0 {
+            if rawCm >= minRange && rawCm <= maxRange {
               estimatedCm = rawCm
               estimationMethod = "interpupillary_ratio"
             }
           }
         }
         
-        // 2. Método Nariz-Cuello: Invariante a distancia (distancia media nariz a cuello = 16.5 cm)
+        // 2. Método Nariz-Cuello: Invariante a distancia
         if estimationMethod == "calibrated_fov" {
           if let n = nose, n.confidence > 0.3,
              let neck = recognizedPoints[.neck], neck.confidence > 0.3 {
             let headDy = abs(Double(n.location.y) - Double(neck.location.y))
             if headDy > 0.04 {
-              let headScale = 16.5 / headDy
+              let headScale = refHeadH / headDy
               let rawHeadCm = shoulderDist * headScale
-              if rawHeadCm >= 36.0 && rawHeadCm <= 56.0 {
+              if rawHeadCm >= minRange && rawHeadCm <= maxRange {
                 estimatedCm = rawHeadCm
                 estimationMethod = "head_height_ratio"
               }
@@ -190,18 +198,19 @@ import Vision
         
         // 3. Método FOV Calibrado (iPhone 15 Pro Max a ~1.7m de distancia)
         if estimationMethod == "calibrated_fov" {
-          let baseCm = 43.5
           let delta = (shoulderDist - 0.25) * 55.0
           estimatedCm = baseCm + delta
         }
         
-        // Redondear a 1 decimal y limitar a rango humano real (37.0 a 54.0 cm)
-        let finalCm = Double(round(estimatedCm * 10) / 10).clamped(to: 37.0...54.0)
+        // Redondear a 1 decimal y limitar al rango humano real según género
+        let finalCm = Double(round(estimatedCm * 10) / 10).clamped(to: minRange...maxRange)
         
         result([
           "detected": true,
           "shoulderRatio": shoulderDist,
+          "shoulderAngle": shoulderAngle,
           "estimatedShouldersCm": finalCm,
+          "gender": isFemale ? "MUJER" : "HOMBRE",
           "method": estimationMethod,
           "leftShoulder": ["x": lsX, "y": lsY, "confidence": Double(leftShoulder.confidence)],
           "rightShoulder": ["x": rsX, "y": rsY, "confidence": Double(rightShoulder.confidence)],

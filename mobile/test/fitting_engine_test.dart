@@ -1,5 +1,7 @@
+import 'dart:ui';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/features/fitting/domain/fitting_engine.dart';
+import 'package:capricho_store/features/fitting/domain/pose_smoother.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -43,16 +45,32 @@ void main() {
       expect(rec.sizeScales['M'], 1.0);
       expect(rec.sizeScales['L'], greaterThan(1.0));
       expect(rec.sizeScales['S'], lessThan(1.0));
+      expect(rec.isBorderline, isFalse);
     });
 
-    test('recomienda talla L para hombros más anchos (47.5cm)', () {
+    test('detecta talla frontera entre M y L a 45.5cm', () {
       final rec = FittingEngine.evaluate(
         measurements: sampleMeasurements,
         availableSizes: ['S', 'M', 'L'],
-        userShouldersCm: 47.5,
+        userShouldersCm: 45.5,
       );
 
-      expect(rec.recommendedSize, 'L');
+      expect(rec.isBorderline, isTrue);
+      expect(rec.alternativeSize, isNotNull);
+      expect(['M', 'L'], contains(rec.recommendedSize));
+      expect(['M', 'L'], contains(rec.alternativeSize));
+    });
+
+    test('aplica calibración femenina correctamente en ausencia de tabla', () {
+      final rec = FittingEngine.evaluate(
+        measurements: [],
+        availableSizes: ['S', 'M', 'L', 'XL'],
+        userShouldersCm: 38.0,
+        gender: 'MUJER',
+      );
+
+      expect(rec.recommendedSize, 'M');
+      expect(rec.gender, 'MUJER');
       expect(rec.confidence, greaterThanOrEqualTo(90));
     });
 
@@ -67,17 +85,6 @@ void main() {
       expect(rec.confidence, greaterThanOrEqualTo(90));
     });
 
-    test('maneja lista vacía de medidas usando hombros estándar', () {
-      final rec = FittingEngine.evaluate(
-        measurements: [],
-        availableSizes: ['S', 'M', 'L'],
-        userShouldersCm: 44.0,
-      );
-
-      expect(rec.recommendedSize, 'M');
-      expect(rec.confidence, isNotNull);
-    });
-
     test('retorna fallback cuando no hay tallas disponibles', () {
       final rec = FittingEngine.evaluate(
         measurements: [],
@@ -86,6 +93,47 @@ void main() {
 
       expect(rec.recommendedSize, 'M');
       expect(rec.confidence, 85);
+    });
+  });
+
+  group('PoseSmoother EMA Tests', () {
+    test('inicializa valores en la primera llamada', () {
+      final smoother = PoseSmoother(alpha: 0.35);
+      expect(smoother.isInitialized, isFalse);
+
+      final pose = smoother.update(
+        neck: const Offset(0.5, 0.3),
+        shoulderAngle: 0.05,
+        shoulderRatio: 0.45,
+        scaleMultiplier: 1.0,
+      );
+
+      expect(smoother.isInitialized, isTrue);
+      expect(pose.neck, const Offset(0.5, 0.3));
+      expect(pose.shoulderAngle, 0.05);
+      expect(pose.shoulderRatio, 0.45);
+    });
+
+    test('suaviza variaciones abruptas de forma gradual', () {
+      final smoother = PoseSmoother(alpha: 0.35);
+      smoother.update(
+        neck: const Offset(0.5, 0.3),
+        shoulderAngle: 0.0,
+        shoulderRatio: 0.40,
+      );
+
+      // Simular un salto repentino en un fotograma ruidoso
+      final smoothed = smoother.update(
+        neck: const Offset(0.6, 0.4),
+        shoulderAngle: 0.2,
+        shoulderRatio: 0.50,
+      );
+
+      // El valor suavizado no debe saltar directamente a 0.6 sino a 0.35 * 0.6 + 0.65 * 0.5 = 0.535
+      expect(smoothed.neck.dx, closeTo(0.535, 0.001));
+      expect(smoothed.neck.dy, closeTo(0.335, 0.001));
+      expect(smoothed.shoulderAngle, closeTo(0.07, 0.001));
+      expect(smoothed.shoulderRatio, closeTo(0.435, 0.001));
     });
   });
 }
