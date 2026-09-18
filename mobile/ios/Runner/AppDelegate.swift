@@ -23,13 +23,14 @@ import Vision
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     
-    if poseChannel == nil {
-      let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "CaprichoBodyPosePlugin")
+    if poseChannel == nil,
+       let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "CaprichoBodyPosePlugin") {
       registerPoseChannel(messenger: registrar.messenger())
     }
   }
 
   private func registerPoseChannel(messenger: FlutterBinaryMessenger) {
+    guard poseChannel == nil else { return }
     let channel = FlutterMethodChannel(
       name: "com.capricho.store/body_pose",
       binaryMessenger: messenger
