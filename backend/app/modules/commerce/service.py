@@ -4,7 +4,7 @@ from decimal import Decimal
 from math import asin, ceil, cos, radians, sin, sqrt
 from urllib.parse import urlparse
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.openrouteservice import OpenRouteServiceClient
@@ -2285,6 +2285,29 @@ class CommerceService:
 
     async def list_notifications(self, user_id: int):
         return await self.repository.notifications(user_id)
+
+    async def mark_notification_as_read(self, user_id: int, notification_id: int) -> None:
+        stmt = select(Notificacion).where(
+            Notificacion.id_notificacion == notification_id,
+            Notificacion.id_usuario == user_id,
+        )
+        res = await self.session.execute(stmt)
+        notification = res.scalar_one_or_none()
+        if notification:
+            notification.estado = "LEIDO"
+            await self.session.commit()
+
+    async def mark_all_notifications_as_read(self, user_id: int) -> None:
+        stmt = (
+            update(Notificacion)
+            .where(
+                Notificacion.id_usuario == user_id,
+                Notificacion.estado != "LEIDO",
+            )
+            .values(estado="LEIDO")
+        )
+        await self.session.execute(stmt)
+        await self.session.commit()
 
     async def admin_list_notifications(
         self,

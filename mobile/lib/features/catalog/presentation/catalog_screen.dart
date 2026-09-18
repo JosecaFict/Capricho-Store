@@ -131,7 +131,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           tempSize = null;
                           tempColor = null;
                           tempSeason = null;
-                          tempBranchId = isLocked ? user.idSucursal : null;
+                          tempBranchId = isLocked ? user?.idSucursal : null;
                           tempFittingEnabled = null;
                         });
                       },
@@ -204,7 +204,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              user.branchName ?? 'Sucursal #${user.idSucursal}',
+                              user?.assignedBranchLabel ??
+                                  'Sucursal asignada',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,

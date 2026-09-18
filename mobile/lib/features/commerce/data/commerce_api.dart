@@ -300,4 +300,20 @@ class CommerceApi {
       throw ApiException.fromDio(e);
     }
   }
+
+  Future<void> markNotificationAsRead(int notificationId) async {
+    try {
+      await _dio.patch('/notifications/$notificationId/read');
+    } on DioException {
+      // Tolerar silenciosamente si el endpoint no responde o hay problemas de red
+    }
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    try {
+      await _dio.patch('/notifications/read-all');
+    } on DioException {
+      // Tolerar silenciosamente
+    }
+  }
 }

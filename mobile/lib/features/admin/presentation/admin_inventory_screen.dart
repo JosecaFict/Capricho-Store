@@ -155,7 +155,7 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
         }
 
         final defaultBranchId =
-            (isLocked ? user!.idSucursal : null) ?? branches.first.id;
+            (isLocked ? user?.idSucursal : null) ?? branches.first.id;
         final effectiveBranchId = _selectedBranchId ?? defaultBranchId;
         final stockAsync = ref.watch(
           adminBranchInventoryProvider(effectiveBranchId),
@@ -211,8 +211,8 @@ class _AdminInventoryScreenState extends ConsumerState<AdminInventoryScreen>
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    user.branchName ??
-                                        'Sucursal #${user.idSucursal}',
+                                    user?.assignedBranchLabel ??
+                                        'Sucursal asignada',
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,

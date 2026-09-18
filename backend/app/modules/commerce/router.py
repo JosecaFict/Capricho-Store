@@ -413,6 +413,25 @@ async def register_device_token(
     return await service.register_device_token(principal.user.id_usuario, payload)
 
 
+@router.patch("/notifications/read-all")
+async def mark_all_notifications_as_read(
+    principal: Authenticated,
+    service: Service,
+):
+    await service.mark_all_notifications_as_read(principal.user.id_usuario)
+    return {"mensaje": "Todas las notificaciones marcadas como leídas.", "ok": True}
+
+
+@router.patch("/notifications/{notification_id}/read")
+async def mark_notification_as_read(
+    notification_id: int,
+    principal: Authenticated,
+    service: Service,
+):
+    await service.mark_notification_as_read(principal.user.id_usuario, notification_id)
+    return {"mensaje": "Notificación marcada como leída.", "ok": True}
+
+
 @router.get("/admin/notifications", response_model=AdminNotificationPage)
 async def admin_list_notifications(
     principal: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
