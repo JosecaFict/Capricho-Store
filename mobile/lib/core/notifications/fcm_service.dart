@@ -24,6 +24,7 @@ class FcmService {
 
   String? _fcmToken;
   String? get fcmToken => _fcmToken;
+  CommerceApi? _cachedApi;
 
   final _notificationTapController = StreamController<String>.broadcast();
   Stream<String> get onNotificationTap => _notificationTapController.stream;
@@ -56,21 +57,46 @@ class FcmService {
         name: 'FCM',
       );
 
-      // Obtener el token de FCM
-      _fcmToken = await messaging.getToken();
-      if (_fcmToken != null) {
-        developer.log('FCM Token obtenido: $_fcmToken', name: 'FCM');
-        if (kDebugMode) {
-          debugPrint('====================================');
-          debugPrint('🔥 FCM Token: $_fcmToken');
-          debugPrint('====================================');
+      // En iOS, esperar que APNs asigne el APNs token antes de pedir el token FCM
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        try {
+          String? apnsToken = await messaging.getAPNSToken();
+          int retries = 0;
+          while (apnsToken == null && retries < 5) {
+            await Future.delayed(const Duration(milliseconds: 600));
+            apnsToken = await messaging.getAPNSToken();
+            retries++;
+          }
+          if (apnsToken != null) {
+            developer.log('APNs Token obtenido en iOS: $apnsToken', name: 'FCM');
+          }
+        } catch (apnsError) {
+          developer.log('Aviso APNs Token en iOS: $apnsError', name: 'FCM');
         }
+      }
+
+      // Obtener el token de FCM
+      try {
+        _fcmToken = await messaging.getToken();
+        if (_fcmToken != null) {
+          developer.log('FCM Token obtenido: $_fcmToken', name: 'FCM');
+          if (kDebugMode) {
+            debugPrint('====================================');
+            debugPrint('🔥 FCM Token: $_fcmToken');
+            debugPrint('====================================');
+          }
+        }
+      } catch (tokenError) {
+        developer.log('Error al obtener FCM token: $tokenError', name: 'FCM');
       }
 
       // Escuchar actualizaciones del token
       messaging.onTokenRefresh.listen((newToken) {
         _fcmToken = newToken;
         developer.log('FCM Token actualizado: $newToken', name: 'FCM');
+        if (_cachedApi != null) {
+          syncTokenWithBackend(_cachedApi!);
+        }
       });
 
       // Manejar mensajes en primer plano (Foreground)
@@ -125,6 +151,7 @@ class FcmService {
 
   /// Sincroniza el token del dispositivo con el backend
   Future<void> syncTokenWithBackend(CommerceApi api) async {
+    _cachedApi = api;
     final token = _fcmToken;
     if (token == null || token.isEmpty) return;
 
@@ -156,8 +183,14 @@ class FcmService {
       return data['route'].toString();
     }
     final type = (data['type'] ?? '').toString().toUpperCase();
-    final id = (data['id'] ?? '').toString();
+    final id = (data['id'] ?? data['order_id'] ?? data['id_pedido'] ?? '').toString();
 
+    if (type.contains('STOCK')) {
+      return '/admin/inventario';
+    }
+    if (type.contains('CAMPA') || type.contains('MARKETING')) {
+      return '/catalogo';
+    }
     if (type.contains('ORDER') ||
         type.contains('PEDIDO') ||
         type.contains('VENTA')) {

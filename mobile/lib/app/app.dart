@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:capricho_store/app/router.dart';
 import 'package:capricho_store/core/notifications/fcm_service.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class CaprichoStoreApp extends ConsumerStatefulWidget {
@@ -33,6 +35,9 @@ class _CaprichoStoreAppState extends ConsumerState<CaprichoStoreApp> {
 
     // Escuchar notificaciones en primer plano (Foreground)
     _foregroundMessageSub = FcmService().onForegroundMessage.listen((message) {
+      HapticFeedback.mediumImpact();
+      ref.read(notificationsProvider.notifier).refresh();
+
       final route = FcmService.extractRoute(message);
       final title = message.notification?.title ?? 'Notificación';
       final body = message.notification?.body ?? '';

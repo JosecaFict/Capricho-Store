@@ -484,5 +484,40 @@ class CustomerNotification {
     );
   }
 
-  String get formattedDate => DateFormat('dd/MM/yyyy HH:mm').format(fechaCreacion.toLocal());
+  bool get isUnread => estado != 'LEIDO';
+  bool get isRead => estado == 'LEIDO';
+
+  CustomerNotification copyWith({String? estado}) => CustomerNotification(
+        idNotificacion: idNotificacion,
+        tipo: tipo,
+        titulo: titulo,
+        contenido: contenido,
+        estado: estado ?? this.estado,
+        fechaCreacion: fechaCreacion,
+      );
+
+  String get targetRoute {
+    final t = tipo.toUpperCase();
+    if (t.contains('STOCK')) {
+      return '/admin/inventario';
+    }
+    if (t.contains('CAMPA') || t.contains('MARKETING')) {
+      return '/catalogo';
+    }
+    if (t.contains('RESERV')) {
+      return '/reservas';
+    }
+    if (t.contains('PEDIDO') || t.contains('VENTA') || t.contains('ORDER')) {
+      final match = RegExp(r'#(\d+)').firstMatch(contenido);
+      if (match != null) {
+        final orderId = match.group(1);
+        return '/pedidos/$orderId';
+      }
+      return '/pedidos';
+    }
+    return '/notificaciones';
+  }
+
+  String get formattedDate =>
+      DateFormat('dd/MM/yyyy HH:mm').format(fechaCreacion.toLocal());
 }

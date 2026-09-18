@@ -223,6 +223,11 @@ final notificationsProvider =
     AsyncNotifierProvider<NotificationsController, List<CustomerNotification>>(
         NotificationsController.new);
 
+final unreadNotificationsCountProvider = Provider<int>((ref) {
+  final notifs = ref.watch(notificationsProvider).value ?? [];
+  return notifs.where((n) => n.isUnread).length;
+});
+
 class NotificationsController extends AsyncNotifier<List<CustomerNotification>> {
   CommerceApi get _api => ref.read(commerceApiProvider);
 
@@ -239,4 +244,32 @@ class NotificationsController extends AsyncNotifier<List<CustomerNotification>> 
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() => _api.listNotifications());
   }
+
+  Future<void> markAsRead(int notificationId) async {
+    try {
+      await _api.markNotificationAsRead(notificationId);
+      final current = state.value;
+      if (current != null) {
+        state = AsyncValue.data(
+          current.map((n) {
+            if (n.idNotificacion == notificationId) {
+              return n.copyWith(estado: 'LEIDO');
+            }
+            return n;
+          }).toList(),
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> markAllAsRead() async {
+    final current = state.value ?? [];
+    for (final n in current.where((n) => n.isUnread)) {
+      try {
+        await _api.markNotificationAsRead(n.idNotificacion);
+      } catch (_) {}
+    }
+    await refresh();
+  }
 }
+

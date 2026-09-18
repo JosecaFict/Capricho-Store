@@ -467,6 +467,11 @@ class CommerceService:
                 "RESERVA_CREADA",
                 "Reserva recibida",
                 f"Tu reserva #{reservation.id_reserva} fue registrada.",
+                data={
+                    "type": "RESERVA",
+                    "id": str(reservation.id_reserva),
+                    "route": "/reservas",
+                },
             )
             await self.session.commit()
         except Exception:
@@ -575,6 +580,11 @@ class CommerceService:
                 "RESERVA_CANCELADA",
                 "Reserva cancelada",
                 f"La reserva #{reservation.id_reserva} fue cancelada.",
+                data={
+                    "type": "RESERVA",
+                    "id": str(reservation.id_reserva),
+                    "route": "/reservas",
+                },
             )
             await self.session.commit()
         except Exception:
@@ -620,6 +630,11 @@ class CommerceService:
             f"RESERVA_{payload.estado}",
             "Estado de reserva actualizado",
             f"Tu reserva #{reservation.id_reserva} ahora está {payload.estado.lower()}.",
+            data={
+                "type": "RESERVA",
+                "id": str(reservation.id_reserva),
+                "route": "/reservas",
+            },
         )
         await self.session.commit()
         return await self._reservation_response(reservation)
@@ -721,6 +736,28 @@ class CommerceService:
                 )
             )
             await self._consume_fifo(inventory, line.cantidad, movement.id_movimiento)
+            remaining_available = (
+                inventory.stock_fisico - line.cantidad - inventory.stock_reservado
+                if not reservation_id
+                else inventory.stock_fisico - inventory.stock_reservado
+            )
+            if remaining_available <= inventory.stock_minimo:
+                variant_info = await self.repository.variant_row(line.id_variante)
+                product_label = (
+                    f"{variant_info['producto']} ({variant_info['color']}, Talla {variant_info['talla']})"
+                    if variant_info
+                    else f"Variante #{line.id_variante}"
+                )
+                await self._notify_branch_staff(
+                    inventory.id_sucursal,
+                    "Alerta de Stock Crítico",
+                    f"{product_label} alcanzó el stock mínimo en tu sucursal ({remaining_available} unidades restantes).",
+                    data={
+                        "type": "STOCK_CRITICO",
+                        "id": str(inventory.id_inventario),
+                        "route": "/admin/inventario",
+                    },
+                )
         if cash:
             method_code = payment_method_code or "EFECTIVO"
             method = await self.repository.payment_method(method_code)
@@ -1060,6 +1097,11 @@ class CommerceService:
                     "PAGO_CONFIRMADO",
                     "Compra confirmada",
                     f"Stripe confirmó el pago de tu pedido #{order.id_pedido}.",
+                    data={
+                        "type": "PEDIDO",
+                        "id": str(order.id_pedido),
+                        "route": f"/pedidos/{order.id_pedido}",
+                    },
                 )
         if sale.modalidad_entrega == "DELIVERY":
             await self._dispatch_order_invoice_email(order, sale)
@@ -1665,6 +1707,11 @@ class CommerceService:
                     f"Tu pedido #{order.id_pedido} ahora está "
                     f"{payload.estado.lower().replace('_', ' ')}."
                 ),
+                data={
+                    "type": f"PEDIDO_{payload.estado}",
+                    "id": str(order.id_pedido),
+                    "route": f"/pedidos/{order.id_pedido}",
+                },
             )
         await self.session.commit()
         return await self._order_response(order)
@@ -2201,6 +2248,25 @@ class CommerceService:
                 )
         except Exception as exc:
             logger.warning("No se pudo registrar la notificacion: %s", exc)
+
+    async def _notify_branch_staff(
+        self,
+        branch_id: int,
+        title: str,
+        content: str,
+        data: dict | None = None,
+    ) -> None:
+        try:
+            from app.modules.auth.models import Empleado
+            stmt = select(Empleado.id_usuario).where(
+                Empleado.id_sucursal == branch_id,
+                Empleado.estado_laboral == "ACTIVO",
+            )
+            res = await self.session.execute(stmt)
+            for row in res.all():
+                await self._notify(row[0], "STOCK_CRITICO", title, content, data=data)
+        except Exception as exc:
+            logger.warning("No se pudo notificar al personal de sucursal: %s", exc)
 
     async def register_device_token(
         self, user_id: int, payload: DeviceTokenRegisterRequest

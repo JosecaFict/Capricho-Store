@@ -3,6 +3,7 @@ import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/admin/domain/operational_access.dart';
 import 'package:capricho_store/features/auth/domain/app_user.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
+import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
 import 'package:flutter/material.dart';
@@ -491,7 +492,36 @@ class ProfileScreen extends ConsumerWidget {
                 title: const Text('Notificaciones',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 subtitle: const Text('Avisos de pedidos y reservas'),
-                trailing: const Icon(Icons.chevron_right_rounded),
+                trailing: Consumer(
+                  builder: (context, ref, _) {
+                    final unread = ref.watch(unreadNotificationsCountProvider);
+                    if (unread > 0) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.cobalt,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$unread',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right_rounded),
+                        ],
+                      );
+                    }
+                    return const Icon(Icons.chevron_right_rounded);
+                  },
+                ),
                 onTap: () {
                   HapticFeedback.selectionClick();
                   context.push('/notificaciones');
