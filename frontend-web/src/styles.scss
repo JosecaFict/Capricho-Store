@@ -2937,26 +2937,19 @@ td {
     }
   }
 
-  .dropdown-refresh-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 6px;
+  .mark-all-read-btn {
     background: transparent;
-    color: var(--ink-soft);
+    border: none;
+    color: var(--accent);
+    font-size: 0.74rem;
+    font-weight: 700;
     cursor: pointer;
-    transition: background 120ms ease, color 120ms ease;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 150ms ease, color 150ms ease;
 
     &:hover {
-      background: var(--line);
-      color: var(--ink);
-    }
-
-    .is-spinning {
-      animation: spin 700ms linear infinite;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
     }
   }
 }

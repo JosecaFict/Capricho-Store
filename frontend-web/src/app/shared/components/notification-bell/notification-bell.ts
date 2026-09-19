@@ -57,46 +57,19 @@ import { CommerceService } from '../../../core/services/commerce.service';
             <div class="dropdown-title-row">
               <h3>Notificaciones</h3>
               @if (unreadCount() > 0) {
-                <span class="dropdown-count-pill">{{ unreadCount() }} recientes</span>
+                <span class="dropdown-count-pill">{{ unreadCount() }} pendientes</span>
               }
             </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              @if (unreadCount() > 0) {
-                <button
-                  type="button"
-                  class="mark-all-read-btn"
-                  (click)="markAllAsRead()"
-                  title="Marcar todas como leídas"
-                  style="background: none; border: none; color: #2563eb; font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 4px;"
-                >
-                  Marcar leídas
-                </button>
-              }
+            @if (unreadCount() > 0) {
               <button
                 type="button"
-                class="dropdown-refresh-btn"
-                (click)="loadNotifications()"
-                [disabled]="loading()"
-                title="Actualizar notificaciones"
-                aria-label="Actualizar"
+                class="mark-all-read-btn"
+                (click)="markAllAsRead()"
+                title="Marcar todas como leídas"
               >
-                <svg
-                  [class.is-spinning]="loading()"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  width="15"
-                  height="15"
-                  aria-hidden="true"
-                >
-                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                  <path d="M16 21h5v-5" />
-                </svg>
+                Marcar todo leído
               </button>
-            </div>
+            }
           </header>
 
           <div class="notification-dropdown__list">
@@ -115,6 +88,7 @@ import { CommerceService } from '../../../core/services/commerce.service';
               @for (item of recentItems(); track item.id_notificacion) {
                 <article
                   class="notification-item"
+                  [class.is-unread]="item.estado !== 'LEIDO'"
                   [attr.data-type]="categorize(item.tipo)"
                   [routerLink]="itemRoute(item)"
                   (click)="onItemClick(item)"
@@ -163,23 +137,18 @@ export class NotificationBell implements OnInit {
   readonly items = signal<OperationalNotification[]>([]);
 
   readonly recentItems = computed(() => this.items().slice(0, 5));
-  readonly unreadCount = computed(() => {
-    // Cuenta elementos no leídos recibidos en las últimas 48 horas como recientes
-    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-    return this.items().filter((item) => {
-      if (item.estado === 'LEIDO') return false;
-      const ts = new Date(item.fecha_creacion).getTime();
-      return ts > cutoff;
-    }).length;
-  });
+  readonly unreadCount = computed(() =>
+    this.items().filter((item) => item.estado !== 'LEIDO').length
+  );
 
   readonly destinationUrl = computed(() =>
     this.mode() === 'admin' ? '/admin/notificaciones' : '/notificaciones',
   );
 
   ngOnInit(): void {
-    // Sondeo periódico cada 5 segundos para refrescar la campana en vivo sin recargar página
-    timer(0, 5000)
+    this.loadNotifications();
+    // Sondeo periódico en vivo cada 5 segundos
+    timer(5000, 5000)
       .pipe(
         switchMap(() => this.commerce.notifications()),
         takeUntilDestroyed(this.destroyRef)
@@ -207,7 +176,13 @@ export class NotificationBell implements OnInit {
   onItemClick(item: OperationalNotification): void {
     this.close();
     if (item.estado !== 'LEIDO') {
-      item.estado = 'LEIDO';
+      this.items.update((list) =>
+        list.map((n) =>
+          n.id_notificacion === item.id_notificacion
+            ? { ...n, estado: 'LEIDO' }
+            : n
+        )
+      );
       this.commerce.markNotificationAsRead(item.id_notificacion).subscribe({
         next: () => {},
         error: () => {},
@@ -216,9 +191,9 @@ export class NotificationBell implements OnInit {
   }
 
   markAllAsRead(): void {
-    for (const item of this.items()) {
-      item.estado = 'LEIDO';
-    }
+    this.items.update((list) =>
+      list.map((n) => ({ ...n, estado: 'LEIDO' }))
+    );
     this.commerce.markAllNotificationsAsRead().subscribe({
       next: () => {},
       error: () => {},
