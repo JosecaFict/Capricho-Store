@@ -25,38 +25,25 @@ async def run_startup_migrations() -> None:
 
         logger = logging.getLogger("capricho.migrations")
         async with engine.begin() as conn:
-            # Actualizar check constraint de notificacion para admitir LEIDO, ACTIVO, FALLIDO
-            await conn.execute(
-                text(
-                    """
-                    DO $$
-                    BEGIN
-                        ALTER TABLE IF EXISTS notificacion DROP CONSTRAINT IF EXISTS notificacion_estado_check;
-                        ALTER TABLE IF EXISTS notificacion ADD CONSTRAINT notificacion_estado_check 
+            for target_table in ["capricho.notificacion", "notificacion"]:
+                try:
+                    # 1. Primero eliminar la restricción restrictiva antigua
+                    await conn.execute(
+                        text(f"ALTER TABLE IF EXISTS {target_table} DROP CONSTRAINT IF EXISTS notificacion_estado_check;")
+                    )
+                    # 2. Añadir la restricción moderna que incluye LEIDO, ACTIVO, FALLIDO
+                    await conn.execute(
+                        text(
+                            f"""
+                            ALTER TABLE IF EXISTS {target_table} 
+                            ADD CONSTRAINT notificacion_estado_check 
                             CHECK (estado IN ('PENDIENTE', 'ENVIANDO', 'ENVIADO', 'ENTREGADO', 'ERROR', 'LEIDO', 'ACTIVO', 'FALLIDO'));
-                    EXCEPTION
-                        WHEN OTHERS THEN
-                            NULL;
-                    END $$;
-                    """
-                )
-            )
-            await conn.execute(
-                text(
-                    """
-                    DO $$
-                    BEGIN
-                        ALTER TABLE IF EXISTS capricho.notificacion DROP CONSTRAINT IF EXISTS notificacion_estado_check;
-                        ALTER TABLE IF EXISTS capricho.notificacion ADD CONSTRAINT notificacion_estado_check 
-                            CHECK (estado IN ('PENDIENTE', 'ENVIANDO', 'ENVIADO', 'ENTREGADO', 'ERROR', 'LEIDO', 'ACTIVO', 'FALLIDO'));
-                    EXCEPTION
-                        WHEN OTHERS THEN
-                            NULL;
-                    END $$;
-                    """
-                )
-            )
-            logger.info("Migración de notificacion_estado_check verificada exitosamente.")
+                            """
+                        )
+                    )
+                    logger.info("Restricción notificacion_estado_check actualizada para %s.", target_table)
+                except Exception as inner_exc:
+                    logger.warning("Aviso durante migración de %s: %s", target_table, inner_exc)
     except Exception as exc:
         import logging
         logging.getLogger("capricho.migrations").warning("No se pudo ejecutar la migración inicial de notificaciones: %s", exc)
