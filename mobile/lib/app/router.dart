@@ -22,6 +22,7 @@ import 'package:capricho_store/features/commerce/presentation/order_detail_scree
 import 'package:capricho_store/features/commerce/presentation/orders_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/reservations_screen.dart';
 import 'package:capricho_store/features/home/presentation/home_screen.dart';
+import 'package:capricho_store/features/home/presentation/splash_screen.dart';
 import 'package:capricho_store/shared/widgets/app_shell.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -61,10 +62,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/inicio',
+    initialLocation: '/splash',
     refreshListenable: refresh,
     redirect: (context, state) {
       final location = state.uri.path;
+      if (location == '/splash') return null;
       final isPanelRoute =
           location == '/admin' || location.startsWith('/admin/');
       if (!isPanelRoute) return null;
@@ -77,6 +79,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       );
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) =>

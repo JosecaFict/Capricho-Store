@@ -2,6 +2,7 @@ import 'package:capricho_store/app/navigation_memory.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/admin/domain/operational_access.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
+import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,7 +20,10 @@ class AppShell extends ConsumerWidget {
     final user = ref.watch(authControllerProvider).user;
     final isStaff = user != null && user.canAccessOperationalPanel;
 
-    final orders = ref.watch(ordersProvider).valueOrNull ?? [];
+    final orders = ref.watch(ordersProvider).maybeWhen(
+      data: (items) => items,
+      orElse: () => const <Order>[],
+    );
     final activeOrdersCount = orders.where((o) =>
         o.estado == 'PENDIENTE' ||
         o.estado == 'PREPARANDO' ||
