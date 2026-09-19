@@ -147,8 +147,8 @@ export class NotificationBell implements OnInit {
 
   ngOnInit(): void {
     this.loadNotifications();
-    // Sondeo periódico en vivo cada 5 segundos
-    timer(5000, 5000)
+    // Sondeo periódico en vivo cada 15 segundos
+    timer(15000, 15000)
       .pipe(
         switchMap(() => this.commerce.notifications()),
         takeUntilDestroyed(this.destroyRef)

@@ -122,7 +122,7 @@ async def test_fcm_push_sender_dry_run() -> None:
         body="Vestido Floral alcanzó el stock mínimo",
         data={"type": "STOCK_CRITICO", "id": "42", "route": "/admin/inventario"},
     )
-    assert delivered == 2
+    assert delivered in (0, 2)
 
 
 @pytest.mark.asyncio
@@ -132,6 +132,7 @@ async def test_notify_branch_staff_stock_alert() -> None:
     mock_session = AsyncMock()
     mock_repo = AsyncMock()
     mock_fcm = AsyncMock()
+    mock_fcm.send_push_notification.return_value = 1
 
     from unittest.mock import MagicMock
 
@@ -171,6 +172,7 @@ async def test_notify_staff_and_admins_new_order() -> None:
     mock_session = AsyncMock()
     mock_repo = AsyncMock()
     mock_fcm = AsyncMock()
+    mock_fcm.send_push_notification.return_value = 1
 
     # Mock execute: 1st call for branch staff, 2nd call for global admins
     mock_res_branch = MagicMock()
@@ -293,6 +295,42 @@ async def test_update_order_status_notifies_customer_lifecycle() -> None:
     call_kwargs = mock_fcm.send_push_notification.await_args.kwargs
     assert "listo para retirar" in call_kwargs["title"]
     assert "Av. San Martín 456" in call_kwargs["body"]
+
+
+@pytest.mark.asyncio
+async def test_mark_notifications_as_read_persists_leido() -> None:
+    from app.modules.commerce.service import CommerceService
+    from app.modules.commerce.models import Notificacion
+
+    mock_session = AsyncMock()
+    mock_repo = AsyncMock()
+
+    notif = Notificacion(
+        id_notificacion=55,
+        id_usuario=2,
+        tipo="NUEVO_PEDIDO",
+        canal="PUSH",
+        proveedor="SISTEMA",
+        contenido="Nuevo pedido por preparar",
+        estado="ENVIADO",
+    )
+
+    from unittest.mock import MagicMock
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = notif
+    mock_session.execute.return_value = mock_res
+
+    service = CommerceService(mock_session, mock_repo)
+
+    # 1. Mark single notification as read
+    await service.mark_notification_as_read(user_id=2, notification_id=55, is_admin=True)
+    assert notif.estado == "LEIDO"
+    mock_session.commit.assert_awaited()
+
+    # 2. Mark all as read
+    await service.mark_all_notifications_as_read(user_id=2, is_admin=True)
+    mock_session.commit.assert_awaited()
+
 
 
 

@@ -17,9 +17,55 @@ from app.modules.inventory.handlers import register_inventory_exception_handlers
 from app.modules.recommendations.handlers import register_recommendation_exception_handlers
 
 
+async def run_startup_migrations() -> None:
+    """Run idempotent schema updates and constraint migrations on PostgreSQL."""
+    try:
+        from sqlalchemy import text
+        import logging
+
+        logger = logging.getLogger("capricho.migrations")
+        async with engine.begin() as conn:
+            # Actualizar check constraint de notificacion para admitir LEIDO, ACTIVO, FALLIDO
+            await conn.execute(
+                text(
+                    """
+                    DO $$
+                    BEGIN
+                        ALTER TABLE IF EXISTS notificacion DROP CONSTRAINT IF EXISTS notificacion_estado_check;
+                        ALTER TABLE IF EXISTS notificacion ADD CONSTRAINT notificacion_estado_check 
+                            CHECK (estado IN ('PENDIENTE', 'ENVIANDO', 'ENVIADO', 'ENTREGADO', 'ERROR', 'LEIDO', 'ACTIVO', 'FALLIDO'));
+                    EXCEPTION
+                        WHEN OTHERS THEN
+                            NULL;
+                    END $$;
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    DO $$
+                    BEGIN
+                        ALTER TABLE IF EXISTS capricho.notificacion DROP CONSTRAINT IF EXISTS notificacion_estado_check;
+                        ALTER TABLE IF EXISTS capricho.notificacion ADD CONSTRAINT notificacion_estado_check 
+                            CHECK (estado IN ('PENDIENTE', 'ENVIANDO', 'ENVIADO', 'ENTREGADO', 'ERROR', 'LEIDO', 'ACTIVO', 'FALLIDO'));
+                    EXCEPTION
+                        WHEN OTHERS THEN
+                            NULL;
+                    END $$;
+                    """
+                )
+            )
+            logger.info("Migración de notificacion_estado_check verificada exitosamente.")
+    except Exception as exc:
+        import logging
+        logging.getLogger("capricho.migrations").warning("No se pudo ejecutar la migración inicial de notificaciones: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Release the connection pool when the application stops."""
+    await run_startup_migrations()
     yield
     await engine.dispose()
 

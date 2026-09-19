@@ -418,7 +418,11 @@ async def mark_all_notifications_as_read(
     principal: Authenticated,
     service: Service,
 ):
-    await service.mark_all_notifications_as_read(principal.user.id_usuario)
+    is_admin = any(
+        r.upper() in ["ADMINISTRADOR", "PROPIETARIO", "ADMIN"]
+        for r in (principal.roles or [])
+    )
+    await service.mark_all_notifications_as_read(principal.user.id_usuario, is_admin=is_admin)
     return {"mensaje": "Todas las notificaciones marcadas como leídas.", "ok": True}
 
 
@@ -428,7 +432,13 @@ async def mark_notification_as_read(
     principal: Authenticated,
     service: Service,
 ):
-    await service.mark_notification_as_read(principal.user.id_usuario, notification_id)
+    is_admin = any(
+        r.upper() in ["ADMINISTRADOR", "PROPIETARIO", "ADMIN"]
+        for r in (principal.roles or [])
+    )
+    await service.mark_notification_as_read(
+        principal.user.id_usuario, notification_id, is_admin=is_admin
+    )
     return {"mensaje": "Notificación marcada como leída.", "ok": True}
 
 

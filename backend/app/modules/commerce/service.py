@@ -2318,7 +2318,8 @@ class CommerceService:
                     body=content,
                     data=push_data,
                 )
-                if delivered > 0:
+                delivered_count = int(delivered) if isinstance(delivered, (int, float)) else (1 if delivered else 0)
+                if delivered_count > 0:
                     estado = "ENVIADO"
                     fecha_envio = datetime.now(UTC)
                 else:
@@ -2434,26 +2435,42 @@ class CommerceService:
     async def list_notifications(self, user_id: int):
         return await self.repository.notifications(user_id)
 
-    async def mark_notification_as_read(self, user_id: int, notification_id: int) -> None:
+    async def mark_notification_as_read(
+        self, user_id: int, notification_id: int, is_admin: bool = False
+    ) -> None:
         stmt = select(Notificacion).where(
             Notificacion.id_notificacion == notification_id,
-            Notificacion.id_usuario == user_id,
         )
+        if not is_admin:
+            stmt = stmt.where(Notificacion.id_usuario == user_id)
+
         res = await self.session.execute(stmt)
         notification = res.scalar_one_or_none()
         if notification:
             notification.estado = "LEIDO"
             await self.session.commit()
 
-    async def mark_all_notifications_as_read(self, user_id: int) -> None:
-        stmt = (
-            update(Notificacion)
-            .where(
-                Notificacion.id_usuario == user_id,
-                Notificacion.estado != "LEIDO",
+    async def mark_all_notifications_as_read(
+        self, user_id: int, is_admin: bool = False
+    ) -> None:
+        if is_admin:
+            stmt = (
+                update(Notificacion)
+                .where(
+                    (Notificacion.id_usuario == user_id) | (Notificacion.id_usuario.is_(None)),
+                    Notificacion.estado != "LEIDO",
+                )
+                .values(estado="LEIDO")
             )
-            .values(estado="LEIDO")
-        )
+        else:
+            stmt = (
+                update(Notificacion)
+                .where(
+                    Notificacion.id_usuario == user_id,
+                    Notificacion.estado != "LEIDO",
+                )
+                .values(estado="LEIDO")
+            )
         await self.session.execute(stmt)
         await self.session.commit()
 
