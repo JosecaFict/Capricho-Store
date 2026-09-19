@@ -104,12 +104,11 @@ class FcmPushSender:
                 logger.error("Error al enviar multicast FCM: %s", exc)
                 return 0
 
-        sent_count = 0
-        for token in tokens:
-            logger.debug("Dispatching push to token=%s...", token[:15])
-            sent_count += 1
-
-        return sent_count
+        logger.warning(
+            "FCM Push Sender no está inicializado (falta FIREBASE_SERVICE_ACCOUNT_JSON o firebase-admin). No se pudo despachar el push a %d dispositivo(s).",
+            len(tokens),
+        )
+        return 0
 
 
 _default_fcm_sender = FcmPushSender()

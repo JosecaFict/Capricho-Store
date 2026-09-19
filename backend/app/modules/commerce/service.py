@@ -2304,22 +2304,11 @@ class CommerceService:
     ) -> None:
         try:
             now = datetime.now(UTC)
-            notif = Notificacion(
-                id_usuario=user_id,
-                id_campania=None,
-                tipo=kind,
-                canal="PUSH",
-                proveedor="SISTEMA",
-                titulo=title,
-                contenido=content,
-                estado="ENVIADO",
-                fecha_creacion=now,
-                fecha_envio=now,
-                fecha_entrega=now,
-            )
-            await self.repository.add(notif)
-            # Despachar push a los dispositivos registrados
             device_tokens = await self.repository.get_user_device_tokens(user_id)
+            estado = "ENVIADO"
+            fecha_envio = now
+            error_msg = None
+
             if device_tokens:
                 push_data = dict(data or {})
                 push_data.setdefault("type", kind)
@@ -2329,8 +2318,31 @@ class CommerceService:
                     body=content,
                     data=push_data,
                 )
-                if delivered == 0 and len(device_tokens) > 0:
-                    notif.error_mensaje = "FCM no pudo entregar el push a los dispositivos registrados"
+                if delivered > 0:
+                    estado = "ENVIADO"
+                    fecha_envio = datetime.now(UTC)
+                else:
+                    estado = "FALLIDO"
+                    error_msg = "FCM no pudo entregar el push a los dispositivos registrados"
+            else:
+                estado = "ENVIADO"
+                fecha_envio = now
+
+            notif = Notificacion(
+                id_usuario=user_id,
+                id_campania=None,
+                tipo=kind,
+                canal="PUSH",
+                proveedor="SISTEMA",
+                titulo=title,
+                contenido=content,
+                estado=estado,
+                fecha_creacion=now,
+                fecha_envio=fecha_envio,
+                fecha_entrega=fecha_envio if estado == "ENVIADO" else None,
+                error_mensaje=error_msg,
+            )
+            await self.repository.add(notif)
         except Exception as exc:
             logger.warning("No se pudo registrar la notificacion: %s", exc)
 
