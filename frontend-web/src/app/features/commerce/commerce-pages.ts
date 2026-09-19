@@ -1620,6 +1620,17 @@ export class AddressesPage {
               }
             </ul>
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button
+                  class="button button--small button--secondary"
+                  type="button"
+                  [disabled]="downloadingSaleId() === sale.id_venta"
+                  (click)="downloadSaleInvoice(sale.id_venta)"
+                  title="Descargar factura en PDF"
+                >
+                  {{ downloadingSaleId() === sale.id_venta ? 'Generando PDF…' : '📄 Descargar Factura PDF' }}
+                </button>
+              </div>
               @if (isReturnEligible(sale.fecha_venta).eligible && (sale.estado === 'PAGADA' || sale.estado === 'CONFIRMADA')) {
                 <span class="status-chip" style="background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; font-size: 0.75rem;">
                   ✓ Devolución disponible ({{ isReturnEligible(sale.fecha_venta).remaining }} d. hábiles)
@@ -1714,6 +1725,7 @@ export class HistoryPage {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
+  readonly downloadingSaleId = signal<number | null>(null);
   readonly returnForm = this.fb.nonNullable.group({
     id_detalle_venta: ['', Validators.required],
     cantidad: [1, [Validators.required, Validators.min(1)]],
@@ -1770,6 +1782,27 @@ export class HistoryPage {
         },
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos crear la devolución.')),
+      });
+  }
+
+  downloadSaleInvoice(saleId: number): void {
+    this.downloadingSaleId.set(saleId);
+    this.commerce
+      .saleInvoice(saleId)
+      .pipe(finalize(() => this.downloadingSaleId.set(null)))
+      .subscribe({
+        next: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `factura_compra_${saleId}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          a.remove();
+        },
+        error: (error) =>
+          this.error.set(this.errors.message(error, 'No pudimos descargar la factura.')),
       });
   }
 
