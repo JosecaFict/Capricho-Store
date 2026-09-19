@@ -714,5 +714,79 @@ describe('SupplierHistoryAdmin', () => {
     await component.exportExcel();
     expect(exportService.exportPurchasesToExcel).toHaveBeenCalled();
   });
+
+  it('manages returns, opens inspection modal and completes with item conditions', () => {
+    const mockReturns: ReturnRequest[] = [
+      {
+        id_devolucion: 10,
+        id_venta: 25,
+        cliente_nombre: 'Carlos Perez',
+        motivo: 'Talla grande',
+        estado: 'APROBADA',
+        fecha_solicitud: '2026-09-18T10:00:00Z',
+        fecha_resolucion: null,
+        items: [
+          {
+            id_detalle_devolucion: 101,
+            id_detalle_venta: 501,
+            id_variante: 101,
+            producto: 'Polera Oversize Basic',
+            talla: 'M',
+            color: 'Negro',
+            cantidad: 1,
+            estado_prenda: 'APTA_REINGRESO',
+          },
+        ],
+      },
+    ];
+
+    const commerce = {
+      adminReturns: vi.fn().mockReturnValue(of(mockReturns)),
+      updateReturn: vi.fn().mockImplementation((id: number, payload: any) =>
+        of({
+          ...mockReturns[0],
+          estado: typeof payload === 'string' ? payload : payload.estado,
+        }),
+      ),
+      inspectSaleForReturn: vi.fn(),
+      createAdminReturn: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [ReturnsAdmin],
+      providers: [
+        { provide: CommerceService, useValue: commerce },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ReturnsAdmin);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    expect(commerce.adminReturns).toHaveBeenCalled();
+    expect(component.items().length).toBe(1);
+    expect(component.kpis().approved).toBe(1);
+
+    // Open inspection modal
+    component.openInspectionModal(mockReturns[0]);
+    expect(component.inspectingReturn()?.id_devolucion).toBe(10);
+    expect(component.inspectionConditions()[101]).toBe('APTA_REINGRESO');
+
+    // Change condition to NO_APTA
+    component.updateInspectionCondition(101, 'NO_APTA');
+    expect(component.inspectionConditions()[101]).toBe('NO_APTA');
+
+    // Complete inspection
+    component.inspectionObservations.set('Revisado con defecto');
+    component.resolveInspection('COMPLETADA');
+
+    expect(commerce.updateReturn).toHaveBeenCalledWith(10, {
+      estado: 'COMPLETADA',
+      items: [{ id_detalle_devolucion: 101, estado_prenda: 'NO_APTA' }],
+      observaciones: 'Revisado con defecto',
+    });
+    expect(component.inspectingReturn()).toBeNull();
+  });
 });
 

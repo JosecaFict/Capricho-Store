@@ -30,6 +30,7 @@ import {
   CustomerAdminUpdateRequest,
   AdminReturnCreate,
   SaleReturnInspectionResponse,
+  ReturnStatusUpdatePayload,
 } from '../models/commerce.model';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
@@ -181,10 +182,9 @@ export class CommerceService {
   adminReturns() {
     return this.http.get<ReturnRequest[]>(`${API_BASE_URL}/admin/returns`);
   }
-  updateReturn(id: number, estado: string) {
-    return this.http.patch<ReturnRequest>(`${API_BASE_URL}/admin/returns/${id}/status`, {
-      estado,
-    });
+  updateReturn(id: number, payload: string | ReturnStatusUpdatePayload) {
+    const body = typeof payload === 'string' ? { estado: payload } : payload;
+    return this.http.patch<ReturnRequest>(`${API_BASE_URL}/admin/returns/${id}/status`, body);
   }
   inspectSaleForReturn(saleId: number) {
     return this.http.get<SaleReturnInspectionResponse>(

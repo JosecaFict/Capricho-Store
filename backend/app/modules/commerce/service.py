@@ -1981,6 +1981,28 @@ class CommerceService:
             await self.repository.add(
                 DetalleDevolucion(id_devolucion=returned.id_devolucion, **item.model_dump())
             )
+        await self._notify(
+            customer.id_usuario,
+            "DEVOLUCION_PENDIENTE",
+            "Solicitud de devolución registrada 🔄",
+            f"Recibimos tu solicitud de devolución #{returned.id_devolucion}. La revisaremos a la brevedad.",
+            data={
+                "type": "DEVOLUCION_PENDIENTE",
+                "id_devolucion": str(returned.id_devolucion),
+                "id_venta": str(returned.id_venta),
+            },
+        )
+        await self._notify_staff_and_admins(
+            sale.id_sucursal,
+            "NUEVA_DEVOLUCION",
+            "Nueva Solicitud de Devolución 🔄",
+            f"El cliente solicitó devolución #{returned.id_devolucion} para la venta #{sale.id_venta}.",
+            data={
+                "type": "NUEVA_DEVOLUCION",
+                "id_devolucion": str(returned.id_devolucion),
+                "id_venta": str(returned.id_venta),
+            },
+        )
         await self.session.commit()
         return await self._return_response(returned)
 
@@ -2282,6 +2304,21 @@ class CommerceService:
             raise CommerceNotFoundError("La devolución no existe")
         self._validate_transition(returned.estado, payload.estado, RETURN_TRANSITIONS)
         try:
+            if payload.items:
+                details_map = {
+                    d.id_detalle_devolucion: d
+                    for d in await self.repository.return_details(returned.id_devolucion)
+                }
+                for item_upd in payload.items:
+                    detail = details_map.get(item_upd.id_detalle_devolucion)
+                    if detail:
+                        detail.estado_prenda = item_upd.estado_prenda
+
+            if payload.observaciones:
+                obs = payload.observaciones.strip()
+                if obs and obs not in returned.motivo:
+                    returned.motivo = f"{returned.motivo} [Nota: {obs}]"[:255]
+
             if payload.estado == "COMPLETADA":
                 for detail in await self.repository.return_details(returned.id_devolucion):
                     if detail.estado_prenda != "APTA_REINGRESO":
@@ -2342,11 +2379,37 @@ class CommerceService:
                 else None
             )
             if customer:
+                if payload.estado == "APROBADA":
+                    notif_title = "Solicitud de devolución aprobada 📋"
+                    notif_body = (
+                        f"Tu solicitud de devolución #{returned.id_devolucion} fue aprobada. "
+                        "Por favor acércate a la sucursal con tus prendas para la inspección física y recepción."
+                    )
+                elif payload.estado == "COMPLETADA":
+                    notif_title = "Devolución completada con éxito ✅"
+                    notif_body = (
+                        f"Tu devolución #{returned.id_devolucion} ha sido completada exitosamente. "
+                        "Se procesó la recepción física en tienda."
+                    )
+                elif payload.estado == "RECHAZADA":
+                    notif_title = "Solicitud de devolución no aprobada ✕"
+                    notif_body = (
+                        f"Tu solicitud de devolución #{returned.id_devolucion} no fue aprobada."
+                    )
+                else:
+                    notif_title = "Estado de devolución actualizado"
+                    notif_body = f"Tu devolución #{returned.id_devolucion} ahora está {payload.estado.lower()}."
+
                 await self._notify(
                     customer.id_usuario,
                     f"DEVOLUCION_{payload.estado}",
-                    "Estado de devolución actualizado",
-                    f"Tu devolución #{returned.id_devolucion} ahora está {payload.estado.lower()}.",
+                    notif_title,
+                    notif_body,
+                    data={
+                        "type": f"DEVOLUCION_{payload.estado}",
+                        "id_devolucion": str(returned.id_devolucion),
+                        "id_venta": str(returned.id_venta),
+                    },
                 )
             await self.session.commit()
         except Exception:

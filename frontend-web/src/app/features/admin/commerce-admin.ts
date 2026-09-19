@@ -13,6 +13,7 @@ import {
   Sale,
   SaleReturnInspectionResponse,
   SaleReturnLineInspection,
+  ReturnStatusUpdatePayload,
 } from '../../core/models/commerce.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
@@ -2585,32 +2586,40 @@ export class OrdersAdmin {
                         </span>
                       </div>
 
-                      @if (nextStates(item.estado).length > 0) {
-                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                          @for (state of nextStates(item.estado); track state) {
-                            <button
-                              class="button"
-                              [class.button--primary]="state === 'COMPLETADA'"
-                              [class.button--secondary]="state === 'APROBADA'"
-                              [class.button--danger]="state === 'RECHAZADA'"
-                              type="button"
-                              [disabled]="saving()"
-                              (click)="update(item.id_devolucion, state)"
-                              style="font-size: 0.75rem; padding: 4px 8px;"
-                            >
-                              @if (state === 'COMPLETADA') {
-                                ✓ Completar
-                              } @else if (state === 'APROBADA') {
-                                📋 Aprobar
-                              } @else if (state === 'RECHAZADA') {
-                                ✕ Rechazar
-                              } @else {
-                                {{ state }}
-                              }
-                            </button>
-                          }
-                        </div>
-                      }
+                      <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                        <button
+                          class="button button--quiet"
+                          type="button"
+                          (click)="openInspectionModal(item)"
+                          style="font-size: 0.75rem; padding: 4px 8px;"
+                          title="Inspeccionar prendas y ver resolución"
+                        >
+                          🔍 Inspeccionar
+                        </button>
+
+                        @for (state of nextStates(item.estado); track state) {
+                          <button
+                            class="button"
+                            [class.button--primary]="state === 'COMPLETADA'"
+                            [class.button--secondary]="state === 'APROBADA'"
+                            [class.button--danger]="state === 'RECHAZADA'"
+                            type="button"
+                            [disabled]="saving()"
+                            (click)="state === 'COMPLETADA' ? openInspectionModal(item) : update(item.id_devolucion, state)"
+                            style="font-size: 0.75rem; padding: 4px 8px;"
+                          >
+                            @if (state === 'COMPLETADA') {
+                              ✓ Completar
+                            } @else if (state === 'APROBADA') {
+                              📋 Aprobar
+                            } @else if (state === 'RECHAZADA') {
+                              ✕ Rechazar
+                            } @else {
+                              {{ state }}
+                            }
+                          </button>
+                        }
+                      </div>
                     </div>
                   </td>
 
@@ -2859,6 +2868,203 @@ export class OrdersAdmin {
           </div>
         </div>
       }
+
+      <!-- Modal de Inspección y Resolución de Devolución -->
+      @if (inspectingReturn(); as item) {
+        <div class="admin-modal-backdrop" (click)="closeInspectionModal()">
+          <div
+            class="admin-modal-card"
+            style="max-width: 680px;"
+            (click)="$event.stopPropagation()"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inspection-modal-title"
+          >
+            <header class="admin-modal-header">
+              <div>
+                <span class="admin-modal-kicker">Inspección Física y Kardex</span>
+                <h2 id="inspection-modal-title" class="admin-modal-title">
+                  Devolución #{{ item.id_devolucion }}
+                </h2>
+                <p class="admin-modal-subtitle">
+                  Venta original #{{ item.id_venta }} · Solicitado el {{ item.fecha_solicitud | date: 'short' }}
+                </p>
+              </div>
+              <button
+                type="button"
+                class="admin-modal-close"
+                (click)="closeInspectionModal()"
+                [disabled]="saving()"
+                aria-label="Cerrar modal"
+              >
+                ✕
+              </button>
+            </header>
+
+            <div style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; overflow-y: auto; max-height: 70vh;">
+              <!-- Resumen de Cliente y Estado -->
+              <div class="counter-sale-grid">
+                <div class="metric-item">
+                  <span>Cliente</span>
+                  <strong>{{ item.cliente_nombre || 'Consumidor Final' }}</strong>
+                </div>
+                <div class="metric-item">
+                  <span>Estado Actual</span>
+                  <strong [style.color]="item.estado === 'COMPLETADA' ? '#059669' : (item.estado === 'RECHAZADA' ? '#dc2626' : '#2563eb')">
+                    {{ item.estado }}
+                  </strong>
+                </div>
+                <div class="metric-item">
+                  <span>Venta Relacionada</span>
+                  <strong>#{{ item.id_venta }}</strong>
+                </div>
+                <div class="metric-item">
+                  <span>Fecha Solicitud</span>
+                  <strong>{{ item.fecha_solicitud | date: 'short' }}</strong>
+                </div>
+              </div>
+
+              <!-- Motivo del Cliente -->
+              <div style="background: var(--surface-muted); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line);">
+                <span style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 2px;">
+                  Motivo indicado por el cliente:
+                </span>
+                <p style="margin: 0; font-size: 0.88rem; font-style: italic; color: var(--ink);">
+                  "{{ item.motivo }}"
+                </p>
+              </div>
+
+              <!-- Tabla de Inspección de Prendas -->
+              <div>
+                <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 6px;">
+                  Prendas a Inspeccionar:
+                </label>
+                <div class="modal-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Prenda / Talla / Color</th>
+                        <th style="width: 80px; text-align: center;">Cantidad</th>
+                        <th style="width: 260px;">Condición Física (Inspección)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (line of item.items; track line.id_detalle_devolucion) {
+                        <tr>
+                          <td>
+                            <strong>{{ line.producto }}</strong>
+                            <span style="color: var(--ink-soft); font-size: 0.75rem;"> ({{ line.color }} / {{ line.talla }})</span>
+                          </td>
+                          <td style="text-align: center; font-weight: 700;">
+                            {{ line.cantidad }} u.
+                          </td>
+                          <td>
+                            @if (item.estado === 'COMPLETADA' || item.estado === 'RECHAZADA') {
+                              <span
+                                class="condition-badge"
+                                [class.condition-badge--apta]="line.estado_prenda === 'APTA_REINGRESO'"
+                                [class.condition-badge--no-apta]="line.estado_prenda === 'NO_APTA'"
+                              >
+                                {{ line.estado_prenda === 'APTA_REINGRESO' ? '✓ Apta para Reingreso' : '⚠️ No Apta (Merma/Defecto)' }}
+                              </span>
+                            } @else {
+                              <select
+                                [value]="inspectionConditions()[line.id_detalle_devolucion] || 'APTA_REINGRESO'"
+                                (change)="updateInspectionCondition(line.id_detalle_devolucion, $any($event.target).value)"
+                                style="width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.8rem;"
+                              >
+                                <option value="APTA_REINGRESO">✓ Apta para Reingreso (Suma stock a tienda)</option>
+                                <option value="NO_APTA">⚠️ No Apta (Daño/Uso - no suma stock)</option>
+                              </select>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Banner de Impacto en Inventario -->
+              @if (item.estado !== 'COMPLETADA' && item.estado !== 'RECHAZADA') {
+                <div class="policy-banner policy-banner--valid">
+                  <span class="policy-banner__icon">ℹ️</span>
+                  <div class="policy-banner__text">
+                    <strong>Control de Inventario y Kardex FIFO</strong>
+                    <span>
+                      Al marcar una prenda como <strong>Apta</strong>, el sistema restablece automáticamente su stock en la sucursal y repone las capas FIFO originales.
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Observaciones opcionales del personal -->
+                <label class="field">
+                  <span>Observaciones del Encargado (Opcional)</span>
+                  <input
+                    type="text"
+                    placeholder="Ej: Prenda recibida en perfecto estado con etiqueta original..."
+                    [value]="inspectionObservations()"
+                    (input)="inspectionObservations.set($any($event.target).value)"
+                  />
+                </label>
+              } @else if (item.fecha_resolucion) {
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; color: #166534;">
+                  ✓ Devolución finalizada el <strong>{{ item.fecha_resolucion | date: 'medium' }}</strong>.
+                </div>
+              }
+            </div>
+
+            <footer style="padding: 1rem 1.5rem; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; background: var(--surface-muted);">
+              <button
+                type="button"
+                class="button button--quiet"
+                (click)="closeInspectionModal()"
+                [disabled]="saving()"
+              >
+                Cerrar
+              </button>
+
+              <div style="display: flex; gap: 8px;">
+                @if (item.estado === 'PENDIENTE') {
+                  <button
+                    type="button"
+                    class="button button--danger"
+                    [disabled]="saving()"
+                    (click)="resolveInspection('RECHAZADA')"
+                  >
+                    ✕ Rechazar Solicitud
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--primary"
+                    [disabled]="saving()"
+                    (click)="resolveInspection('APROBADA')"
+                  >
+                    {{ saving() ? 'Guardando...' : '📋 Aprobar Solicitud' }}
+                  </button>
+                } @else if (item.estado === 'APROBADA') {
+                  <button
+                    type="button"
+                    class="button button--danger"
+                    [disabled]="saving()"
+                    (click)="resolveInspection('RECHAZADA')"
+                  >
+                    ✕ Rechazar
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--primary"
+                    [disabled]="saving()"
+                    (click)="resolveInspection('COMPLETADA')"
+                  >
+                    {{ saving() ? 'Procesando...' : '✓ Completar y Reingresar Stock' }}
+                  </button>
+                }
+              </div>
+            </footer>
+          </div>
+        </div>
+      }
     </section>
   `,
 })
@@ -2874,6 +3080,11 @@ export class ReturnsAdmin {
 
   readonly statusTab = signal<'TODAS' | 'PENDIENTE' | 'APROBADA' | 'COMPLETADA' | 'RECHAZADA'>('TODAS');
   readonly searchQuery = signal('');
+
+  // Inspection & Resolution modal state
+  readonly inspectingReturn = signal<ReturnRequest | null>(null);
+  readonly inspectionConditions = signal<Record<number, 'APTA_REINGRESO' | 'NO_APTA'>>({});
+  readonly inspectionObservations = signal('');
 
   // Counter return modal state
   readonly showModal = signal(false);
@@ -2973,6 +3184,65 @@ export class ReturnsAdmin {
         },
         error: (error) =>
           this.error.set(this.errors.message(error, 'No pudimos actualizar la devolución.')),
+      });
+  }
+
+  openInspectionModal(item: ReturnRequest): void {
+    this.inspectingReturn.set(item);
+    const condMap: Record<number, 'APTA_REINGRESO' | 'NO_APTA'> = {};
+    (item.items || []).forEach((line) => {
+      condMap[line.id_detalle_devolucion] =
+        (line.estado_prenda as 'APTA_REINGRESO' | 'NO_APTA') || 'APTA_REINGRESO';
+    });
+    this.inspectionConditions.set(condMap);
+    this.inspectionObservations.set('');
+  }
+
+  closeInspectionModal(): void {
+    this.inspectingReturn.set(null);
+  }
+
+  updateInspectionCondition(detailId: number, condition: 'APTA_REINGRESO' | 'NO_APTA'): void {
+    this.inspectionConditions.update((map) => ({
+      ...map,
+      [detailId]: condition,
+    }));
+  }
+
+  resolveInspection(newState: 'APROBADA' | 'COMPLETADA' | 'RECHAZADA'): void {
+    const item = this.inspectingReturn();
+    if (!item) return;
+
+    const payload: ReturnStatusUpdatePayload = {
+      estado: newState,
+      items: item.items.map((line) => ({
+        id_detalle_devolucion: line.id_detalle_devolucion,
+        estado_prenda: this.inspectionConditions()[line.id_detalle_devolucion] || 'APTA_REINGRESO',
+      })),
+      observaciones: this.inspectionObservations().trim() || null,
+    };
+
+    this.saving.set(true);
+    this.error.set('');
+    this.successMessage.set('');
+
+    this.commerce
+      .updateReturn(item.id_devolucion, payload)
+      .pipe(finalize(() => this.saving.set(false)))
+      .subscribe({
+        next: (updated) => {
+          this.items.update((list) =>
+            list.map((r) => (r.id_devolucion === updated.id_devolucion ? updated : r)),
+          );
+          this.successMessage.set(
+            `Devolución #${updated.id_devolucion} actualizada a ${updated.estado}.` +
+              (updated.estado === 'COMPLETADA' ? ' Se reintegraron las prendas aptas al inventario.' : ''),
+          );
+          this.closeInspectionModal();
+        },
+        error: (err) => {
+          this.error.set(this.errors.message(err, 'No fue posible actualizar la devolución.'));
+        },
       });
   }
 

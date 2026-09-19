@@ -277,8 +277,15 @@ class AdminReturnCreate(BaseModel):
     completar_inmediato: bool = True
 
 
+class ReturnItemConditionUpdate(BaseModel):
+    id_detalle_devolucion: int = Field(gt=0)
+    estado_prenda: Literal["APTA_REINGRESO", "NO_APTA"]
+
+
 class ReturnStatusUpdate(BaseModel):
     estado: ReturnState
+    items: list[ReturnItemConditionUpdate] | None = None
+    observaciones: str | None = Field(default=None, max_length=255)
 
 
 class ReturnLineResponse(ORMResponse):

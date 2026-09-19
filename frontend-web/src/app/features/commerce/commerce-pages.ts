@@ -1742,11 +1742,62 @@ export class AddressesPage {
             <header>
               <div>
                 <h2>Devolución #{{ item.id_devolucion }}</h2>
-                <p>Compra #{{ item.id_venta }} / {{ item.fecha_solicitud | date: 'medium' }}</p>
+                <p>Compra #{{ item.id_venta }} · Solicitado el {{ item.fecha_solicitud | date: 'medium' }}</p>
               </div>
-              <span class="status-chip">{{ item.estado }}</span>
+              <span class="status-chip" [class]="returnBadgeClass(item.estado)">
+                {{ returnStateLabel(item.estado) }}
+              </span>
             </header>
-            <p>{{ item.motivo }}</p>
+
+            @if (item.estado === 'APROBADA') {
+              <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; font-size: 0.84rem; color: #1e40af; display: flex; align-items: center; gap: 8px; margin: 10px 0;">
+                <span style="font-size: 1.1rem;">📍</span>
+                <div>
+                  <strong>¡Tu solicitud fue aprobada!</strong> Presenta la(s) prenda(s) en la tienda con tu comprobante para la inspección física y cierre de devolución.
+                </div>
+              </div>
+            } @else if (item.estado === 'PENDIENTE') {
+              <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 0.84rem; color: #92400e; display: flex; align-items: center; gap: 8px; margin: 10px 0;">
+                <span style="font-size: 1.1rem;">⏳</span>
+                <div>
+                  <strong>Solicitud recibida.</strong> Nuestro equipo en tienda revisará los datos de tu compra dentro del plazo reglamentario (5 días hábiles).
+                </div>
+              </div>
+            } @else if (item.estado === 'COMPLETADA') {
+              <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 10px 14px; font-size: 0.84rem; color: #065f46; display: flex; align-items: center; gap: 8px; margin: 10px 0;">
+                <span style="font-size: 1.1rem;">✅</span>
+                <div>
+                  <strong>Devolución completada con éxito.</strong> Se procesó la recepción en tienda{{ item.fecha_resolucion ? ' el ' + (item.fecha_resolucion | date: 'medium') : '' }}.
+                </div>
+              </div>
+            } @else if (item.estado === 'RECHAZADA') {
+              <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; font-size: 0.84rem; color: #991b1b; display: flex; align-items: center; gap: 8px; margin: 10px 0;">
+                <span style="font-size: 1.1rem;">✕</span>
+                <div>
+                  <strong>Solicitud no aprobada.</strong> La devolución no cumplió con las condiciones de plazo o política de prendas.
+                </div>
+              </div>
+            }
+
+            <p style="margin: 8px 0; font-size: 0.88rem; color: var(--ink);">
+              <strong>Motivo:</strong> "{{ item.motivo }}"
+            </p>
+
+            @if (item.items && item.items.length > 0) {
+              <div style="margin-top: 10px;">
+                <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 6px;">
+                  Prendas incluidas:
+                </span>
+                <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px;">
+                  @for (line of item.items; track line.id_detalle_devolucion) {
+                    <li style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; background: var(--surface-muted); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line);">
+                      <span><strong>{{ line.producto }}</strong> · {{ line.color }} / {{ line.talla }}</span>
+                      <strong style="font-variant-numeric: tabular-nums;">{{ line.cantidad }} u.</strong>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
           </article>
         } @empty {
           <app-status-panel
@@ -1878,6 +1929,36 @@ export class HistoryPage {
     }
     const remaining = Math.max(0, 5 - elapsed);
     return { eligible, remaining };
+  }
+
+  returnBadgeClass(state: string): string {
+    switch (state) {
+      case 'PENDIENTE':
+        return 'order-badge--pending';
+      case 'APROBADA':
+        return 'order-badge--confirmed';
+      case 'COMPLETADA':
+        return 'order-badge--completed';
+      case 'RECHAZADA':
+        return 'order-badge--cancelled';
+      default:
+        return 'order-badge--default';
+    }
+  }
+
+  returnStateLabel(state: string): string {
+    switch (state) {
+      case 'PENDIENTE':
+        return '⏳ En Revisión';
+      case 'APROBADA':
+        return '📋 Aprobada';
+      case 'COMPLETADA':
+        return '✅ Completada';
+      case 'RECHAZADA':
+        return '✕ No Aprobada';
+      default:
+        return state;
+    }
   }
 }
 

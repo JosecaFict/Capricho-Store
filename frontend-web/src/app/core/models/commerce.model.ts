@@ -144,6 +144,17 @@ export interface ReturnRequest {
   }>;
 }
 
+export interface ReturnItemConditionUpdate {
+  id_detalle_devolucion: number;
+  estado_prenda: 'APTA_REINGRESO' | 'NO_APTA';
+}
+
+export interface ReturnStatusUpdatePayload {
+  estado: 'PENDIENTE' | 'APROBADA' | 'COMPLETADA' | 'RECHAZADA';
+  items?: ReturnItemConditionUpdate[];
+  observaciones?: string | null;
+}
+
 export interface SaleReturnLineInspection {
   id_detalle_venta: number;
   id_variante: number;

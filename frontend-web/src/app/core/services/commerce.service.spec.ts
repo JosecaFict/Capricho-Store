@@ -138,6 +138,34 @@ describe('CommerceService', () => {
 
     expect(result).toEqual({ id_pedido: 22, estado: 'ENTREGADO' });
   });
+
+  it('updates return status with string state', () => {
+    service.updateReturn(5, 'APROBADA').subscribe();
+
+    const request = http.expectOne(`${API_BASE_URL}/admin/returns/5/status`);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ estado: 'APROBADA' });
+    request.flush({ id_devolucion: 5, estado: 'APROBADA' });
+  });
+
+  it('updates return status with full ReturnStatusUpdatePayload', () => {
+    service
+      .updateReturn(5, {
+        estado: 'COMPLETADA',
+        items: [{ id_detalle_devolucion: 10, estado_prenda: 'NO_APTA' }],
+        observaciones: 'Prenda con mancha',
+      })
+      .subscribe();
+
+    const request = http.expectOne(`${API_BASE_URL}/admin/returns/5/status`);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({
+      estado: 'COMPLETADA',
+      items: [{ id_detalle_devolucion: 10, estado_prenda: 'NO_APTA' }],
+      observaciones: 'Prenda con mancha',
+    });
+    request.flush({ id_devolucion: 5, estado: 'COMPLETADA' });
+  });
 });
 
 

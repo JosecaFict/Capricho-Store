@@ -564,3 +564,50 @@ async def test_get_sale_by_id_endpoint() -> None:
     )
     assert response.status_code == 200
     assert response.json()["id_venta"] == 6
+
+
+async def test_admin_update_return_status_approved() -> None:
+    service = AsyncMock()
+    service.update_return_status.return_value = {
+        **RETURN,
+        "estado": "APROBADA",
+    }
+    response = await call(
+        "PATCH",
+        "/api/v1/admin/returns/1/status",
+        service=service,
+        actor=principal("ventas.crear"),
+        json={"estado": "APROBADA"},
+    )
+    assert response.status_code == 200
+    assert response.json()["estado"] == "APROBADA"
+
+
+async def test_admin_update_return_status_completed_with_conditions() -> None:
+    service = AsyncMock()
+    service.update_return_status.return_value = {
+        **RETURN,
+        "estado": "COMPLETADA",
+        "items": [
+            {
+                **RETURN["items"][0],
+                "estado_prenda": "NO_APTA",
+            }
+        ],
+    }
+    response = await call(
+        "PATCH",
+        "/api/v1/admin/returns/1/status",
+        service=service,
+        actor=principal("ventas.crear"),
+        json={
+            "estado": "COMPLETADA",
+            "items": [{"id_detalle_devolucion": 1, "estado_prenda": "NO_APTA"}],
+            "observaciones": "Prenda con mancha de tinta, no apta para reingreso",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["estado"] == "COMPLETADA"
+    assert data["items"][0]["estado_prenda"] == "NO_APTA"
+
