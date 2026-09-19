@@ -222,8 +222,20 @@ export class NotificationBell implements OnInit {
       if (t.includes('DEVOLUCION')) return '/admin/devoluciones';
       return '/admin/notificaciones';
     } else {
-      if (t.includes('PEDIDO') || t.includes('PAGO')) return '/cuenta/pedidos';
-      if (t.includes('RESERVA')) return '/cuenta/reservas';
+      if (
+        t.includes('PEDIDO') ||
+        t.includes('PAGO') ||
+        t.includes('COMPRA') ||
+        t.includes('VENTA') ||
+        t.includes('DELIVERY') ||
+        t.includes('ENTREGA') ||
+        t.includes('ENVIO')
+      ) {
+        return '/pedidos';
+      }
+      if (t.includes('RESERVA')) return '/reservas';
+      if (t.includes('DIRECCION') || t.includes('UBICACION')) return '/direcciones';
+      if (t.includes('CATALOGO') || t.includes('PROMO') || t.includes('DESCUENTO') || t.includes('CAMPAÑA')) return '/catalogo';
       return '/notificaciones';
     }
   }

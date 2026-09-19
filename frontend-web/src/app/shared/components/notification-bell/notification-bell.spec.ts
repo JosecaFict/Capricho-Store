@@ -81,4 +81,28 @@ describe('NotificationBell', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.notification-dropdown')).toBeNull();
   });
+
+  it('correctly maps item routes in public and admin modes', () => {
+    const commerceMock = {
+      notifications: vi.fn(() => of([])),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [NotificationBell],
+      providers: [
+        provideRouter([]),
+        { provide: CommerceService, useValue: commerceMock },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(NotificationBell);
+    const component = fixture.componentInstance;
+
+    // Public mode (default)
+    expect(component.itemRoute({ id_notificacion: 1, tipo: 'PAGO_CONFIRMADO', titulo: '', contenido: '', estado: 'ENVIADO', fecha_creacion: '' })).toBe('/pedidos');
+    expect(component.itemRoute({ id_notificacion: 2, tipo: 'PEDIDO_EN_CAMINO', titulo: '', contenido: '', estado: 'ENVIADO', fecha_creacion: '' })).toBe('/pedidos');
+    expect(component.itemRoute({ id_notificacion: 3, tipo: 'RESERVA_CREADA', titulo: '', contenido: '', estado: 'ENVIADO', fecha_creacion: '' })).toBe('/reservas');
+    expect(component.itemRoute({ id_notificacion: 4, tipo: 'CAMPAÑA_PROMOCIONAL', titulo: '', contenido: '', estado: 'ENVIADO', fecha_creacion: '' })).toBe('/catalogo');
+    expect(component.itemRoute({ id_notificacion: 5, tipo: 'DESCONOCIDO', titulo: '', contenido: '', estado: 'ENVIADO', fecha_creacion: '' })).toBe('/notificaciones');
+  });
 });

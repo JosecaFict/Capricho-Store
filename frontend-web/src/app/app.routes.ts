@@ -50,6 +50,11 @@ export const routes: Routes = [
         canActivate: [authGuard],
         loadComponent: () => import('./features/auth/account').then((m) => m.Account),
       },
+      { path: 'cuenta/pedidos', redirectTo: 'pedidos' },
+      { path: 'cuenta/reservas', redirectTo: 'reservas' },
+      { path: 'cuenta/historial', redirectTo: 'historial' },
+      { path: 'cuenta/direcciones', redirectTo: 'direcciones' },
+      { path: 'cuenta/notificaciones', redirectTo: 'notificaciones' },
       {
         path: 'carrito',
         title: 'Carrito | Capricho Store',
