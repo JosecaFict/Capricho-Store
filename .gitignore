@@ -21,6 +21,8 @@ mobile/.dart_tool/
 mobile/build/
 mobile/.flutter-plugins-dependencies
 mobile/coverage/
+apk-release/
+*.apk
 
 # Editors and operating systems
 .idea/
