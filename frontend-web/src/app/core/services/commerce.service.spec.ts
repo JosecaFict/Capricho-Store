@@ -124,5 +124,20 @@ describe('CommerceService', () => {
     });
     request.flush({ id_cliente: 7, nombre_completo: 'Ana Silva' });
   });
+
+  it('posts confirm delivery for an order', () => {
+    let result: any = null;
+    service.confirmDelivery(22).subscribe((res) => {
+      result = res;
+    });
+
+    const request = http.expectOne(`${API_BASE_URL}/orders/22/confirm-delivery`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({});
+    request.flush({ id_pedido: 22, estado: 'ENTREGADO' });
+
+    expect(result).toEqual({ id_pedido: 22, estado: 'ENTREGADO' });
+  });
 });
+
 

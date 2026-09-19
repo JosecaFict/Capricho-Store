@@ -269,6 +269,15 @@ class CommerceApi {
     }
   }
 
+  Future<Order> confirmDelivery(int orderId) async {
+    try {
+      final response = await _dio.post('/orders/$orderId/confirm-delivery');
+      return Order.fromJson(_asMap(response.data));
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   // -------------------------------------------------------------
   // NOTIFICACIONES OPERATIVAS
   // -------------------------------------------------------------

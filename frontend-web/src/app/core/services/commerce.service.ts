@@ -113,6 +113,9 @@ export class CommerceService {
       responseType: 'blob',
     });
   }
+  confirmDelivery(orderId: number) {
+    return this.http.post<Order>(`${API_BASE_URL}/orders/${orderId}/confirm-delivery`, {});
+  }
   purchaseHistory() {
     return this.http.get<Sale[]>(`${API_BASE_URL}/history/purchases`);
   }

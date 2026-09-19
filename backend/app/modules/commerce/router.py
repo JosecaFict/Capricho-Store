@@ -267,6 +267,11 @@ async def get_customer_order(order_id: int, principal: Authenticated, service: S
     return await service.get_order(principal.user.id_usuario, order_id, operational=False)
 
 
+@router.post("/orders/{order_id}/confirm-delivery", response_model=OrderResponse)
+async def confirm_order_delivery(order_id: int, principal: Authenticated, service: Service):
+    return await service.confirm_delivery(principal.user.id_usuario, order_id)
+
+
 @router.get("/orders/{order_id}/invoice")
 async def get_order_invoice(order_id: int, principal: Authenticated, service: Service) -> Response:
     pdf_bytes = await service.get_order_invoice_pdf(principal.user.id_usuario, order_id)

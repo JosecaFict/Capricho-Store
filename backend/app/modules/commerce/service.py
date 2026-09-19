@@ -1726,7 +1726,7 @@ class CommerceService:
             order.fecha_preparacion = datetime.now(UTC)
         if payload.estado in {"ENTREGADO", "RETIRADO", "CANCELADO"}:
             order.fecha_finalizacion = datetime.now(UTC)
-        if payload.estado == "RETIRADO":
+        if payload.estado in {"RETIRADO", "ENTREGADO"}:
             await self._dispatch_order_invoice_email(order, sale)
         if payload.estado == "CANCELADO":
             await self._restore_sale_stock(
@@ -1793,6 +1793,66 @@ class CommerceService:
                     "route": f"/pedidos/{order.id_pedido}",
                 },
             )
+        await self.session.commit()
+        return await self._order_response(order)
+
+    async def confirm_delivery(self, user_id: int, order_id: int) -> OrderResponse:
+        customer = await self._customer(user_id)
+        order = await self.repository.get(Pedido, order_id)
+        if order is None:
+            raise CommerceNotFoundError("El pedido no existe")
+        sale = await self.repository.get(Venta, order.id_venta)
+        if sale is None or sale.id_cliente != customer.id_cliente:
+            raise CommerceNotFoundError("El pedido no existe")
+
+        if sale.modalidad_entrega != "DELIVERY":
+            raise InvalidCommerceOperationError("Este pedido no corresponde a entrega por delivery")
+
+        if order.estado == "ENTREGADO":
+            return await self._order_response(order)
+
+        if order.estado != "EN_CAMINO":
+            raise InvalidCommerceOperationError(
+                "Solo puedes confirmar la recepción de un pedido que se encuentre en camino"
+            )
+
+        order.estado = "ENTREGADO"
+        order.fecha_finalizacion = datetime.now(UTC)
+
+        await self._dispatch_order_invoice_email(order, sale)
+
+        # Notificar al cliente
+        await self._notify(
+            customer.id_usuario,
+            "PEDIDO_ENTREGADO",
+            "¡Entrega confirmada! ✨",
+            f"Confirmaste la recepción de tu Pedido #{order.id_pedido}. ¡Muchas gracias por tu compra en Capricho Store!",
+            data={
+                "type": "PEDIDO_ENTREGADO",
+                "id": str(order.id_pedido),
+                "route": "/pedidos",
+            },
+        )
+
+        # Notificar a los administradores y personal de la sucursal
+        user = await self.repository.get(Usuario, customer.id_usuario)
+        customer_name = (
+            f"{user.nombres} {user.apellidos}".strip()
+            if user and (user.nombres or user.apellidos)
+            else "El cliente"
+        )
+        await self._notify_staff_and_admins(
+            branch_id=sale.id_sucursal,
+            kind="PEDIDO_ENTREGADO",
+            title=f"Entrega confirmada - Pedido #{order.id_pedido} 🛵",
+            content=f"{customer_name} confirmó la recepción de su pedido por delivery.",
+            data={
+                "type": "PEDIDO_ENTREGADO",
+                "id": str(order.id_pedido),
+                "route": "/admin/pedidos",
+            },
+        )
+
         await self.session.commit()
         return await self._order_response(order)
 

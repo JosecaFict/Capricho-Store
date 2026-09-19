@@ -188,4 +188,50 @@ describe('Account Component', () => {
     expect(compiled.querySelector('.account-empty-orders')).toBeTruthy();
     expect(compiled.textContent).toContain('Aún no has realizado pedidos');
   });
+
+  it('calls confirmDelivery when user confirms reception of a delivery order in camino', () => {
+    const currentUserSig = signal<UserResponse | null>(MOCK_USER);
+    const authMock = {
+      currentUser: currentUserSig,
+      logout: vi.fn(),
+    };
+    const permissionsMock = {
+      hasAdminAccess: vi.fn(() => false),
+    };
+    const updatedOrder = { ...MOCK_ORDERS[1], estado: 'ENTREGADO' as const };
+    const commerceMock = {
+      orders: vi.fn(() => of(MOCK_ORDERS)),
+      reservations: vi.fn(() => of([])),
+      addresses: vi.fn(() => of([])),
+      notifications: vi.fn(() => of([])),
+      confirmDelivery: vi.fn(() => of(updatedOrder)),
+      orderInvoice: vi.fn(),
+    };
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    TestBed.configureTestingModule({
+      imports: [Account],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: authMock },
+        { provide: PermissionService, useValue: permissionsMock },
+        { provide: CommerceService, useValue: commerceMock },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(Account);
+    fixture.detectChanges();
+
+    const confirmBtn = fixture.nativeElement.querySelector('.btn-confirm-delivery') as HTMLButtonElement;
+    expect(confirmBtn).toBeTruthy();
+    expect(confirmBtn.textContent).toContain('Confirmar recepción');
+
+    confirmBtn.click();
+    fixture.detectChanges();
+
+    expect(commerceMock.confirmDelivery).toHaveBeenCalledWith(102);
+    expect(fixture.nativeElement.textContent).toContain('¡Pedido #102 confirmado como entregado!');
+  });
 });
+

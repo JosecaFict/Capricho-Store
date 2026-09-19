@@ -16,14 +16,21 @@ final orderDetailProvider =
   return api.getOrder(orderId);
 });
 
-class OrderDetailScreen extends ConsumerWidget {
+class OrderDetailScreen extends ConsumerStatefulWidget {
   final int orderId;
 
   const OrderDetailScreen({required this.orderId, super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final orderAsync = ref.watch(orderDetailProvider(orderId));
+  ConsumerState<OrderDetailScreen> createState() => _OrderDetailScreenState();
+}
+
+class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
+  bool _isConfirming = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final orderAsync = ref.watch(orderDetailProvider(widget.orderId));
 
     return Scaffold(
       appBar: AppBar(
@@ -38,7 +45,7 @@ class OrderDetailScreen extends ConsumerWidget {
             }
           },
         ),
-        title: Text('Pedido #$orderId'),
+        title: Text('Pedido #${widget.orderId}'),
         shape: const Border(
           bottom: BorderSide(color: AppColors.line, width: 1),
         ),
@@ -48,17 +55,21 @@ class OrderDetailScreen extends ConsumerWidget {
         error: (err, _) => MessageState(
           title: 'No pudimos cargar el pedido',
           message: err.toString().replaceAll('ApiException: ', ''),
-          onRetry: () => ref.refresh(orderDetailProvider(orderId)),
+          onRetry: () => ref.refresh(orderDetailProvider(widget.orderId)),
         ),
-        data: (order) => _buildContent(context, ref, order),
+        data: (order) => _buildContent(context, order),
       ),
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, Order order) {
+  Widget _buildContent(BuildContext context, Order order) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Confirmación de entrega pendiente
+        if (order.isDelivery && order.estado == 'EN_CAMINO')
+          _buildDeliveryConfirmationCard(context, order),
+
         // Línea de tiempo de Seguimiento
         _buildTrackingCard(order),
         const SizedBox(height: 16),
@@ -238,7 +249,7 @@ class OrderDetailScreen extends ConsumerWidget {
         // Acciones: Factura oficial y Recibo de Stripe
         const SizedBox(height: 20),
         FilledButton.icon(
-          onPressed: () => _openInvoicePdf(context, ref, order.idPedido),
+          onPressed: () => _openInvoicePdf(context, order.idPedido),
           icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 20),
           label: const Text(
             'Descargar Factura Oficial (PDF)',
@@ -283,8 +294,141 @@ class OrderDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openInvoicePdf(
-      BuildContext context, WidgetRef ref, int orderId) async {
+  Widget _buildDeliveryConfirmationCard(BuildContext context, Order order) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFA7F3D0), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delivery_dining_rounded,
+                  color: AppColors.success,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tu pedido está en camino 🛵',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: Color(0xFF065F46),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '¿El repartidor ya te entregó tus prendas?',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF047857),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isConfirming ? null : () => _confirmDelivery(order.idPedido),
+              icon: _isConfirming
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.check_circle_outline_rounded, size: 20),
+              label: Text(
+                _isConfirming ? 'Confirmando recepción…' : '✓ Confirmar que recibí mi pedido',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.success,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelivery(int orderId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar entrega'),
+        content: const Text(
+          '¿Confirmas que recibiste todas tus prendas de forma satisfactoria? Esta acción dará por finalizado el pedido.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Aún no'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.success),
+            child: const Text('Sí, lo recibí'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isConfirming = true);
+    try {
+      await ref.read(ordersProvider.notifier).confirmDelivery(orderId);
+      ref.invalidate(orderDetailProvider(orderId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Entrega confirmada con éxito! Gracias por tu compra.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo confirmar la entrega: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConfirming = false);
+      }
+    }
+  }
+
+  Future<void> _openInvoicePdf(BuildContext context, int orderId) async {
     try {
       final storage = ref.read(tokenStorageProvider);
       final token = await storage.read();

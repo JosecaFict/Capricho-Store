@@ -8,7 +8,11 @@ from app.main import app
 from app.modules.auth.dependencies import CurrentPrincipal, get_current_principal
 from app.modules.auth.models import Usuario
 from app.modules.commerce.dependencies import get_commerce_service
-from app.modules.commerce.exceptions import CommerceConflictError, CommerceNotFoundError
+from app.modules.commerce.exceptions import (
+    CommerceConflictError,
+    CommerceNotFoundError,
+    InvalidCommerceOperationError,
+)
 from app.modules.commerce.repository import CommerceRepository
 from app.modules.commerce.schemas import CheckoutCreate
 from app.modules.commerce.service import ORDER_TRANSITIONS, RESERVATION_TRANSITIONS, CommerceService
@@ -287,6 +291,36 @@ async def test_missing_customer_order_returns_404() -> None:
     service.get_order.side_effect = CommerceNotFoundError("El pedido no existe")
     response = await call("GET", "/api/v1/orders/999", service=service, actor=principal())
     assert response.status_code == 404
+
+
+async def test_customer_can_confirm_delivery() -> None:
+    service = AsyncMock()
+    delivered_order = {**ORDER, "estado": "ENTREGADO", "modalidad_entrega": "DELIVERY"}
+    service.confirm_delivery.return_value = delivered_order
+    response = await call(
+        "POST",
+        "/api/v1/orders/8/confirm-delivery",
+        service=service,
+        actor=principal(),
+    )
+    assert response.status_code == 200
+    assert response.json()["estado"] == "ENTREGADO"
+    service.confirm_delivery.assert_awaited_once_with(9, 8)
+
+
+async def test_customer_confirm_delivery_invalid_state() -> None:
+    service = AsyncMock()
+    service.confirm_delivery.side_effect = InvalidCommerceOperationError(
+        "Solo puedes confirmar la recepción de un pedido que se encuentre en camino"
+    )
+    response = await call(
+        "POST",
+        "/api/v1/orders/8/confirm-delivery",
+        service=service,
+        actor=principal(),
+    )
+    assert response.status_code == 400
+    assert "en camino" in response.json()["detail"]
 
 
 async def test_customer_can_request_return() -> None:

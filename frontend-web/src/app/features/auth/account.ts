@@ -247,6 +247,12 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
             }
           </div>
 
+          @if (actionFeedback()) {
+            <div class="notice notice--success" style="margin-bottom: 1rem;">
+              {{ actionFeedback() }}
+            </div>
+          }
+
           @if (ordersLoading()) {
             <div class="account-orders-loading">
               <div class="skeleton-order-card"></div>
@@ -290,6 +296,16 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
                   </div>
 
                   <footer class="order-item-footer">
+                    @if (order.modalidad_entrega === 'DELIVERY' && order.estado === 'EN_CAMINO') {
+                      <button
+                        class="button button--primary button--small btn-confirm-delivery"
+                        type="button"
+                        [disabled]="confirmingId() === order.id_pedido"
+                        (click)="confirmDelivery(order.id_pedido)"
+                      >
+                        {{ confirmingId() === order.id_pedido ? 'Confirmando…' : '✓ Confirmar recepción' }}
+                      </button>
+                    }
                     <button
                       class="button button--secondary button--small"
                       type="button"
@@ -329,6 +345,8 @@ export class Account implements OnInit {
   readonly addressesCount = signal(0);
   readonly unreadNotificationsCount = signal(0);
   readonly downloadingId = signal<number | null>(null);
+  readonly confirmingId = signal<number | null>(null);
+  readonly actionFeedback = signal<string | null>(null);
 
   readonly initials = computed(() => {
     const user = this.auth.currentUser();
@@ -395,6 +413,28 @@ export class Account implements OnInit {
         a.remove();
       },
       error: () => this.downloadingId.set(null),
+    });
+  }
+
+  confirmDelivery(orderId: number): void {
+    const confirmed = window.confirm('¿Confirmas que recibiste tu pedido de forma satisfactoria?');
+    if (!confirmed) return;
+
+    this.confirmingId.set(orderId);
+    this.actionFeedback.set(null);
+    this.commerce.confirmDelivery(orderId).subscribe({
+      next: (updatedOrder) => {
+        this.confirmingId.set(null);
+        this.orders.update((list) =>
+          list.map((o) => (o.id_pedido === updatedOrder.id_pedido ? updatedOrder : o))
+        );
+        this.actionFeedback.set(`¡Pedido #${orderId} confirmado como entregado!`);
+        setTimeout(() => this.actionFeedback.set(null), 6000);
+      },
+      error: () => {
+        this.confirmingId.set(null);
+        this.actionFeedback.set('No se pudo confirmar la entrega del pedido.');
+      },
     });
   }
 

@@ -204,6 +204,33 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               'Fecha: ${order.formattedDate}',
               style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
             ),
+            if (order.isDelivery && order.estado == 'EN_CAMINO') ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.delivery_dining_rounded, size: 16, color: AppColors.success),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'En camino • Toca para ver y confirmar entrega',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF065F46),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const Divider(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

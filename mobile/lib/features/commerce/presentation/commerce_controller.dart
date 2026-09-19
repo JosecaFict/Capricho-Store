@@ -165,6 +165,12 @@ class OrdersController extends AsyncNotifier<List<Order>> {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() => _api.listOrders());
   }
+
+  Future<Order> confirmDelivery(int orderId) async {
+    final updated = await _api.confirmDelivery(orderId);
+    await refresh();
+    return updated;
+  }
 }
 
 // -------------------------------------------------------------

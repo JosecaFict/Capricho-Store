@@ -1229,6 +1229,16 @@ export class ReservationsPage {
         <p>Sigue la preparación, el retiro o la entrega.</p>
       </div>
     </header>
+    @if (actionSuccess()) {
+      <div class="notice notice--success" style="margin-bottom: 1rem;">
+        {{ actionSuccess() }}
+      </div>
+    }
+    @if (actionError()) {
+      <div class="notice notice--error" style="margin-bottom: 1rem;">
+        {{ actionError() }}
+      </div>
+    }
     @if (loading()) {
       <div class="commerce-skeleton"><span></span><span></span></div>
     } @else if (error()) {
@@ -1271,6 +1281,16 @@ export class ReservationsPage {
               </div>
             </dl>
             <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line-subtle, #f0ede8); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              @if (order.modalidad_entrega === 'DELIVERY' && order.estado === 'EN_CAMINO') {
+                <button
+                  class="button button--primary button--small btn-confirm-delivery"
+                  type="button"
+                  [disabled]="confirmingId() === order.id_pedido"
+                  (click)="confirmDelivery(order.id_pedido)"
+                >
+                  {{ confirmingId() === order.id_pedido ? 'Confirmando…' : '✓ Confirmar que recibí mi pedido' }}
+                </button>
+              }
               <button
                 class="button button--small"
                 type="button"
@@ -1302,7 +1322,10 @@ export class OrdersPage {
   readonly orders = signal<Order[]>([]);
   readonly loading = signal(true);
   readonly downloadingId = signal<number | null>(null);
+  readonly confirmingId = signal<number | null>(null);
   readonly error = signal('');
+  readonly actionError = signal('');
+  readonly actionSuccess = signal('');
   constructor() {
     this.load();
   }
@@ -1314,6 +1337,28 @@ export class OrdersPage {
       .subscribe({
         next: (items) => this.orders.set(items),
         error: (error) => this.error.set(this.errors.message(error, 'Intenta nuevamente.')),
+      });
+  }
+
+  confirmDelivery(orderId: number): void {
+    const confirmed = window.confirm('¿Confirmas que recibiste tu pedido de forma satisfactoria?');
+    if (!confirmed) return;
+
+    this.confirmingId.set(orderId);
+    this.actionError.set('');
+    this.actionSuccess.set('');
+    this.commerce
+      .confirmDelivery(orderId)
+      .pipe(finalize(() => this.confirmingId.set(null)))
+      .subscribe({
+        next: (updatedOrder) => {
+          this.orders.update((list) =>
+            list.map((o) => (o.id_pedido === updatedOrder.id_pedido ? updatedOrder : o))
+          );
+          this.actionSuccess.set(`¡Pedido #${orderId} confirmado como recibido con éxito!`);
+        },
+        error: (error) =>
+          this.actionError.set(this.errors.message(error, 'No pudimos confirmar la entrega.')),
       });
   }
 
@@ -1334,7 +1379,7 @@ export class OrdersPage {
           a.remove();
         },
         error: (error) =>
-          this.error.set(this.errors.message(error, 'No pudimos descargar la factura.')),
+          this.actionError.set(this.errors.message(error, 'No pudimos descargar la factura.')),
       });
   }
 }
