@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:capricho_store/core/network/api_client.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:flutter/material.dart';
@@ -57,6 +58,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _handleSessionAndNavigate() async {
+    // Pre-calentamiento silencioso del backend en la nube (despierta el contenedor de Railway en segundo plano)
+    unawaited(
+      ref.read(dioProvider).get('/health').then((_) => null).catchError((_) => null),
+    );
+
     final authNotifier = ref.read(authControllerProvider.notifier);
     final authState = ref.read(authControllerProvider);
 

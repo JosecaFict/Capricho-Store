@@ -137,22 +137,88 @@ class MainActivity : FlutterActivity() {
                     val rx = rightShoulder.position.x / imageWidth
                     val ry = rightShoulder.position.y / imageHeight
 
-                    val dx = (rx - lx) * imageWidth
-                    val dy = (ry - ly) * imageHeight
-                    val shoulderPixelDist = sqrt(dx * dx + dy * dy)
+                    // Identificar hombro izquierdo y derecho según la vista en pantalla (X menor a la izquierda)
+                    val screenLeftX = kotlin.math.min(lx, rx)
+                    val screenLeftY = if (lx < rx) ly else ry
+                    val screenRightX = kotlin.math.max(lx, rx)
+                    val screenRightY = if (lx < rx) ry else ly
+
+                    val screenDx = screenRightX - screenLeftX // Siempre positivo de izquierda a derecha
+                    val screenDy = screenRightY - screenLeftY
+
+                    val dxPixels = screenDx * imageWidth
+                    val dyPixels = screenDy * imageHeight
+                    val shoulderPixelDist = sqrt(dxPixels * dxPixels + dyPixels * dyPixels)
                     val shoulderRatio = shoulderPixelDist / imageWidth
 
-                    // Ángulo de inclinación de hombros en grados
-                    val angleDeg = Math.toDegrees(atan2(dy, dx))
+                    // Ángulo de hombros en RADIANES para Transform.rotate en Flutter (horizontal ≈ 0.0 rad)
+                    val shoulderAngleRad = atan2(screenDy, screenDx)
 
                     // Centro del cuello: punto medio entre hombros ligeramente elevado
                     val neckX = (lx + rx) / 2.0
-                    val neckY = ((ly + ry) / 2.0) - (0.04 * (if (imageHeight > imageWidth) 1.0 else 1.3))
+                    val neckY = ((ly + ry) / 2.0) - (0.038 * (if (imageHeight > imageWidth) 1.0 else 1.25))
 
-                    // Estimación antropométrica calibrada por género (~1.7m de distancia)
+                    // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO CALIBRADO (TALLAS REALES S, M, L, XL) ---
                     val isFemale = gender.equals("MUJER", ignoreCase = true)
-                    val baseFactor = if (isFemale) 92.0 else 102.0
-                    val estimatedShouldersCm = (shoulderRatio * baseFactor).coerceIn(30.0, 62.0)
+                    val baseCm = if (isFemale) 38.0 else 46.5
+                    val refIpd = if (isFemale) 6.1 else 6.3      // Distancia interpupilar humana adulta promedio en cm
+                    val refHeadH = if (isFemale) 15.0 else 16.5  // Distancia nariz-cuello promedio en cm
+                    val minRange = if (isFemale) 34.0 else 40.0
+                    val maxRange = if (isFemale) 49.0 else 56.0
+
+                    // Factor de expansión deltoidea: ML Kit detecta los centros articulares esqueléticos (glenohumerales).
+                    // El contorno exterior real de hombros en prendas de vestir añade ~28% al 32% sobre la distancia articular.
+                    val deltoidExpansion = 1.30
+
+                    var estimatedCm = baseCm
+                    var methodApplied = false
+
+                    val leftEye = pose.getPoseLandmark(PoseLandmark.LEFT_EYE)
+                    val rightEye = pose.getPoseLandmark(PoseLandmark.RIGHT_EYE)
+                    val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
+
+                    // 1. Método Interpupilar: Invariante a la distancia de la persona a la cámara
+                    if (leftEye != null && rightEye != null &&
+                        leftEye.inFrameLikelihood > 0.35f && rightEye.inFrameLikelihood > 0.35f) {
+                        val ex1 = leftEye.position.x / imageWidth
+                        val ey1 = leftEye.position.y / imageHeight
+                        val ex2 = rightEye.position.x / imageWidth
+                        val ey2 = rightEye.position.y / imageHeight
+                        val edx = (ex2 - ex1)
+                        val edy = (ey2 - ey1)
+                        val eyeDist = sqrt(edx * edx + edy * edy)
+
+                        if (eyeDist > 0.015) {
+                            val anthropometricScale = refIpd / eyeDist
+                            val rawCm = shoulderRatio * anthropometricScale * deltoidExpansion
+                            if (rawCm in minRange..maxRange) {
+                                estimatedCm = rawCm
+                                methodApplied = true
+                            }
+                        }
+                    }
+
+                    // 2. Método Nariz-Cuello si los ojos no dieron lectura fiable
+                    if (!methodApplied && nose != null && nose.inFrameLikelihood > 0.35f) {
+                        val ny = nose.position.y / imageHeight
+                        val headDy = kotlin.math.abs(neckY - ny)
+                        if (headDy > 0.035) {
+                            val headScale = refHeadH / headDy
+                            val rawHeadCm = shoulderRatio * headScale * deltoidExpansion
+                            if (rawHeadCm in minRange..maxRange) {
+                                estimatedCm = rawHeadCm
+                                methodApplied = true
+                            }
+                        }
+                    }
+
+                    // 3. Método FOV Calibrado según proporción en encuadre de torso (~1.4m - 1.8m)
+                    if (!methodApplied) {
+                        val fovFactor = if (isFemale) 122.0 else 148.0
+                        estimatedCm = (shoulderRatio * fovFactor).coerceIn(minRange, maxRange)
+                    }
+
+                    val finalShouldersCm = (kotlin.math.round(estimatedCm * 10.0) / 10.0).coerceIn(minRange, maxRange)
 
                     // Liberación inmediata de memoria RAM
                     bitmap.recycle()
@@ -160,9 +226,9 @@ class MainActivity : FlutterActivity() {
                     result.success(
                         mapOf(
                             "detected" to true,
-                            "estimatedShouldersCm" to estimatedShouldersCm,
+                            "estimatedShouldersCm" to finalShouldersCm,
                             "shoulderRatio" to shoulderRatio,
-                            "shoulderAngle" to angleDeg,
+                            "shoulderAngle" to shoulderAngleRad,
                             "neck" to mapOf("x" to neckX, "y" to neckY),
                             "gender" to gender
                         )
