@@ -415,8 +415,12 @@ class EmployeeService:
 
     @staticmethod
     def _raise_integrity_conflict(exc: IntegrityError) -> None:
-        message = str(exc).lower()
-        if "correo" in message:
-            raise ResourceConflictError("Email already registered") from exc
-        if "ci" in message:
+        error_prefix = str(exc).split("[SQL:")[0].lower()
+        constraint = getattr(exc.orig, "constraint_name", "") or ""
+        detail = getattr(exc.orig, "detail", "") or ""
+        check = f"{error_prefix} {constraint} {detail}".lower()
+        if "ci" in check:
             raise ResourceConflictError("CI already registered") from exc
+        if "correo" in check or "email" in check:
+            raise ResourceConflictError("Email already registered") from exc
+        raise ResourceConflictError("Resource already exists") from exc

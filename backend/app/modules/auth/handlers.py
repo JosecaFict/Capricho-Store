@@ -2,9 +2,11 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from app.modules.auth.exceptions import (
+    CiAlreadyRegisteredError,
     EmailAlreadyRegisteredError,
     EmailDeliveryError,
     InactiveUserError,
+    InvalidAvatarError,
     InvalidCredentialsError,
     InvalidPasswordRecoveryCodeError,
     InvalidPasswordResetTokenError,
@@ -20,6 +22,26 @@ async def email_already_registered_handler(
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={"detail": "Email already registered"},
+    )
+
+
+async def ci_already_registered_handler(
+    _: Request,
+    __: CiAlreadyRegisteredError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": "El carnet de identidad (CI) ya se encuentra registrado con otra cuenta"},
+    )
+
+
+async def invalid_avatar_handler(
+    _: Request,
+    exc: InvalidAvatarError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc) or "Archivo de imagen no válido o excede el tamaño permitido"},
     )
 
 
@@ -90,6 +112,8 @@ async def email_delivery_handler(_: Request, __: EmailDeliveryError) -> JSONResp
 
 def register_auth_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(EmailAlreadyRegisteredError, email_already_registered_handler)
+    app.add_exception_handler(CiAlreadyRegisteredError, ci_already_registered_handler)
+    app.add_exception_handler(InvalidAvatarError, invalid_avatar_handler)
     app.add_exception_handler(InvalidCredentialsError, invalid_credentials_handler)
     app.add_exception_handler(InactiveUserError, inactive_user_handler)
     app.add_exception_handler(PermissionDeniedError, permission_denied_handler)

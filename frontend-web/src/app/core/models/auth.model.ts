@@ -68,4 +68,5 @@ export interface UserResponse {
   permisos: string[];
   id_sucursal?: number | null;
   sucursal?: string | null;
+  avatar_url?: string | null;
 }

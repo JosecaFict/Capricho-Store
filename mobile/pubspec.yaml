@@ -45,6 +45,7 @@ dependencies:
   url_launcher: ^6.3.0
   camera: ^0.11.0+2
   sensors_plus: ^6.1.1
+  image_picker: ^1.1.2
 
 dependency_overrides:
   camera_avfoundation: 0.9.18

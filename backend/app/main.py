@@ -44,9 +44,18 @@ async def run_startup_migrations() -> None:
                     logger.info("Restricción notificacion_estado_check actualizada para %s.", target_table)
                 except Exception as inner_exc:
                     logger.warning("Aviso durante migración de %s: %s", target_table, inner_exc)
+
+            for target_table in ["capricho.usuario", "usuario"]:
+                try:
+                    await conn.execute(
+                        text(f"ALTER TABLE IF EXISTS {target_table} ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);")
+                    )
+                    logger.info("Columna avatar_url verificada/añadida en %s.", target_table)
+                except Exception as inner_exc:
+                    logger.warning("Aviso durante migración de avatar_url en %s: %s", target_table, inner_exc)
     except Exception as exc:
         import logging
-        logging.getLogger("capricho.migrations").warning("No se pudo ejecutar la migración inicial de notificaciones: %s", exc)
+        logging.getLogger("capricho.migrations").warning("No se pudo ejecutar la migración inicial: %s", exc)
 
 
 @asynccontextmanager

@@ -80,6 +80,7 @@ class UserResponse(BaseModel):
     permisos: list[str] = Field(default_factory=list)
     id_sucursal: int | None = None
     sucursal: str | None = None
+    avatar_url: str | None = None
 
 
 class TokenResponse(BaseModel):

@@ -6,6 +6,14 @@ class EmailAlreadyRegisteredError(AuthError):
     pass
 
 
+class CiAlreadyRegisteredError(AuthError):
+    pass
+
+
+class InvalidAvatarError(AuthError):
+    pass
+
+
 class InvalidCredentialsError(AuthError):
     pass
 

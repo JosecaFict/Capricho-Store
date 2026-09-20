@@ -184,6 +184,32 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  Future<bool> uploadAvatar(String filePath) async {
+    if (state.loading) return false;
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final updatedUser = await ref.read(authRepositoryProvider).uploadAvatar(filePath);
+      state = state.copyWith(user: updatedUser, loading: false);
+      return true;
+    } catch (error) {
+      state = state.copyWith(loading: false, error: error.toString());
+      return false;
+    }
+  }
+
+  Future<bool> deleteAvatar() async {
+    if (state.loading) return false;
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final updatedUser = await ref.read(authRepositoryProvider).deleteAvatar();
+      state = state.copyWith(user: updatedUser, loading: false);
+      return true;
+    } catch (error) {
+      state = state.copyWith(loading: false, error: error.toString());
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     await ref.read(authRepositoryProvider).logout();
     state = const AuthState(initialized: true);

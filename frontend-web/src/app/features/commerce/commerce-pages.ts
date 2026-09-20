@@ -231,6 +231,13 @@ export class CartPage {
             '. Enviamos el comprobante oficial de Stripe directamente a tu correo electrónico y puedes seguir el pedido desde tu cuenta.'
           "
         />
+        @if (isMobileSource()) {
+          <div style="text-align: center; margin: 1rem 0;">
+            <a class="button button--primary" [href]="mobileReturnUrl()" style="background: #10b981; border-color: #10b981; color: #fff; font-weight: 600;">
+              📱 Regresar a la App Capricho Store
+            </a>
+          </div>
+        }
         <p class="stripe-checkout-note" style="text-align: center; margin-top: 0.75rem; font-weight: 500;">
           ¿Realizaste esta compra desde la app móvil? Ya puedes cerrar esta ventana y regresar a la aplicación.
         </p>
@@ -267,6 +274,12 @@ export class CartPage {
         @if (cancelled()) {
           <p class="notice notice--warning" role="status">
             El pago fue cancelado. No se realizó ningún cobro y las prendas volvieron a tu carrito.
+            @if (isMobileSource()) {
+              <br><br>
+              <a class="button button--secondary" href="capricho://checkout-complete?status=CANCELADO" style="margin-top: 0.5rem; display: inline-block;">
+                📱 Volver a la App Capricho Store
+              </a>
+            }
           </p>
         }
         <form class="commerce-layout" [formGroup]="form" (ngSubmit)="submit()">
@@ -575,6 +588,13 @@ export class CheckoutPage {
   readonly quoting = signal(false);
   readonly downloadingInvoice = signal(false);
   readonly error = signal('');
+  readonly isMobileSource = computed(
+    () => this.route.snapshot.queryParamMap.get('source') === 'mobile',
+  );
+  readonly mobileReturnUrl = computed(() => {
+    const sessionId = this.paymentSessionId();
+    return `capricho://checkout-complete?session_id=${encodeURIComponent(sessionId)}&status=PAGADO`;
+  });
 
   // Inline address creation modal state
   readonly showAddressModal = signal(false);
@@ -605,6 +625,13 @@ export class CheckoutPage {
       return;
     }
     if (this.route.snapshot.queryParamMap.get('pago_cancelado') === '1') {
+      if (this.isMobileSource()) {
+        try {
+          window.location.href = 'capricho://checkout-complete?status=CANCELADO';
+        } catch {
+          // ignore navigation errors
+        }
+      }
       this.cancelPendingPayment();
       return;
     }
@@ -825,6 +852,15 @@ export class CheckoutPage {
             this.completed.set(order);
             this.paymentStatus.set(null);
             this.forgetSession();
+            if (this.isMobileSource()) {
+              setTimeout(() => {
+                try {
+                  window.location.href = this.mobileReturnUrl();
+                } catch {
+                  // ignore navigation errors
+                }
+              }, 400);
+            }
           } else {
             this.paymentStatus.set(result);
           }

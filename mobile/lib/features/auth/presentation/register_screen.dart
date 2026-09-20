@@ -40,12 +40,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.initState();
     password.addListener(_onPasswordChanged);
     confirmPassword.addListener(_onPasswordChanged);
-    names.addListener(_updateCanSubmit);
-    surnames.addListener(_updateCanSubmit);
-    email.addListener(_updateCanSubmit);
+    names.addListener(_onFieldChanged);
+    surnames.addListener(_onFieldChanged);
+    email.addListener(_onFieldChanged);
+    phone.addListener(_onFieldChanged);
+    ci.addListener(_onFieldChanged);
   }
 
   void _onPasswordChanged() {
+    ref.read(authControllerProvider.notifier).clearError();
     setState(() {
       passwordValidation = PasswordValidator.validate(
         password.text,
@@ -54,7 +57,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
   }
 
-  void _updateCanSubmit() {
+  void _onFieldChanged() {
+    ref.read(authControllerProvider.notifier).clearError();
     setState(() {});
   }
 
@@ -241,7 +245,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      state.error!,
+                      state.error!.replaceAll('ApiException: ', '').trim(),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                         fontWeight: FontWeight.w600,

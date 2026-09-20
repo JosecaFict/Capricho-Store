@@ -16,8 +16,30 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
         <!-- Encabezado de Perfil Editorial -->
         <header class="account-header-card">
           <div class="account-profile-main">
-            <div class="account-avatar" aria-hidden="true">
-              {{ initials() }}
+            <div class="account-avatar-wrapper">
+              <div class="account-avatar" [class.has-image]="!!user.avatar_url" aria-hidden="true">
+                @if (user.avatar_url) {
+                  <img [src]="user.avatar_url" [alt]="user.nombres" class="account-avatar__img" />
+                } @else {
+                  {{ initials() }}
+                }
+              </div>
+              <label class="account-avatar-action" title="Cambiar foto de perfil" [class.is-loading]="uploadingAvatar()">
+                @if (uploadingAvatar()) {
+                  <span class="avatar-mini-spinner"></span>
+                } @else {
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                    <circle cx="12" cy="13" r="3"/>
+                  </svg>
+                }
+                <input type="file" accept="image/jpeg,image/png,image/webp" style="display:none;" (change)="onAvatarSelected($event)" [disabled]="uploadingAvatar()" />
+              </label>
+              @if (user.avatar_url) {
+                <button class="account-avatar-delete-link" type="button" (click)="deleteAvatar()" title="Eliminar foto de perfil">
+                  Quitar foto
+                </button>
+              }
             </div>
             <div class="account-profile-info">
               <span class="account-eyebrow">Espacio personal</span>
@@ -347,6 +369,48 @@ export class Account implements OnInit {
   readonly downloadingId = signal<number | null>(null);
   readonly confirmingId = signal<number | null>(null);
   readonly actionFeedback = signal<string | null>(null);
+  readonly uploadingAvatar = signal(false);
+  readonly avatarError = signal<string | null>(null);
+
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    if (file.size > 5 * 1024 * 1024) {
+      this.actionFeedback.set('La imagen supera el límite de 5 MB.');
+      setTimeout(() => this.actionFeedback.set(null), 5000);
+      return;
+    }
+    this.uploadingAvatar.set(true);
+    this.auth.uploadAvatar(file).subscribe({
+      next: () => {
+        this.uploadingAvatar.set(false);
+        this.actionFeedback.set('¡Foto de perfil actualizada con éxito!');
+        setTimeout(() => this.actionFeedback.set(null), 5000);
+      },
+      error: () => {
+        this.uploadingAvatar.set(false);
+        this.actionFeedback.set('No se pudo subir la foto de perfil.');
+        setTimeout(() => this.actionFeedback.set(null), 5000);
+      },
+    });
+    input.value = '';
+  }
+
+  deleteAvatar(): void {
+    if (!window.confirm('¿Deseas eliminar tu foto de perfil actual?')) return;
+    this.uploadingAvatar.set(true);
+    this.auth.deleteAvatar().subscribe({
+      next: () => {
+        this.uploadingAvatar.set(false);
+        this.actionFeedback.set('Foto de perfil eliminada.');
+        setTimeout(() => this.actionFeedback.set(null), 4000);
+      },
+      error: () => {
+        this.uploadingAvatar.set(false);
+      },
+    });
+  }
 
   readonly initials = computed(() => {
     const user = this.auth.currentUser();

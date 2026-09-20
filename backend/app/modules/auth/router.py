@@ -1,7 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 
+from app.integrations.cloudinary import CloudinaryStorage
+from app.modules.catalog.dependencies import get_cloudinary_storage
 from app.modules.auth.dependencies import (
     CurrentPrincipal,
     build_request_audit_context,
@@ -96,6 +98,7 @@ async def me(
         permisos=sorted(principal.permissions),
         id_sucursal=principal.id_sucursal,
         sucursal=principal.sucursal,
+        avatar_url=user.avatar_url,
     )
 
 
@@ -125,6 +128,67 @@ async def update_profile(
         permisos=sorted(principal.permissions),
         id_sucursal=principal.id_sucursal,
         sucursal=principal.sucursal,
+        avatar_url=user.avatar_url,
+    )
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+    storage: Annotated[CloudinaryStorage, Depends(get_cloudinary_storage)],
+    request: Request,
+    file: UploadFile = File(...),
+) -> UserResponse:
+    audit_context = build_request_audit_context(
+        request,
+        user_id=principal.user.id_usuario,
+        session_id=principal.session_id,
+    )
+    user = await service.upload_avatar(principal.user.id_usuario, file, storage, audit_context)
+    return UserResponse(
+        id_usuario=user.id_usuario,
+        nombres=user.nombres,
+        apellidos=user.apellidos,
+        correo=user.correo,
+        telefono=user.telefono,
+        ci=user.ci,
+        estado=user.estado,
+        created_at=user.created_at,
+        roles=sorted(principal.roles),
+        permisos=sorted(principal.permissions),
+        id_sucursal=principal.id_sucursal,
+        sucursal=principal.sucursal,
+        avatar_url=user.avatar_url,
+    )
+
+
+@router.delete("/me/avatar", response_model=UserResponse)
+async def delete_avatar(
+    principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+    request: Request,
+) -> UserResponse:
+    audit_context = build_request_audit_context(
+        request,
+        user_id=principal.user.id_usuario,
+        session_id=principal.session_id,
+    )
+    user = await service.delete_avatar(principal.user.id_usuario, audit_context)
+    return UserResponse(
+        id_usuario=user.id_usuario,
+        nombres=user.nombres,
+        apellidos=user.apellidos,
+        correo=user.correo,
+        telefono=user.telefono,
+        ci=user.ci,
+        estado=user.estado,
+        created_at=user.created_at,
+        roles=sorted(principal.roles),
+        permisos=sorted(principal.permissions),
+        id_sucursal=principal.id_sucursal,
+        sucursal=principal.sucursal,
+        avatar_url=user.avatar_url,
     )
 
 

@@ -249,6 +249,20 @@ h3 {
   text-decoration: none;
   cursor: pointer;
 }
+.nav-account-link {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.5rem;
+}
+.nav-avatar-mini {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--accent, #064fe8);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
 .site-nav a {
   position: relative;
   padding-block: 0.5rem;
@@ -1633,6 +1647,80 @@ td {
   flex-shrink: 0;
   letter-spacing: 0.05em;
   box-shadow: 0 2px 8px rgba(6, 79, 232, 0.12);
+  overflow: hidden;
+  position: relative;
+}
+
+.account-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.account-avatar-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.account-avatar-action {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent, #064fe8);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    transform: scale(1.08);
+    background: #053ec2;
+  }
+
+  &.is-loading {
+    pointer-events: none;
+    opacity: 0.8;
+  }
+}
+
+.account-avatar-delete-link {
+  font-size: 0.7rem;
+  color: #c92a2a;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  margin-top: 4px;
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover {
+    color: #a61e1e;
+  }
+}
+
+.avatar-mini-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: avatar-spin 0.7s linear infinite;
+}
+
+@keyframes avatar-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .account-profile-info {

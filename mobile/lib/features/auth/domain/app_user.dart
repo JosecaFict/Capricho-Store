@@ -11,6 +11,7 @@ class AppUser {
     this.ci,
     this.idSucursal,
     this.branchName,
+    this.avatarUrl,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
@@ -25,6 +26,7 @@ class AppUser {
     permissions: List<String>.from(json['permisos'] as List? ?? const []),
     idSucursal: json['id_sucursal'] as int?,
     branchName: json['sucursal'] as String?,
+    avatarUrl: json['avatar_url'] as String?,
   );
 
   final int id;
@@ -38,6 +40,51 @@ class AppUser {
   final List<String> permissions;
   final int? idSucursal;
   final String? branchName;
+  final String? avatarUrl;
+
+  AppUser copyWith({
+    int? id,
+    String? names,
+    String? surnames,
+    String? email,
+    String? phone,
+    String? ci,
+    String? status,
+    List<String>? roles,
+    List<String>? permissions,
+    int? idSucursal,
+    String? branchName,
+    String? avatarUrl,
+    bool clearAvatar = false,
+  }) => AppUser(
+    id: id ?? this.id,
+    names: names ?? this.names,
+    surnames: surnames ?? this.surnames,
+    email: email ?? this.email,
+    phone: phone ?? this.phone,
+    ci: ci ?? this.ci,
+    status: status ?? this.status,
+    roles: roles ?? this.roles,
+    permissions: permissions ?? this.permissions,
+    idSucursal: idSucursal ?? this.idSucursal,
+    branchName: branchName ?? this.branchName,
+    avatarUrl: clearAvatar ? null : (avatarUrl ?? this.avatarUrl),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id_usuario': id,
+    'nombres': names,
+    'apellidos': surnames,
+    'correo': email,
+    'telefono': phone,
+    'ci': ci,
+    'estado': status,
+    'roles': roles,
+    'permisos': permissions,
+    'id_sucursal': idSucursal,
+    'sucursal': branchName,
+    'avatar_url': avatarUrl,
+  };
 
   String get fullName => '$names $surnames';
 

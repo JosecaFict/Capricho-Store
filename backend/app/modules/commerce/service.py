@@ -1016,8 +1016,12 @@ class CommerceService:
                     payment_intent_data=payment_intent_data,
                     success_url=(
                         f"{base_web_url}/checkout?session_id={{CHECKOUT_SESSION_ID}}"
+                        + ("&source=mobile" if (payload.return_url and "source=mobile" in payload.return_url) else "")
                     ),
-                    cancel_url=f"{base_web_url}/checkout?pago_cancelado=1",
+                    cancel_url=(
+                        f"{base_web_url}/checkout?pago_cancelado=1"
+                        + ("&source=mobile" if (payload.return_url and "source=mobile" in payload.return_url) else "")
+                    ),
                     expires_at=int(expires_at.timestamp()),
                     locale="es",
                     idempotency_key=f"capricho-checkout-{payment.id_pago}",

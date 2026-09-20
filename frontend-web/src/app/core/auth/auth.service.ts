@@ -64,6 +64,20 @@ export class AuthService {
       .pipe(tap((user) => this.currentUserState.set(user)));
   }
 
+  uploadAvatar(file: File): Observable<UserResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http
+      .post<UserResponse>(`${API_BASE_URL}/auth/me/avatar`, formData)
+      .pipe(tap((user) => this.currentUserState.set(user)));
+  }
+
+  deleteAvatar(): Observable<UserResponse> {
+    return this.http
+      .delete<UserResponse>(`${API_BASE_URL}/auth/me/avatar`)
+      .pipe(tap((user) => this.currentUserState.set(user)));
+  }
+
   changePassword(payload: ChangePasswordRequest): Observable<MessageResponse> {
     return this.http.post<MessageResponse>(`${API_BASE_URL}/auth/change-password`, payload);
   }

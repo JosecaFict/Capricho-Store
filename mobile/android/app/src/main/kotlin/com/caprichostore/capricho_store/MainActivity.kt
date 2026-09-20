@@ -1,5 +1,8 @@
 package com.caprichostore.capricho_store
 
+import android.app.ActivityManager
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -31,18 +34,37 @@ class MainActivity : FlutterActivity() {
         poseDetector = PoseDetection.getClient(options)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "detectPose") {
-                val imagePath = call.argument<String>("imagePath")
-                val gender = call.argument<String>("gender") ?: "HOMBRE"
+            when (call.method) {
+                "detectPose" -> {
+                    val imagePath = call.argument<String>("imagePath")
+                    val gender = call.argument<String>("gender") ?: "HOMBRE"
 
-                if (imagePath.isNullOrEmpty()) {
-                    result.error("INVALID_ARGS", "Falta el parámetro imagePath", null)
-                    return@setMethodCallHandler
+                    if (imagePath.isNullOrEmpty()) {
+                        result.error("INVALID_ARGS", "Falta el parámetro imagePath", null)
+                        return@setMethodCallHandler
+                    }
+
+                    analyzePose(imagePath, gender, result)
                 }
+                "bringToFront" -> {
+                    try {
+                        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                        activityManager?.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
 
-                analyzePose(imagePath, gender, result)
-            } else {
-                result.notImplemented()
+                        val intent = Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
             }
         }
     }

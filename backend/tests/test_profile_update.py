@@ -222,6 +222,7 @@ async def test_auth_service_update_profile_commits_transaction() -> None:
 
     mock_session = AsyncMock()
     mock_repository = AsyncMock()
+    mock_repository.get_user_by_ci.return_value = None
     updated_user = make_user(nombres="Carlos", apellidos="Dueñas")
     mock_repository.update_profile.return_value = updated_user
 
@@ -242,6 +243,33 @@ async def test_auth_service_update_profile_commits_transaction() -> None:
     assert result == updated_user
     mock_session.commit.assert_awaited_once()
     mock_session.begin.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_auth_service_update_profile_raises_ci_conflict() -> None:
+    from app.db.audit_context import AuditContext
+    from app.modules.auth.exceptions import CiAlreadyRegisteredError
+    from app.modules.auth.schemas import UpdateProfileRequest
+    from app.modules.auth.service import AuthService
+
+    mock_session = AsyncMock()
+    mock_repository = AsyncMock()
+    existing_other_user = make_user(id_usuario=2, ci="6339300")
+    mock_repository.get_user_by_ci.return_value = existing_other_user
+
+    service = AuthService(session=mock_session, repository=mock_repository)
+    audit = AuditContext(usuario_id=1, sesion_id="s1")
+
+    with pytest.raises(CiAlreadyRegisteredError):
+        await service.update_profile(
+            user_id=1,
+            payload=UpdateProfileRequest(
+                nombres="Carlos",
+                apellidos="Dueñas",
+                ci="6339300",
+            ),
+            audit_context=audit,
+        )
 
 
 @pytest.mark.asyncio

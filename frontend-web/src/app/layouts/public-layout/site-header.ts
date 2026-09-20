@@ -58,7 +58,12 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
               </svg>
             </a>
           } @else {
-            <a routerLink="/cuenta" routerLinkActive="active" (click)="closeMenu()">Mi cuenta</a>
+            <a routerLink="/cuenta" routerLinkActive="active" (click)="closeMenu()" class="nav-account-link">
+              @if (auth.currentUser()?.avatar_url) {
+                <img [src]="auth.currentUser()?.avatar_url" alt="" class="nav-avatar-mini" />
+              }
+              <span>Mi cuenta</span>
+            </a>
             <button class="nav-action" type="button" (click)="logout()">Cerrar sesión</button>
           }
         } @else {

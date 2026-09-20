@@ -33,6 +33,10 @@ class AuthRepository:
         statement = select(Usuario).where(Usuario.correo == email)
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    async def get_user_by_ci(self, ci: str) -> Usuario | None:
+        statement = select(Usuario).where(Usuario.ci == ci.strip())
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
     async def get_user_by_id(self, user_id: int) -> Usuario | None:
         return await self.session.get(Usuario, user_id)
 

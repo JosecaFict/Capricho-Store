@@ -87,6 +87,35 @@ class AuthRepository {
     }
   }
 
+  Future<AppUser> uploadAvatar(String filePath) async {
+    try {
+      final fileName = filePath.split('/').last.split(r'\').last;
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+        ),
+      });
+
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/me/avatar',
+        data: formData,
+      );
+      return AppUser.fromJson(response.data!);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<AppUser> deleteAvatar() async {
+    try {
+      final response = await _dio.delete<Map<String, dynamic>>('/auth/me/avatar');
+      return AppUser.fromJson(response.data!);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<bool> hasSession() async => (await _storage.read()) != null;
   Future<void> logout() => _storage.clear();
 

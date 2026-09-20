@@ -38,6 +38,7 @@ CREATE TABLE usuario (
   password_hash VARCHAR(255) NOT NULL,
   estado VARCHAR(20) NOT NULL DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO','INACTIVO','BLOQUEADO')),
   ultimo_acceso TIMESTAMPTZ,
+  avatar_url VARCHAR(500),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -1,13 +1,16 @@
 from datetime import UTC, datetime
-
+from fastapi import UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.audit_context import AuditContext, apply_audit_context
+from app.integrations.cloudinary import CloudinaryStorage
 from app.modules.auth.exceptions import (
+    CiAlreadyRegisteredError,
     EmailAlreadyRegisteredError,
     InactiveUserError,
+    InvalidAvatarError,
     InvalidCredentialsError,
     SecurityConfigurationError,
 )
@@ -42,6 +45,8 @@ class AuthService:
             await apply_audit_context(self.session, audit_context)
             if await self.repository.get_user_by_email(email) is not None:
                 raise EmailAlreadyRegisteredError
+            if payload.ci and await self.repository.get_user_by_ci(payload.ci) is not None:
+                raise CiAlreadyRegisteredError
 
             client_role = await self.repository.get_active_role_by_name("CLIENTE")
             if client_role is None:
@@ -60,7 +65,13 @@ class AuthService:
             await self.session.commit()
         except IntegrityError as exc:
             await self.session.rollback()
-            if getattr(exc.orig, "sqlstate", None) == "23505" and "correo" in str(exc).lower():
+            error_prefix = str(exc).split("[SQL:")[0].lower()
+            constraint = (getattr(exc.orig, "constraint_name", "") or "").lower()
+            detail = (getattr(exc.orig, "detail", "") or "").lower()
+            check_text = f"{error_prefix} {constraint} {detail}"
+            if "ci" in check_text or "usuario_ci" in check_text:
+                raise CiAlreadyRegisteredError from exc
+            if "correo" in check_text or "usuario_correo" in check_text or getattr(exc.orig, "sqlstate", None) == "23505":
                 raise EmailAlreadyRegisteredError from exc
             raise
         except Exception:
@@ -111,6 +122,11 @@ class AuthService:
     ) -> Usuario:
         try:
             await apply_audit_context(self.session, audit_context)
+            if payload.ci:
+                existing_ci_user = await self.repository.get_user_by_ci(payload.ci)
+                if existing_ci_user is not None and existing_ci_user.id_usuario != user_id:
+                    raise CiAlreadyRegisteredError
+
             user = await self.repository.update_profile(
                 user_id,
                 nombres=payload.nombres,
@@ -118,6 +134,67 @@ class AuthService:
                 telefono=payload.telefono,
                 ci=payload.ci,
             )
+            await self.session.commit()
+            return user
+        except IntegrityError as exc:
+            await self.session.rollback()
+            error_prefix = str(exc).split("[SQL:")[0].lower()
+            constraint = (getattr(exc.orig, "constraint_name", "") or "").lower()
+            detail = (getattr(exc.orig, "detail", "") or "").lower()
+            check_text = f"{error_prefix} {constraint} {detail}"
+            if "ci" in check_text or "usuario_ci" in check_text:
+                raise CiAlreadyRegisteredError from exc
+            raise
+        except Exception:
+            await self.session.rollback()
+            raise
+
+    async def upload_avatar(
+        self,
+        user_id: int,
+        file: UploadFile,
+        storage: CloudinaryStorage,
+        audit_context: AuditContext,
+    ) -> Usuario:
+        content_type = file.content_type or "image/jpeg"
+        if content_type.lower() not in {"image/jpeg", "image/png", "image/webp", "image/jpg"}:
+            raise InvalidAvatarError("Formato no soportado. Usa imágenes JPG, PNG o WebP.")
+        content = await file.read()
+        if len(content) == 0:
+            raise InvalidAvatarError("El archivo de imagen está vacío.")
+        if len(content) > 5 * 1024 * 1024:
+            raise InvalidAvatarError("La imagen supera el tamaño máximo permitido de 5 MB.")
+
+        try:
+            await apply_audit_context(self.session, audit_context)
+            user = await self.repository.get_user_by_id(user_id)
+            if user is None or user.estado != "ACTIVO":
+                raise InactiveUserError("Usuario no encontrado o inactivo")
+
+            upload = await storage.upload_avatar_image(
+                user_id=user_id,
+                content=content,
+                filename=file.filename or f"avatar_{user_id}.jpg",
+                content_type=content_type,
+            )
+            user.avatar_url = upload.secure_url
+            await self.session.commit()
+            return user
+        except Exception:
+            await self.session.rollback()
+            raise
+
+    async def delete_avatar(
+        self,
+        user_id: int,
+        audit_context: AuditContext,
+    ) -> Usuario:
+        try:
+            await apply_audit_context(self.session, audit_context)
+            user = await self.repository.get_user_by_id(user_id)
+            if user is None or user.estado != "ACTIVO":
+                raise InactiveUserError("Usuario no encontrado o inactivo")
+            user.avatar_url = None
             await self.session.commit()
             return user
         except Exception:
@@ -162,5 +239,6 @@ class AuthService:
             created_at=user.created_at,
             roles=sorted(roles),
             permisos=sorted(permissions),
+            avatar_url=user.avatar_url,
         )
 

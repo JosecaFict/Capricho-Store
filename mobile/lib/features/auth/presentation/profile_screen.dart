@@ -6,6 +6,8 @@ import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
 import 'package:capricho_store/shared/widgets/brand_wordmark.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -207,38 +209,95 @@ class ProfileScreen extends ConsumerWidget {
         Center(
           child: Column(
             children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Theme.of(context).colorScheme.secondary,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Theme.of(context).colorScheme.primary
-                          .withValues(alpha: 0.25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).colorScheme.primary,
+                          Theme.of(context).colorScheme.secondary,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                    child: ClipOval(
+                      child: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: user.avatarUrl!,
+                              fit: BoxFit.cover,
+                              width: 88,
+                              height: 88,
+                              placeholder: (context, url) => Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Center(
+                                child: Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Text(
+                                initials,
+                                style: const TextStyle(
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
                     ),
                   ),
-                ),
+                  Positioned(
+                    bottom: -2,
+                    right: -2,
+                    child: Material(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: const CircleBorder(),
+                      elevation: 3,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => _showAvatarOptions(context, ref, user),
+                        child: const Padding(
+                          padding: EdgeInsets.all(7),
+                          child: Icon(
+                            Icons.camera_alt_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               Text(
@@ -622,6 +681,160 @@ class ProfileScreen extends ConsumerWidget {
 
     if (confirmed == true) {
       await ref.read(authControllerProvider.notifier).logout();
+    }
+  }
+
+  Future<void> _showAvatarOptions(
+    BuildContext context,
+    WidgetRef ref,
+    AppUser user,
+  ) async {
+    final hasAvatar = user.avatarUrl != null && user.avatarUrl!.isNotEmpty;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Text(
+                'Foto de perfil',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.muted,
+                  child: Icon(Icons.photo_camera_rounded, color: AppColors.cobalt),
+                ),
+                title: const Text('Tomar foto con la cámara'),
+                onTap: () => Navigator.of(ctx).pop('camera'),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.muted,
+                  child: Icon(Icons.photo_library_rounded, color: AppColors.cobalt),
+                ),
+                title: const Text('Elegir de la galería'),
+                onTap: () => Navigator.of(ctx).pop('gallery'),
+              ),
+              if (hasAvatar)
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFFFEEEE),
+                    child: Icon(Icons.delete_outline_rounded, color: Colors.red),
+                  ),
+                  title: const Text('Eliminar foto actual', style: TextStyle(color: Colors.red)),
+                  onTap: () => Navigator.of(ctx).pop('delete'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (action == null || !context.mounted) return;
+
+    if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Eliminar foto de perfil'),
+          content: const Text('¿Estás seguro de que deseas eliminar tu foto de perfil?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && context.mounted) {
+        final ok = await ref.read(authControllerProvider.notifier).deleteAvatar();
+        if (context.mounted) {
+          if (ok) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Foto de perfil eliminada.')),
+            );
+          } else {
+            final err = ref.read(authControllerProvider).error ?? 'No se pudo eliminar la foto.';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(err.replaceAll('ApiException: ', ''))),
+            );
+          }
+        }
+      }
+    } else if (action == 'camera' || action == 'gallery') {
+      try {
+        final picker = ImagePicker();
+        final source = action == 'camera' ? ImageSource.camera : ImageSource.gallery;
+        final picked = await picker.pickImage(
+          source: source,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 85,
+        );
+
+        if (picked != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Actualizando foto de perfil...'),
+                ],
+              ),
+              duration: Duration(seconds: 4),
+            ),
+          );
+
+          final ok = await ref.read(authControllerProvider.notifier).uploadAvatar(picked.path);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            if (ok) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('¡Foto de perfil actualizada con éxito!')),
+              );
+            } else {
+              final err = ref.read(authControllerProvider).error ?? 'No se pudo subir la foto.';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(err.replaceAll('ApiException: ', ''))),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al seleccionar imagen: $e')),
+          );
+        }
+      }
     }
   }
 }

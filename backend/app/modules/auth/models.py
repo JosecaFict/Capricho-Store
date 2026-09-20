@@ -67,6 +67,7 @@ class Usuario(Base):
         String(20), nullable=False, server_default=text("'ACTIVO'")
     )
     ultimo_acceso: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

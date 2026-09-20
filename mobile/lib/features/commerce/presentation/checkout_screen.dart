@@ -6,6 +6,7 @@ import 'package:capricho_store/features/commerce/domain/commerce_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/shared/widgets/adaptive/adaptive_dialogs.dart';
 import 'package:capricho_store/shared/widgets/location_map_preview.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -368,7 +369,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         deliveryMode: _deliveryMode,
         addressId: _deliveryMode == 'DELIVERY' ? _selectedAddress?.idDireccion : null,
         quoteId: _deliveryMode == 'DELIVERY' ? _shippingQuote?.idCotizacion : null,
-        returnUrl: 'https://capricho-store.vercel.app',
+        returnUrl: 'https://capricho-store.vercel.app?source=mobile',
       );
 
       debugPrint('[Checkout] Sesión creada: ${checkoutData.sessionId}, url: ${checkoutData.checkoutUrl}');
@@ -1149,6 +1150,12 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
           try {
             await closeInAppWebView();
           } catch (_) {}
+          if (defaultTargetPlatform == TargetPlatform.android) {
+            try {
+              const channel = MethodChannel('com.capricho.store/body_pose');
+              await channel.invokeMethod('bringToFront');
+            } catch (_) {}
+          }
 
           if (!mounted) return;
           setState(() {
@@ -1174,6 +1181,12 @@ class _PaymentPollerViewState extends State<_PaymentPollerView> {
           try {
             await closeInAppWebView();
           } catch (_) {}
+          if (defaultTargetPlatform == TargetPlatform.android) {
+            try {
+              const channel = MethodChannel('com.capricho.store/body_pose');
+              await channel.invokeMethod('bringToFront');
+            } catch (_) {}
+          }
 
           if (!mounted) return;
           setState(() {
