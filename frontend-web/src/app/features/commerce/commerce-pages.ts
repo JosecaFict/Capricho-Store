@@ -233,7 +233,7 @@ export class CartPage {
         />
         @if (isMobileSource()) {
           <div style="text-align: center; margin: 1rem 0;">
-            <a class="button button--primary" [href]="mobileReturnUrl()" style="background: #10b981; border-color: #10b981; color: #fff; font-weight: 600;">
+            <a class="button button--primary" [href]="mobileReturnUrl()" (click)="closeWindowSoon()" style="background: #10b981; border-color: #10b981; color: #fff; font-weight: 600;">
               📱 Regresar a la App Capricho Store
             </a>
           </div>
@@ -638,6 +638,16 @@ export class CheckoutPage {
     this.load();
   }
 
+  closeWindowSoon(): void {
+    setTimeout(() => {
+      try {
+        window.close();
+      } catch {
+        // ignore
+      }
+    }, 500);
+  }
+
   load(): void {
     this.loading.set(true);
     this.error.set('');
@@ -859,6 +869,13 @@ export class CheckoutPage {
                 } catch {
                   // ignore navigation errors
                 }
+                setTimeout(() => {
+                  try {
+                    window.close();
+                  } catch {
+                    // ignore
+                  }
+                }, 600);
               }, 400);
             }
           } else {

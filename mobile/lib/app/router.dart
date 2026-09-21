@@ -14,8 +14,10 @@ import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/features/catalog/presentation/catalog_screen.dart';
 import 'package:capricho_store/features/catalog/presentation/product_detail_screen.dart';
 import 'package:capricho_store/features/fitting/presentation/virtual_fitting_screen.dart';
+import 'package:capricho_store/core/theme/app_theme.dart';
 import 'package:capricho_store/features/commerce/presentation/addresses_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/cart_screen.dart';
+import 'package:capricho_store/features/commerce/presentation/checkout_complete_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/checkout_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/notifications_screen.dart';
 import 'package:capricho_store/features/commerce/presentation/order_detail_screen.dart';
@@ -65,7 +67,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: refresh,
     redirect: (context, state) {
-      final location = state.uri.path;
+      final uri = state.uri;
+
+      // Interceptar esquema capricho:// o deep links de checkout-complete
+      if (uri.scheme == 'capricho' ||
+          uri.host == 'checkout-complete' ||
+          uri.path == '/checkout-complete' ||
+          uri.toString().contains('checkout-complete')) {
+        final query = uri.hasQuery ? '?${uri.query}' : '';
+        return '/checkout-complete$query';
+      }
+
+      final location = uri.path;
       if (location == '/splash') return null;
       final isPanelRoute =
           location == '/admin' || location.startsWith('/admin/');
@@ -76,6 +89,47 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         initialized: auth.initialized,
         user: auth.user,
         location: state.uri.toString(),
+      );
+    },
+    errorBuilder: (context, state) {
+      debugPrint('[GoRouter] Error de navegación: ${state.uri}');
+      final uri = state.uri;
+      if (uri.scheme == 'capricho' ||
+          uri.host == 'checkout-complete' ||
+          uri.toString().contains('checkout-complete')) {
+        return CheckoutCompleteScreen(
+          sessionId: uri.queryParameters['session_id'],
+          status: uri.queryParameters['status'],
+        );
+      }
+      return Scaffold(
+        appBar: AppBar(title: const Text('Página no encontrada')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.search_off_rounded,
+                  size: 64,
+                  color: AppColors.inkSoft,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No encontramos la página solicitada.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => context.go('/inicio'),
+                  child: const Text('Volver al inicio'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     },
     routes: [
@@ -177,6 +231,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _adaptivePage(
           key: state.pageKey,
           child: const CheckoutScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/checkout-complete',
+        pageBuilder: (context, state) => _adaptivePage(
+          key: state.pageKey,
+          child: CheckoutCompleteScreen(
+            sessionId: state.uri.queryParameters['session_id'],
+            status: state.uri.queryParameters['status'],
+          ),
         ),
       ),
       GoRoute(
