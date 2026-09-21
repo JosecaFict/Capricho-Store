@@ -28,6 +28,7 @@ describe('AdminLayout', () => {
     const authServiceMock = {
       currentUser: userSignal,
       logout: vi.fn(),
+      restoreSession: vi.fn(),
     };
 
     const commerceServiceMock = {
@@ -103,5 +104,14 @@ describe('AdminLayout', () => {
 
     logoutBtn.nativeElement.click();
     expect(authServiceMock.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders avatar image when avatar_url is present', () => {
+    const { fixture } = setup({
+      avatar_url: 'https://res.cloudinary.com/capricho/avatar.jpg',
+    });
+    const imgEl = fixture.debugElement.query(By.css('.admin-user-profile__avatar-img'));
+    expect(imgEl).toBeTruthy();
+    expect(imgEl.nativeElement.getAttribute('src')).toBe('https://res.cloudinary.com/capricho/avatar.jpg');
   });
 });

@@ -26,6 +26,8 @@ describe('ProfileAdmin', () => {
 
     const authServiceMock = {
       currentUser: userSignal,
+      loading: signal(false),
+      restoreSession: vi.fn(),
       updateProfile: vi.fn().mockReturnValue(
         of({
           ...userSignal(),

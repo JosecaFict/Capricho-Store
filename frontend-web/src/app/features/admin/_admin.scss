@@ -306,6 +306,28 @@
   font-weight: 700;
   text-transform: uppercase;
   user-select: none;
+  overflow: hidden;
+
+  &.has-image {
+    padding: 0;
+    border-color: #3b82f6;
+    background: transparent;
+  }
+}
+.admin-user-profile__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+.admin-sidebar-avatar-mini {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }
 .admin-user-profile__details {
   display: flex;

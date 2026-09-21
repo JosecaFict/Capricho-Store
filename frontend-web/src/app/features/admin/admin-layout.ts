@@ -80,10 +80,14 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
             (click)="menuOpen.set(false)"
             title="Mi cuenta"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
+            @if (user()?.avatar_url) {
+              <img [src]="user()?.avatar_url" alt="" class="admin-sidebar-avatar-mini" />
+            } @else {
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            }
             <span>Mi cuenta</span>
           </a>
           <button
@@ -139,8 +143,12 @@ import { NotificationBell } from '../../shared/components/notification-bell/noti
             <app-notification-bell mode="admin" />
             <span class="admin-header__divider" aria-hidden="true"></span>
             <div class="admin-user-profile">
-              <div class="admin-user-profile__avatar" aria-hidden="true">
-                {{ userInitial() }}
+              <div class="admin-user-profile__avatar" [class.has-image]="!!user()?.avatar_url" aria-hidden="true">
+                @if (user()?.avatar_url) {
+                  <img [src]="user()?.avatar_url" [alt]="displayName()" class="admin-user-profile__avatar-img" />
+                } @else {
+                  {{ userInitial() }}
+                }
               </div>
               <div class="admin-user-profile__details">
                 <span class="admin-user-profile__name">{{ displayName() }}</span>
@@ -173,6 +181,7 @@ export class AdminLayout {
   readonly visibleNavigation = computed(() => visibleAdminNavigation(this.user()?.permisos ?? []));
 
   constructor() {
+    this.auth.restoreSession();
     if (typeof window !== 'undefined' && window.localStorage) {
       this.sidebarCollapsed.set(
         localStorage.getItem('capricho_admin_sidebar_collapsed') === 'true',

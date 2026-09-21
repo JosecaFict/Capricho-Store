@@ -17,6 +17,12 @@ import { ApiErrorService } from '../../core/services/api-error.service';
         </div>
       </header>
 
+      @if (auth.loading() && !user()) {
+        <div class="admin-loading-state" style="padding: 4rem 1rem; text-align: center;">
+          <span class="btn-spinner" style="width: 2.25rem; height: 2.25rem; border-width: 3px; display: inline-block;" aria-hidden="true"></span>
+          <p style="margin-top: 1rem; color: var(--ink-soft); font-weight: 500;">Cargando información del perfil...</p>
+        </div>
+      } @else {
       <!-- Tarjeta 1: Datos Personales y Operativos -->
       <section class="admin-profile-card">
         <header class="admin-profile-card__header">
@@ -359,13 +365,18 @@ import { ApiErrorService } from '../../core/services/api-error.service';
           </div>
         </form>
       </section>
+      }
     </div>
   `,
 })
 export class ProfileAdmin {
-  private readonly auth = inject(AuthService);
+  readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly apiError = inject(ApiErrorService);
+
+  constructor() {
+    this.auth.restoreSession();
+  }
 
   readonly user = this.auth.currentUser;
   readonly isEditingProfile = signal(false);
