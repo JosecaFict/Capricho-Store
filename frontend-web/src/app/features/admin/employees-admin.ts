@@ -632,26 +632,44 @@ export class EmployeeDetail implements OnInit {
       }
     </nav>
     @if (selectedRole()) {
-      <label class="permission-search">
-        <span>Buscar permiso</span>
-        <input
-          type="search"
-          placeholder="Nombre, código o módulo"
-          [value]="search()"
-          (input)="search.set($any($event.target).value)"
-        />
-      </label>
+      <div class="role-permission-toolbar">
+        <label class="permission-search">
+          <span>Buscar permiso</span>
+          <input
+            type="search"
+            placeholder="Filtrar por nombre, código o módulo..."
+            [value]="search()"
+            (input)="search.set($any($event.target).value)"
+          />
+        </label>
+        <div class="role-permission-summary-pill">
+          <span>Total asignados: <strong>{{ totalAssignedCount() }} de {{ permissions().length }}</strong></span>
+        </div>
+      </div>
       <div class="role-permission-groups">
         @for (group of groups(); track group.module) {
           <section class="role-permission-group">
             <header>
-              <h2>{{ group.module }}</h2>
-              <span>{{ enabledCount(group.permissions) }} de {{ group.permissions.length }}</span>
+              <h2>
+                <span class="role-module-icon">{{ moduleIcon(group.module) }}</span>
+                <span>{{ group.module }}</span>
+              </h2>
+              <span
+                class="badge-count"
+                [class.all-active]="enabledCount(group.permissions) === group.permissions.length"
+                [class.none-active]="enabledCount(group.permissions) === 0"
+              >
+                {{ enabledCount(group.permissions) }} / {{ group.permissions.length }}
+              </span>
             </header>
-            <div>
+            <div class="role-permission-list">
               @for (permission of group.permissions; track permission['id_permiso']) {
-                <label class="role-permission-row">
-                  <span>
+                <label
+                  class="role-permission-row"
+                  [class.is-checked]="isEnabled(permission)"
+                  [class.is-protected]="isProtected(permission)"
+                >
+                  <span class="role-permission-info">
                     <strong>{{ permission['nombre'] }}</strong>
                     <small>{{ permission['codigo'] }}</small>
                   </span>
@@ -733,6 +751,23 @@ export class RolesPermissionsAdmin implements OnInit {
   }
   enabledCount(permissions: Entity[]) {
     return permissions.filter((permission) => this.isEnabled(permission)).length;
+  }
+  totalAssignedCount = computed(() => {
+    return this.permissions().filter((permission) => this.isEnabled(permission)).length;
+  });
+  moduleIcon(module: string): string {
+    const icons: Record<string, string> = {
+      CATALOGO: '🏷️',
+      INVENTARIO: '📦',
+      MARKETING: '📢',
+      ORGANIZACION: '🏢',
+      PAGOS: '💳',
+      PROVEEDORES: '🚚',
+      RESERVAS: '📅',
+      SEGURIDAD: '🛡️',
+      VENTAS: '🛍️',
+    };
+    return icons[module.toUpperCase()] || '⚙️';
   }
   toggle(permission: Entity, enabled: boolean) {
     const role = this.selectedRole();
