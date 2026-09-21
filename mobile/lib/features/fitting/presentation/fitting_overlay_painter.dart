@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 class FittingOverlayPainter extends CustomPainter {
   const FittingOverlayPainter({
     required this.scaleMultiplier,
-    this.shoulderDistanceRatio = 0.52,
+    this.shoulderDistanceRatio = 0.32,
     this.showGuides = true,
     this.isScanning = false,
     this.scanLinePosition = 0.0,
@@ -37,13 +37,13 @@ class FittingOverlayPainter extends CustomPainter {
     if (!showGuides) return;
 
     final centerX = size.width / 2;
-    final centerY = size.height * 0.42;
+    final centerY = size.height * 0.44;
 
     final baseShoulderWidth =
         size.width * shoulderDistanceRatio * scaleMultiplier;
     final leftShoulderX = centerX - (baseShoulderWidth / 2);
     final rightShoulderX = centerX + (baseShoulderWidth / 2);
-    final shoulderY = centerY - 50;
+    final shoulderY = centerY - 45;
 
     // Colores de estado reactivos
     final Color primaryColor = isCalibrated || isLocked
@@ -53,9 +53,9 @@ class FittingOverlayPainter extends CustomPainter {
             : (isScanning ? const Color(0xFF38BDF8) : AppColors.cobalt));
 
     // 1. Silueta Fantasma: Contorno anatómico de Cabeza (ARRIBA de los hombros)
-    final headCenterY = shoulderY - 82;
-    final headRadiusX = baseShoulderWidth * 0.21;
-    final headRadiusY = baseShoulderWidth * 0.28;
+    final headCenterY = shoulderY - 68;
+    final headRadiusX = baseShoulderWidth * 0.28;
+    final headRadiusY = baseShoulderWidth * 0.38;
     final headRect = Rect.fromCenter(
       center: Offset(centerX, headCenterY),
       width: headRadiusX * 2,
@@ -167,9 +167,9 @@ class FittingOverlayPainter extends CustomPainter {
 
     // 6. Caja guía de encuadre de torso (desde clavículas a cintura)
     final torsoRect = Rect.fromCenter(
-      center: Offset(centerX, centerY + 45),
-      width: baseShoulderWidth * 1.05,
-      height: baseShoulderWidth * 1.30,
+      center: Offset(centerX, centerY + 38),
+      width: baseShoulderWidth * 1.08,
+      height: baseShoulderWidth * 1.45,
     );
 
     final rrect = RRect.fromRectAndRadius(torsoRect, const Radius.circular(22));

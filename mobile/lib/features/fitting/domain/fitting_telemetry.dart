@@ -110,19 +110,19 @@ class UserDistanceState {
     }
 
     // A ~1.7m de distancia en un smartphone típico en vertical,
-    // los hombros ocupan aproximadamente el 42% - 48% del ancho de pantalla.
+    // los hombros ocupan aproximadamente el 26% - 32% del ancho de pantalla.
     // Fórmula empírica estenopeica: Distancia ~ constanteK / ratio
-    // con constanteK ~ 0.76 (0.76 / 0.45 = ~1.69 m)
-    const constantK = 0.76;
+    // con constanteK ~ 0.48 (0.48 / 0.28 = ~1.71 m)
+    const constantK = 0.48;
     double meters = (constantK / ratio).clamp(0.8, 3.5);
 
-    // Rango óptimo para pruebas superiores: 1.50m - 1.85m (ratio entre 0.38 y 0.52)
-    final isOptimal = meters >= 1.50 && meters <= 1.88;
+    // Rango óptimo para pruebas superiores: 1.45m - 2.10m (ratio entre 0.23 y 0.33)
+    final isOptimal = meters >= 1.45 && meters <= 2.10;
 
     DistanceGuidance guidance = DistanceGuidance.perfect;
-    if (meters < 1.50) {
+    if (meters < 1.45) {
       guidance = DistanceGuidance.stepBack;
-    } else if (meters > 1.88) {
+    } else if (meters > 2.10) {
       guidance = DistanceGuidance.stepCloser;
     }
 
@@ -156,7 +156,7 @@ class UserDistanceState {
 
   static const UserDistanceState optimalDefault = UserDistanceState(
     estimatedDistanceMeters: 1.70,
-    shoulderRatio: 0.45,
+    shoulderRatio: 0.28,
     isDistanceOptimal: true,
     guidance: DistanceGuidance.perfect,
   );

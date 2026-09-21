@@ -150,11 +150,11 @@ import Vision
           }
         }
         
-        // Estimar distancia física real a partir de la relación de encuadre
-        let estimatedDistanceMeters = Double(round((0.76 / max(shoulderDist, 0.08)) * 10) / 10)
+        // Estimar distancia física real a partir de la relación de encuadre en iPhone
+        let estimatedDistanceMeters = Double(round((0.48 / max(shoulderDist, 0.08)) * 10) / 10)
         
-        // Validar distancia razonable: no muy lejos (>2.2m) ni muy cerca (<1.3m)
-        if shoulderDist < 0.18 {
+        // Validar distancia razonable: no muy lejos (>2.4m) ni muy cerca (<1.2m)
+        if shoulderDist < 0.15 {
           result([
             "detected": false,
             "reason": "TOO_FAR",
@@ -163,29 +163,29 @@ import Vision
           return
         }
         
-        if shoulderDist > 0.60 {
+        if shoulderDist > 0.48 {
           result([
             "detected": false,
             "reason": "TOO_CLOSE",
-            "message": "Estás demasiado cerca. Da un paso atrás para encuadrar tu torso completo a ~1.7 metros."
+            "message": "Estás demasiado cerca. Da un paso atrás para encuadrar tu torso a ~1.7 metros."
           ])
           return
         }
         
         // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO DIFERENCIADO POR GÉNERO ---
         let isFemale = gender.uppercased() == "MUJER"
-        let baseCm = isFemale ? 36.0 : 44.5
+        let baseCm = isFemale ? 36.0 : 47.0
         let refIpd = isFemale ? 6.0 : 6.35
         let refHeadH = isFemale ? 14.5 : 16.5
-        let minRange = isFemale ? 33.0 : 40.0
-        let maxRange = isFemale ? 46.0 : 54.0
+        let minRange = isFemale ? 32.0 : 38.0
+        let maxRange = isFemale ? 48.0 : 56.0
 
         // Factor de expansión deltoidea anatómica (de articulación ósea a borde exterior)
         let deltoidExpansion = isFemale ? 1.15 : 1.25
 
         // Compensación óptica por distancia: mantiene invariante el cálculo en cm
         // tanto a 1.4m como a 2.1m
-        let distanceComp = (estimatedDistanceMeters / 1.70).clamped(to: 0.80...1.25)
+        let distanceComp = (estimatedDistanceMeters / 1.70).clamped(to: 0.85...1.20)
 
         var estimatedCm: Double = baseCm
         var estimationMethod = "calibrated_fov"
@@ -196,7 +196,7 @@ import Vision
           let eyeDx = abs(Double(le.location.x) - Double(re.location.x))
           let eyeDy = abs(Double(le.location.y) - Double(re.location.y))
           let eyeDist = sqrt(eyeDx * eyeDx + eyeDy * eyeDy)
-          if eyeDist > 0.018 {
+          if eyeDist > 0.015 {
             let anthropometricScale = refIpd / eyeDist
             let rawCm = shoulderDist * anthropometricScale * deltoidExpansion
             if rawCm >= minRange && rawCm <= maxRange {
@@ -211,7 +211,7 @@ import Vision
           if let n = nose, n.confidence > 0.35,
              let neck = recognizedPoints[.neck], neck.confidence > 0.30 {
             let headDy = abs(Double(n.location.y) - Double(neck.location.y))
-            if headDy > 0.04 {
+            if headDy > 0.035 {
               let headScale = refHeadH / headDy
               let rawHeadCm = shoulderDist * headScale * deltoidExpansion
               if rawHeadCm >= minRange && rawHeadCm <= maxRange {
@@ -222,9 +222,9 @@ import Vision
           }
         }
         
-        // 3. Método FOV Calibrado compensado por distancia métrica
+        // 3. Método FOV Calibrado compensado por distancia métrica (168 cm campo hombre / 148 cm campo mujer a 1.70m)
         if estimationMethod == "calibrated_fov" {
-          let fovFactor = (isFemale ? 116.0 : 142.0) * distanceComp
+          let fovFactor = (isFemale ? 148.0 : 168.0) * distanceComp
           estimatedCm = (shoulderDist * fovFactor).clamped(to: minRange...maxRange)
         }
         

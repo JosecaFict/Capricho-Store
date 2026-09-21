@@ -195,10 +195,10 @@ class MainActivity : FlutterActivity() {
                     val shoulderRatio = shoulderPixelDist / imageWidth
 
                     // Estimar distancia física real a partir de la relación de encuadre
-                    val estimatedDistanceMeters = kotlin.math.round((0.76 / kotlin.math.max(shoulderRatio, 0.08)) * 10.0) / 10.0
+                    val estimatedDistanceMeters = kotlin.math.round((0.48 / kotlin.math.max(shoulderRatio, 0.08)) * 10.0) / 10.0
 
                     // Validar distancia razonable
-                    if (shoulderRatio < 0.18) {
+                    if (shoulderRatio < 0.15) {
                         result.success(
                             mapOf(
                                 "detected" to false,
@@ -210,7 +210,7 @@ class MainActivity : FlutterActivity() {
                         return@addOnSuccessListener
                     }
 
-                    if (shoulderRatio > 0.60) {
+                    if (shoulderRatio > 0.48) {
                         result.success(
                             mapOf(
                                 "detected" to false,
@@ -231,17 +231,17 @@ class MainActivity : FlutterActivity() {
 
                     // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO CALIBRADO (TALLAS REALES S, M, L, XL) ---
                     val isFemale = gender.equals("MUJER", ignoreCase = true)
-                    val baseCm = if (isFemale) 36.0 else 44.5
+                    val baseCm = if (isFemale) 36.0 else 47.0
                     val refIpd = if (isFemale) 6.0 else 6.35      // Distancia interpupilar humana adulta promedio en cm
                     val refHeadH = if (isFemale) 14.5 else 16.5  // Distancia nariz-cuello promedio en cm
-                    val minRange = if (isFemale) 33.0 else 40.0
-                    val maxRange = if (isFemale) 46.0 else 54.0
+                    val minRange = if (isFemale) 32.0 else 38.0
+                    val maxRange = if (isFemale) 48.0 else 56.0
 
                     // Factor de expansión deltoidea anatómica (de articulación ósea a borde exterior)
                     val deltoidExpansion = if (isFemale) 1.15 else 1.25
 
                     // Compensación óptica por distancia: mantiene invariante el cálculo en cm
-                    val distanceComp = (estimatedDistanceMeters / 1.70).coerceIn(0.80, 1.25)
+                    val distanceComp = (estimatedDistanceMeters / 1.70).coerceIn(0.85, 1.20)
 
                     var estimatedCm = baseCm
                     var methodApplied = false
@@ -281,9 +281,9 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
-                    // 3. Método FOV Calibrado según proporción en encuadre de torso compensado por distancia métrica
+                    // 3. Método FOV Calibrado según proporción en encuadre de torso compensado por distancia métrica (168cm / 148cm a 1.70m)
                     if (!methodApplied) {
-                        val fovFactor = (if (isFemale) 116.0 else 142.0) * distanceComp
+                        val fovFactor = (if (isFemale) 148.0 else 168.0) * distanceComp
                         estimatedCm = (shoulderRatio * fovFactor).coerceIn(minRange, maxRange)
                     }
 
