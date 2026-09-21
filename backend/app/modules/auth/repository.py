@@ -79,6 +79,11 @@ class AuthRepository:
         self.session.add(user)
         await self.session.flush()
 
+    async def update_user_status(self, user: Usuario, estado: str) -> None:
+        user.estado = estado
+        self.session.add(user)
+        await self.session.flush()
+
     async def get_role_names(self, user_id: int) -> set[str]:
         statement = (
             select(Rol.nombre)

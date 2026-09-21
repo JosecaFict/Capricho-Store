@@ -22,6 +22,7 @@ from app.modules.auth.password_recovery import BrevoEmailClient, RedisPasswordRe
 from app.modules.auth.password_recovery_service import PasswordRecoveryService
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.service import AuthService
+from app.modules.auth.throttler import RedisLoginThrottler
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -60,7 +61,21 @@ def build_request_audit_context(
 async def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AsyncIterator[AuthService]:
-    yield AuthService(session=session, repository=AuthRepository(session))
+    settings = get_settings()
+    redis_client = None
+    throttler = None
+    if settings.redis_url:
+        redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
+        throttler = RedisLoginThrottler(redis_client)
+    try:
+        yield AuthService(
+            session=session,
+            repository=AuthRepository(session),
+            throttler=throttler,
+        )
+    finally:
+        if redis_client is not None:
+            await redis_client.aclose()
 
 
 async def get_password_recovery_service(
@@ -88,6 +103,7 @@ async def get_password_recovery_service(
                 sender_name=settings.brevo_sender_name,
             ),
             settings=settings,
+            throttler=RedisLoginThrottler(redis_client),
         )
     finally:
         await redis_client.aclose()

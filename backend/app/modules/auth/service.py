@@ -7,6 +7,8 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.db.audit_context import AuditContext, apply_audit_context
 from app.integrations.cloudinary import CloudinaryStorage
 from app.modules.auth.exceptions import (
+    AccountPermanentlyBlockedError,
+    AccountTemporarilyLockedError,
     CiAlreadyRegisteredError,
     EmailAlreadyRegisteredError,
     InactiveUserError,
@@ -16,6 +18,7 @@ from app.modules.auth.exceptions import (
 )
 from app.modules.auth.models import Usuario
 from app.modules.auth.repository import AuthRepository
+from app.modules.auth.throttler import InMemoryLoginThrottler, LoginThrottler
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
     LoginRequest,
@@ -31,9 +34,15 @@ def normalize_email(email: str) -> str:
 
 
 class AuthService:
-    def __init__(self, session: AsyncSession, repository: AuthRepository) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        repository: AuthRepository,
+        throttler: LoginThrottler | None = None,
+    ) -> None:
         self.session = session
         self.repository = repository
+        self.throttler = throttler or InMemoryLoginThrottler()
 
     async def register_customer(
         self,
@@ -86,14 +95,55 @@ class AuthService:
         audit_context: AuditContext,
     ) -> TokenResponse:
         email = normalize_email(str(payload.correo))
+
+        # 1. Verificar si la cuenta está en pausa temporal de seguridad (cooldown)
+        cooldown = await self.throttler.get_cooldown_remaining(email)
+        if cooldown is not None:
+            raise AccountTemporarilyLockedError(retry_after=cooldown)
+
         try:
             user = await self.repository.get_user_by_email(email)
+
+            # 2. Si la cuenta ya está bloqueada de forma permanente
+            if user is not None and user.estado == "BLOQUEADO":
+                raise AccountPermanentlyBlockedError(
+                    "Tu cuenta ha sido bloqueada tras múltiples intentos fallidos. Debes recuperar tu contraseña para desbloquearla."
+                )
+
+            # 3. Validar credenciales
             if user is None or not verify_password(
                 payload.password.get_secret_value(), user.password_hash
             ):
-                raise InvalidCredentialsError
+                attempts, cooldown_triggered = await self.throttler.record_failed_attempt(email)
+                if cooldown_triggered is not None:
+                    raise AccountTemporarilyLockedError(retry_after=cooldown_triggered)
+
+                if attempts >= 9:
+                    if user is not None:
+                        user.estado = "BLOQUEADO"
+                        await self.repository.update_user_status(user, "BLOQUEADO")
+                        await self.session.commit()
+                    raise AccountPermanentlyBlockedError(
+                        "Tu cuenta ha sido bloqueada tras alcanzar 9 intentos fallidos. Debes recuperar tu contraseña para desbloquearla."
+                    )
+
+                if attempts < 3:
+                    remaining = 3 - attempts
+                    msg = f"El correo o la contraseña no son correctos. Te quedan {remaining} intento(s) antes de una pausa de seguridad."
+                elif attempts < 6:
+                    remaining = 6 - attempts
+                    msg = f"El correo o la contraseña no son correctos. Te quedan {remaining} intento(s) antes de una pausa de 5 minutos."
+                else:
+                    remaining = 9 - attempts
+                    msg = f"El correo o la contraseña no son correctos. Te quedan {remaining} intento(s) antes del bloqueo definitivo de tu cuenta."
+
+                raise InvalidCredentialsError(detail=msg)
+
             if user.estado != "ACTIVO":
                 raise InactiveUserError(user.estado)
+
+            # 4. Credenciales válidas -> Limpiar registro de fallos en throttler
+            await self.throttler.clear(email)
 
             authenticated_context = AuditContext(
                 usuario_id=user.id_usuario,
@@ -107,6 +157,13 @@ class AuthService:
             user.ultimo_acceso = datetime.now(UTC)
             await self.repository.update_last_access(user)
             await self.session.commit()
+        except (
+            AccountTemporarilyLockedError,
+            AccountPermanentlyBlockedError,
+            InvalidCredentialsError,
+            InactiveUserError,
+        ):
+            raise
         except Exception:
             await self.session.rollback()
             raise

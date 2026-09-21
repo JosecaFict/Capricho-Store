@@ -45,6 +45,9 @@ class Repository:
     async def update_password(self, user: Usuario, password_hash: str) -> None:
         user.password_hash = password_hash
 
+    async def update_user_status(self, user: Usuario, estado: str) -> None:
+        user.estado = estado
+
 
 class Store:
     def __init__(self) -> None:
@@ -146,3 +149,28 @@ async def test_password_recovery_does_not_reveal_unknown_email() -> None:
     assert "correo" in response.message
     assert store.record is None
     assert email.otp == ""
+
+
+async def test_password_recovery_unlocks_blocked_user() -> None:
+    blocked_user = make_user()
+    blocked_user.estado = "BLOQUEADO"
+    service, _, email = make_service(blocked_user)
+
+    # 1. Solicitar código para usuario BLOQUEADO debe funcionar
+    response = await service.request_code(PasswordRecoveryRequest(correo="ana@example.com"))
+    assert "correo" in response.message
+    assert email.otp.isdigit() and len(email.otp) == 6
+
+    # 2. Verificar código
+    verified = await service.verify_code(
+        PasswordRecoveryVerifyRequest(correo="ana@example.com", codigo=email.otp)
+    )
+
+    # 3. Resetear contraseña desbloquea la cuenta
+    completed = await service.reset_password(
+        PasswordResetRequest(reset_token=verified.reset_token, password="NuevaClave123!"),
+        AuditContext(origen="API"),
+    )
+    assert "desbloqueada" in completed.message
+    assert blocked_user.estado == "ACTIVO"
+    assert verify_password("NuevaClave123!", blocked_user.password_hash)

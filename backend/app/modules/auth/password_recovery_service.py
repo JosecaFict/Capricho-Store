@@ -35,6 +35,7 @@ from app.modules.auth.schemas import (
     PasswordResetRequest,
 )
 from app.modules.auth.service import normalize_email
+from app.modules.auth.throttler import LoginThrottler
 
 RECOVERY_MESSAGE = (
     "Si el correo está registrado, recibirás un código para recuperar tu contraseña."
@@ -54,12 +55,14 @@ class PasswordRecoveryService:
         store: RedisPasswordResetStore,
         email_client: BrevoEmailClient,
         settings: Settings,
+        throttler: LoginThrottler | None = None,
     ) -> None:
         self.session = session
         self.repository = repository
         self.store = store
         self.email_client = email_client
         self.settings = settings
+        self.throttler = throttler
 
     async def request_code(self, payload: PasswordRecoveryRequest) -> MessageResponse:
         email = normalize_email(str(payload.correo))
@@ -73,7 +76,7 @@ class PasswordRecoveryService:
                 return MessageResponse(message=RECOVERY_MESSAGE)
 
             user = await self.repository.get_user_by_email(email)
-            if user is None or user.estado != "ACTIVO":
+            if user is None or user.estado not in ("ACTIVO", "BLOQUEADO"):
                 return MessageResponse(message=RECOVERY_MESSAGE)
 
             otp = generate_otp()
@@ -146,7 +149,7 @@ class PasswordRecoveryService:
 
         async with self.session.begin():
             user = await self.repository.get_user_by_id(claims.user_id)
-            if user is None or user.estado != "ACTIVO":
+            if user is None or user.estado not in ("ACTIVO", "BLOQUEADO"):
                 raise InvalidPasswordResetTokenError
             await apply_audit_context(
                 self.session,
@@ -163,4 +166,12 @@ class PasswordRecoveryService:
                 user,
                 hash_password(payload.password.get_secret_value()),
             )
-        return MessageResponse(message="Tu contraseña fue actualizada correctamente.")
+            if user.estado == "BLOQUEADO":
+                await self.repository.update_user_status(user, "ACTIVO")
+
+        if self.throttler is not None:
+            await self.throttler.clear(user.correo)
+
+        return MessageResponse(
+            message="Tu contraseña fue actualizada correctamente. Tu cuenta ha sido desbloqueada."
+        )

@@ -192,14 +192,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.error
                             .withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        state.error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontWeight: FontWeight.w600,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.error
+                              .withValues(alpha: 0.25),
                         ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                state.error!.toLowerCase().contains('bloquead')
+                                    ? Icons.lock_person_rounded
+                                    : (state.error!.toLowerCase().contains('pausada')
+                                        ? Icons.lock_clock_rounded
+                                        : Icons.error_outline_rounded),
+                                size: 20,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  state.error!,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (state.error!.toLowerCase().contains('bloquead') ||
+                              state.error!.toLowerCase().contains('recuperar')) ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor:
+                                      Theme.of(context).colorScheme.error,
+                                ),
+                                onPressed: () =>
+                                    context.push('/recuperar-password'),
+                                icon: const Icon(Icons.key_rounded, size: 16),
+                                label: const Text(
+                                  'Recuperar contraseña ahora',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
