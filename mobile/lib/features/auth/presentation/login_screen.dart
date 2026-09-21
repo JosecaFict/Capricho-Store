@@ -23,14 +23,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Limpiar errores previos al entrar a la pantalla
+    email.addListener(_onFieldChanged);
+    password.addListener(_onFieldChanged);
+    // Limpiar errores previos y asegurar que loading esté en false
     Future.microtask(() {
       ref.read(authControllerProvider.notifier).clearError();
     });
   }
 
+  void _onFieldChanged() {
+    ref.read(authControllerProvider.notifier).clearError();
+  }
+
   @override
   void dispose() {
+    email.removeListener(_onFieldChanged);
+    password.removeListener(_onFieldChanged);
     email.dispose();
     password.dispose();
     super.dispose();

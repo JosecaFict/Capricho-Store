@@ -110,6 +110,8 @@ class ReservationsController extends AsyncNotifier<List<Reservation>> {
 
   @override
   Future<List<Reservation>> build() async {
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.isAuthenticated) return [];
     try {
       return await _api.listReservations();
     } catch (_) {
@@ -118,6 +120,11 @@ class ReservationsController extends AsyncNotifier<List<Reservation>> {
   }
 
   Future<void> refresh() async {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      state = const AsyncValue.data([]);
+      return;
+    }
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() => _api.listReservations());
   }
@@ -158,10 +165,21 @@ class OrdersController extends AsyncNotifier<List<Order>> {
 
   @override
   Future<List<Order>> build() async {
-    return await _api.listOrders();
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.isAuthenticated) return [];
+    try {
+      return await _api.listOrders();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<void> refresh() async {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      state = const AsyncValue.data([]);
+      return;
+    }
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() => _api.listOrders());
   }
@@ -185,6 +203,8 @@ class AddressesController extends AsyncNotifier<List<Address>> {
 
   @override
   Future<List<Address>> build() async {
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.isAuthenticated) return [];
     try {
       return await _api.listAddresses();
     } catch (_) {
@@ -193,6 +213,11 @@ class AddressesController extends AsyncNotifier<List<Address>> {
   }
 
   Future<void> refresh() async {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      state = const AsyncValue.data([]);
+      return;
+    }
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() => _api.listAddresses());
   }
@@ -239,6 +264,8 @@ class NotificationsController extends AsyncNotifier<List<CustomerNotification>> 
 
   @override
   Future<List<CustomerNotification>> build() async {
+    final auth = ref.watch(authControllerProvider);
+    if (!auth.isAuthenticated) return [];
     try {
       return await _api.listNotifications();
     } catch (_) {
@@ -247,6 +274,11 @@ class NotificationsController extends AsyncNotifier<List<CustomerNotification>> 
   }
 
   Future<void> refresh() async {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated) {
+      state = const AsyncValue.data([]);
+      return;
+    }
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() => _api.listNotifications());
   }

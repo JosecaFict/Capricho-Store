@@ -70,9 +70,11 @@ class AuthController extends Notifier<AuthState> {
   }
 
   void clearError() {
-    if (state.error != null || state.sessionExpired) {
-      state = state.copyWith(clearError: true, sessionExpired: false);
-    }
+    state = state.copyWith(
+      clearError: true,
+      sessionExpired: false,
+      loading: false,
+    );
   }
 
   Future<void> restore() async {
@@ -91,7 +93,6 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<bool> login(String email, String password) async {
-    if (state.loading) return false;
     state = state.copyWith(
       loading: true,
       clearError: true,
@@ -100,7 +101,7 @@ class AuthController extends Notifier<AuthState> {
     try {
       final user = await ref
           .read(authRepositoryProvider)
-          .login(email, password);
+          .login(email.trim().toLowerCase(), password);
       state = AuthState(user: user, initialized: true);
       _syncFcmToken();
       return true;
@@ -108,7 +109,7 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(
         loading: false,
         initialized: true,
-        error: error.toString(),
+        error: error.toString().replaceAll('ApiException: ', ''),
       );
       return false;
     }
@@ -122,29 +123,34 @@ class AuthController extends Notifier<AuthState> {
     String? phone,
     String? ci,
   }) async {
-    if (state.loading) return false;
     state = state.copyWith(
       loading: true,
       clearError: true,
       sessionExpired: false,
     );
     try {
+      final cleanEmail = email.trim().toLowerCase();
       await ref
           .read(authRepositoryProvider)
           .register(
-            names: names,
-            surnames: surnames,
-            email: email,
+            names: names.trim(),
+            surnames: surnames.trim(),
+            email: cleanEmail,
             password: password,
             phone: phone,
             ci: ci,
           );
-      return await login(email, password);
+      final user = await ref
+          .read(authRepositoryProvider)
+          .login(cleanEmail, password);
+      state = AuthState(user: user, initialized: true);
+      _syncFcmToken();
+      return true;
     } catch (error) {
       state = state.copyWith(
         loading: false,
         initialized: true,
-        error: error.toString(),
+        error: error.toString().replaceAll('ApiException: ', ''),
       );
       return false;
     }

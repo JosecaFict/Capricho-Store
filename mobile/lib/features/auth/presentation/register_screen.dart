@@ -45,6 +45,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     email.addListener(_onFieldChanged);
     phone.addListener(_onFieldChanged);
     ci.addListener(_onFieldChanged);
+    Future.microtask(() {
+      ref.read(authControllerProvider.notifier).clearError();
+    });
   }
 
   void _onPasswordChanged() {

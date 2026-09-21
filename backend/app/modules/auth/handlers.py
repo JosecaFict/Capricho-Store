@@ -51,7 +51,7 @@ async def invalid_credentials_handler(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"detail": "Invalid credentials"},
+        content={"detail": "El correo o la contraseña no son correctos."},
         headers={"WWW-Authenticate": "Bearer"},
     )
 

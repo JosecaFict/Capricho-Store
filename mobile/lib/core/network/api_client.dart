@@ -33,8 +33,10 @@ final dioProvider = Provider<Dio>((ref) {
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
           final path = error.requestOptions.path;
-          // No disparar expiración si el 401 proviene de login o registro
-          if (!path.contains('/auth/login') &&
+          final hasToken = (await storage.read()) != null;
+          // Solo disparar expiración si había una sesión previa activa y no es login/registro
+          if (hasToken &&
+              !path.contains('/auth/login') &&
               !path.contains('/auth/register')) {
             await storage.clear();
             sessionExpiredEventProvider.add(null);

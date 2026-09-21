@@ -169,7 +169,7 @@ async def test_login_rejects_incorrect_password() -> None:
     )
 
     assert status_code == 401
-    assert body == {"detail": "Invalid credentials"}
+    assert body == {"detail": "El correo o la contraseña no son correctos."}
 
 
 async def test_login_rejects_blocked_user() -> None:
@@ -258,7 +258,7 @@ async def test_me_without_token() -> None:
         response = await client.get("/api/v1/auth/me")
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Invalid credentials"}
+    assert response.json() == {"detail": "El correo o la contraseña no son correctos."}
 
 
 async def request_with_recovery_service(
