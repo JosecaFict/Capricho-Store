@@ -116,7 +116,7 @@ async def test_register_rejects_duplicate_email() -> None:
     )
 
     assert status_code == 409
-    assert body == {"detail": "Email already registered"}
+    assert body == {"detail": "El correo electrónico ya se encuentra registrado con otra cuenta."}
 
 
 async def test_register_rejects_password_without_special_character() -> None:

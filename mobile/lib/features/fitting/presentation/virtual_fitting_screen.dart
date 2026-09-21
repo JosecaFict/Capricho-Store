@@ -54,8 +54,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   DeviceAngleState _angleState = DeviceAngleState.alignedDefault;
   UserDistanceState _distanceState = UserDistanceState.optimalDefault;
   bool _wasAngleAligned = true;
-  int _handsFreeHoldMs = 0;
-  Timer? _handsFreeTimer;
 
   // Máquina de estados del vestidor
   FittingStep _currentStep = FittingStep.scanning;
@@ -64,7 +62,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   late AnimationController _scanAnimationController;
   late Animation<double> _scanAnimation;
 
-  // Temporizador de calibración (3 segundos)
+  // Temporizador de calibración manual (3 segundos)
   Timer? _scanTimer;
   double _scanProgress = 0.0;
   int _scanSecondsRemaining = 3;
@@ -72,6 +70,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
   // Parámetros de anatomía y calce (Hito 5.2)
   double _userShouldersCm = 44.0;
   late String _selectedGender;
+  BodyBuild _selectedBodyBuild = BodyBuild.regular;
   final PoseSmoother _poseSmoother = PoseSmoother(alpha: 0.35);
   Offset _detectedNeck = const Offset(0.50, 0.34);
   double _detectedShoulderAngle = 0.0;
@@ -137,31 +136,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     } catch (e) {
       debugPrint('No se pudo inicializar stream de acelerómetro: $e');
     }
-
-    // Timer periódico para hands-free auto lock
-    _handsFreeTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (!mounted) return;
-      if (_currentStep != FittingStep.scanning) {
-        if (_handsFreeHoldMs != 0) setState(() => _handsFreeHoldMs = 0);
-        return;
-      }
-
-      if (_isAnalyzingPose) return;
-      final isCalibrated = _angleState.isVerticalAligned;
-      if (isCalibrated) {
-        _handsFreeHoldMs += 100;
-        if (_handsFreeHoldMs >= 3500) {
-          _handsFreeHoldMs = 0;
-          HapticFeedback.heavyImpact(); // Taptic Engine Lock
-          _analyzeRealPoseFromCamera();
-        }
-        setState(() {});
-      } else {
-        if (_handsFreeHoldMs > 0) {
-          setState(() => _handsFreeHoldMs = 0);
-        }
-      }
-    });
   }
 
   void _initAnimation() {
@@ -260,6 +234,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           final estimatedCm = (rawResult['estimatedShouldersCm'] as num?)?.toDouble() ?? 44.0;
           final ratio = (rawResult['shoulderRatio'] as num?)?.toDouble() ?? 0.45;
           final angle = (rawResult['shoulderAngle'] as num?)?.toDouble() ?? 0.0;
+          final distMeters = (rawResult['estimatedDistanceMeters'] as num?)?.toDouble();
 
           Offset neck = const Offset(0.50, 0.34);
           if (rawResult['neck'] is Map) {
@@ -274,7 +249,14 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           _scanAnimationController.stop();
           setState(() {
             _userShouldersCm = estimatedCm;
-            _distanceState = UserDistanceState.fromShoulderRatio(ratio);
+            if (distMeters != null && distMeters > 0) {
+              _distanceState = UserDistanceState(
+                estimatedDistanceMeters: distMeters,
+                isDistanceOptimal: distMeters >= 1.4 && distMeters <= 2.2,
+              );
+            } else {
+              _distanceState = UserDistanceState.fromShoulderRatio(ratio);
+            }
             _detectedNeck = neck;
             _detectedShoulderAngle = angle;
             _detectedShoulderRatio = ratio;
@@ -294,7 +276,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
         } else {
           // No se detectó persona (ej. piso, zapatos, pared vacía o persona sentada de lado)
           final message = rawResult['message'] as String? ??
-              'No se detectó un torso humano de frente. Párate erguido a ~1.7 metros.';
+              'No se detectó una persona de frente. Asegúrate de mostrar rostro y torso erguido a ~1.7 metros.';
           HapticFeedback.mediumImpact();
 
           setState(() {
@@ -365,6 +347,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
       availableSizes: sizes,
       userShouldersCm: _userShouldersCm,
       gender: _selectedGender,
+      bodyBuild: _selectedBodyBuild,
     );
 
     _activeSize = _recommendation.recommendedSize;
@@ -461,7 +444,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     _scanAnimationController.dispose();
     _cameraController?.dispose();
     _accelerometerSub?.cancel();
-    _handsFreeTimer?.cancel();
     super.dispose();
   }
 
@@ -559,6 +541,69 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     );
   }
 
+  Widget _buildBodyBuildSelector({bool compact = false, StateSetter? setModalState}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildBuildChip(BodyBuild.slim, 'Delgada', compact, setModalState),
+        const SizedBox(width: 6),
+        _buildBuildChip(BodyBuild.regular, 'Regular', compact, setModalState),
+        const SizedBox(width: 6),
+        _buildBuildChip(BodyBuild.full, 'Robusta (+Peso)', compact, setModalState),
+      ],
+    );
+  }
+
+  Widget _buildBuildChip(
+    BodyBuild build,
+    String label,
+    bool compact,
+    StateSetter? setModalState,
+  ) {
+    final isSelected = _selectedBodyBuild == build;
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        if (setModalState != null) {
+          setModalState(() {
+            _selectedBodyBuild = build;
+          });
+        }
+        setState(() {
+          _selectedBodyBuild = build;
+          _recalculateFit();
+        });
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 10 : 12,
+          vertical: compact ? 5 : 7,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF10B981)
+              : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF34D399)
+                : Colors.white.withValues(alpha: 0.18),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontSize: compact ? 11 : 12.5,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showCalibrationSheet() {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
@@ -611,7 +656,41 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                         fontSize: 13,
                       ),
                     ),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 20),
+
+                    // Contextura corporal
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Contextura / Complexión:',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        if (_selectedBodyBuild == BodyBuild.full)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              '+1 Talla confort',
+                              style: TextStyle(
+                                color: Color(0xFFFBBF24),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildBodyBuildSelector(compact: false, setModalState: setModalState),
+                    const SizedBox(height: 20),
 
                     // Slider de hombros
                     Row(
@@ -644,10 +723,10 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       ],
                     ),
                     Slider(
-                      value: _userShouldersCm,
-                      min: 38.0,
-                      max: 54.0,
-                      divisions: 32,
+                      value: _userShouldersCm.clamp(36.0, 56.0),
+                      min: 36.0,
+                      max: 56.0,
+                      divisions: 40,
                       activeColor: AppColors.cobalt,
                       inactiveColor: Colors.white.withValues(alpha: 0.15),
                       onChanged: (val) {
@@ -915,31 +994,17 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 ),
               ],
             ),
-            if (_handsFreeHoldMs > 0 && isCalibrated) ...[
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF10B981),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Fijando posición (${((1500 - _handsFreeHoldMs) / 1000).toStringAsFixed(1)}s)...',
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF34D399),
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 5),
+            Text(
+              isCalibrated
+                  ? '✓ Nivelado a 90° y distancia lista: Presiona "Escanear Silueta Ahora"'
+                  : (!angleOk ? 'Inclina el teléfono vertical a 90°' : 'Ajusta tu distancia a ~1.7 metros'),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: isCalibrated ? const Color(0xFF34D399) : Colors.white70,
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -1015,7 +1080,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           children: [
             const SizedBox(height: 70),
 
-            // Badge Superior de Estado Dinámico (Verde cuando está listo)
+            // Badge Superior de Estado Dinámico (Verde cuando está listo a 90°)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -1053,7 +1118,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                   const SizedBox(width: 8),
                   Text(
                     isGreen
-                        ? 'VISTO BUENO: TELÉFONO A 90° LISTO'
+                        ? 'TELÉFONO A 90° LISTO - PRESIONA ESCANEAR'
                         : '1. COLOCA EL TELÉFONO VERTICAL A 90°',
                     style: TextStyle(
                       color: isGreen
@@ -1076,7 +1141,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
               child: Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A).withValues(alpha: 0.92),
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.94),
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
                     color: isGreen
@@ -1099,7 +1164,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                     // Texto guía principal
                     Text(
                       isGreen
-                          ? '¡Posición lista! Persona de pie a ~1.7 metros'
+                          ? '¡Posición a 90° lista! Presiona para escanear'
                           : 'Alinea el teléfono a 90° para habilitar el escaneo',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
@@ -1110,7 +1175,25 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                     ),
                     const SizedBox(height: 10),
 
-                    // Estado de análisis con Apple Vision
+                    // Selector de contextura previa al escaneo
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Contextura:',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildBodyBuildSelector(compact: true),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Estado de análisis con Apple Vision / ML Kit
                     if (_isAnalyzingPose) ...[
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
@@ -1127,7 +1210,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                             ),
                             SizedBox(width: 12),
                             Text(
-                              'Analizando silueta en Apple Neural Engine...',
+                              'Analizando silueta humana en tiempo real...',
                               style: TextStyle(
                                 color: Color(0xFF38BDF8),
                                 fontSize: 13,
@@ -1139,7 +1222,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       ),
                     ],
 
-                    // Alerta si falló la detección (ej. piso, zapatos, sin persona)
+                    // Alerta si falló la detección (ej. piso, frazada, sin persona)
                     if (_poseDetectionError != null) ...[
                       Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -1177,30 +1260,8 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       ),
                     ],
 
-                    // Progreso automático manos libres o temporizador activo
-                    if (isGreen && _handsFreeHoldMs > 0) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: (_handsFreeHoldMs / 2000).clamp(0.0, 1.0),
-                          minHeight: 8,
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF10B981),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Mantén la postura: ${((2000 - _handsFreeHoldMs) / 1000).toStringAsFixed(1)}s para disparo automático...',
-                        style: const TextStyle(
-                          color: Color(0xFF34D399),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ] else if (_scanProgress > 0) ...[
+                    // Si el temporizador manual de 3s está corriendo
+                    if (_scanProgress > 0) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: LinearProgressIndicator(
@@ -1224,7 +1285,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       const SizedBox(height: 8),
                     ],
 
-                    // Botón Principal de Escaneo
+                    // Botón Principal de Escaneo Manual (Solución al disparo involuntario)
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
@@ -1234,7 +1295,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                                 if (!isGreen) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Coloca el teléfono vertical a 90° para obtener el visto bueno.'),
+                                      content: Text('Coloca el teléfono vertical a 90° para habilitar el escaneo.'),
                                       backgroundColor: Color(0xFF0F172A),
                                       duration: Duration(seconds: 2),
                                     ),
@@ -1260,13 +1321,13 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                               ),
                         label: Text(
                           _isAnalyzingPose
-                              ? 'Procesando en A17 Pro...'
+                              ? 'Procesando silueta...'
                               : (isGreen
                                   ? 'Escanear Silueta Ahora'
                                   : 'Esperando Posición a 90°...'),
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
-                            fontSize: 14,
+                            fontSize: 14.5,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -1285,7 +1346,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
                     const SizedBox(height: 6),
 
-                    // Opciones secundarias
+                    // Opciones secundarias (Temporizador manual 3s y calibrar manual)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1471,7 +1532,55 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 ),
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
+
+              // Selector interactivo de contextura para ajuste instantáneo
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Contextura corporal:',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (_selectedBodyBuild == BodyBuild.full)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              '+1 Talla confort',
+                              style: TextStyle(
+                                color: Color(0xFFFBBF24),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildBodyBuildSelector(compact: true),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
 
               // Justificación anatómica
               Text(

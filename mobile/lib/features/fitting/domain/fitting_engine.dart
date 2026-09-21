@@ -1,5 +1,11 @@
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 
+enum BodyBuild {
+  slim,     // Delgada / Entallada
+  regular,  // Media / Estándar
+  full,     // Robusta / Mayor volumen (subió de peso)
+}
+
 class FittingRecommendation {
   const FittingRecommendation({
     required this.recommendedSize,
@@ -10,6 +16,7 @@ class FittingRecommendation {
     this.isBorderline = false,
     this.alternativeSize,
     this.gender = 'HOMBRE',
+    this.bodyBuild = BodyBuild.regular,
   });
 
   final String recommendedSize;
@@ -20,6 +27,7 @@ class FittingRecommendation {
   final bool isBorderline;
   final String? alternativeSize;
   final String gender;
+  final BodyBuild bodyBuild;
 }
 
 class FittingEngine {
@@ -45,6 +53,10 @@ class FittingEngine {
     '3XL': 49.0,
   };
 
+  static const List<String> _standardSizeOrder = [
+    'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL',
+  ];
+
   /// Factores de escala visual relativa para cada talla en el vestidor
   static const Map<String, double> _defaultScales = {
     'XS': 0.88,
@@ -57,12 +69,13 @@ class FittingEngine {
   };
 
   /// Calcula la talla óptima de la prenda comparando las medidas de hombros,
-  /// diferenciando silueta masculina y femenina y detectando tallas fronterizas.
+  /// diferenciando silueta masculina y femenina, contextura corporal y detectando tallas fronterizas.
   static FittingRecommendation evaluate({
     required List<ProductMeasurement> measurements,
     required List<String> availableSizes,
     double userShouldersCm = 44.0,
     String gender = 'HOMBRE',
+    BodyBuild bodyBuild = BodyBuild.regular,
   }) {
     final isFemale = gender.toUpperCase() == 'MUJER';
     final fallbackShoulders =
@@ -74,6 +87,7 @@ class FittingEngine {
         confidence: 85,
         verdict: 'Talla estándar recomendada',
         gender: isFemale ? 'MUJER' : 'HOMBRE',
+        bodyBuild: bodyBuild,
       );
     }
 
@@ -112,6 +126,37 @@ class FittingEngine {
       }
     }
 
+    // Compensación por contextura física (aumento de peso / masa corporal)
+    String finalRecommendedSize = bestSize;
+    if (bodyBuild == BodyBuild.full) {
+      // Si la persona es robusta o subió de peso, compensamos la necesidad de volumen
+      // en tórax y abdomen subiendo a la siguiente talla disponible
+      final currentOrderIdx = _standardSizeOrder.indexOf(bestSize.toUpperCase());
+      if (currentOrderIdx != -1) {
+        // Ordenar tallas disponibles por orden estándar
+        final sortedAvailable = [...availableSizes]..sort((a, b) {
+          final idxA = _standardSizeOrder.indexOf(a.toUpperCase());
+          final idxB = _standardSizeOrder.indexOf(b.toUpperCase());
+          return idxA.compareTo(idxB);
+        });
+        final nextAvailable = sortedAvailable.firstWhere(
+          (s) {
+            final idx = _standardSizeOrder.indexOf(s.toUpperCase());
+            return idx > currentOrderIdx;
+          },
+          orElse: () => bestSize,
+        );
+        finalRecommendedSize = nextAvailable;
+      }
+    } else if (bodyBuild == BodyBuild.slim && isBorderline && alternativeSize != null) {
+      // Para contextura delgada en talla límite, favorecer el calce más entallado
+      final idxBest = _standardSizeOrder.indexOf(bestSize.toUpperCase());
+      final idxAlt = _standardSizeOrder.indexOf(alternativeSize.toUpperCase());
+      if (idxAlt != -1 && idxBest != -1 && idxAlt < idxBest) {
+        finalRecommendedSize = alternativeSize;
+      }
+    }
+
     // Calcular nivel de confianza basado en la cercanía de hombros
     int confidence;
     if (bestDiff <= 1.5) {
@@ -129,12 +174,21 @@ class FittingEngine {
       scales[s] = _defaultScales[sUpper] ?? 1.0;
     }
 
-    final verdict = isBorderline && alternativeSize != null
-        ? 'Talla $bestSize sugerida (~${userShouldersCm.toStringAsFixed(1)} cm). Talla intermedia con $alternativeSize; pruébalas en el espejo.'
-        : 'Ajuste exacto para tus proporciones (~${userShouldersCm.toStringAsFixed(1)} cm de hombros)';
+    String verdict;
+    if (bodyBuild == BodyBuild.full &&
+        finalRecommendedSize.toUpperCase() != bestSize.toUpperCase()) {
+      verdict =
+          'Talla $finalRecommendedSize recomendada: ajuste confortable adaptado a contextura robusta con mayor volumen en tórax y abdomen (hombros base: ~${userShouldersCm.toStringAsFixed(1)} cm).';
+    } else if (isBorderline && alternativeSize != null) {
+      verdict =
+          'Talla $finalRecommendedSize sugerida (~${userShouldersCm.toStringAsFixed(1)} cm). Talla intermedia con $alternativeSize; pruébalas en el espejo.';
+    } else {
+      verdict =
+          'Ajuste exacto para tus proporciones (~${userShouldersCm.toStringAsFixed(1)} cm de hombros)';
+    }
 
     return FittingRecommendation(
-      recommendedSize: bestSize,
+      recommendedSize: finalRecommendedSize,
       confidence: confidence,
       verdict: verdict,
       estimatedShouldersCm: userShouldersCm,
@@ -142,6 +196,7 @@ class FittingEngine {
       isBorderline: isBorderline,
       alternativeSize: alternativeSize,
       gender: isFemale ? 'MUJER' : 'HOMBRE',
+      bodyBuild: bodyBuild,
     );
   }
 }

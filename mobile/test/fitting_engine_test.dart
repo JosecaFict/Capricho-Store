@@ -85,6 +85,33 @@ void main() {
       expect(rec.confidence, greaterThanOrEqualTo(90));
     });
 
+    test('compensa con Talla L para persona que subio de peso (BodyBuild.full) con hombros de 44cm', () {
+      // Hombros base de 44cm normalmente recomiendan M, pero contextura robusta compensa a L
+      final rec = FittingEngine.evaluate(
+        measurements: sampleMeasurements,
+        availableSizes: ['S', 'M', 'L', 'XL'],
+        userShouldersCm: 44.0,
+        bodyBuild: BodyBuild.full,
+      );
+
+      expect(rec.recommendedSize, 'L');
+      expect(rec.bodyBuild, BodyBuild.full);
+      expect(rec.verdict, contains('Talla L recomendada'));
+      expect(rec.verdict, contains('volumen en tórax y abdomen'));
+    });
+
+    test('favorece talla entallada para BodyBuild.slim en talla limite', () {
+      final rec = FittingEngine.evaluate(
+        measurements: sampleMeasurements,
+        availableSizes: ['S', 'M', 'L'],
+        userShouldersCm: 42.5, // Entre S (41) y M (44)
+        bodyBuild: BodyBuild.slim,
+      );
+
+      expect(rec.recommendedSize, 'S');
+      expect(rec.bodyBuild, BodyBuild.slim);
+    });
+
     test('retorna fallback cuando no hay tallas disponibles', () {
       final rec = FittingEngine.evaluate(
         measurements: [],

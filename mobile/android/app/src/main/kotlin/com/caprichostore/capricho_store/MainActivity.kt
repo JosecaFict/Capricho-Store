@@ -138,12 +138,33 @@ class MainActivity : FlutterActivity() {
                     val rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
 
                     if (leftShoulder == null || rightShoulder == null ||
-                        leftShoulder.inFrameLikelihood < 0.30f || rightShoulder.inFrameLikelihood < 0.30f) {
+                        leftShoulder.inFrameLikelihood < 0.50f || rightShoulder.inFrameLikelihood < 0.50f) {
                         result.success(
                             mapOf(
                                 "detected" to false,
                                 "reason" to "SHOULDERS_NOT_VISIBLE",
-                                "message" to "No se distinguen claramente ambos hombros. Asegúrate de estar de pie y erguido frente a la cámara."
+                                "message" to "Hombros no detectados con claridad. Por favor párate de pie y erguido frente a la cámara a ~1.7 metros."
+                            )
+                        )
+                        bitmap.recycle()
+                        return@addOnSuccessListener
+                    }
+
+                    val leftEye = pose.getPoseLandmark(PoseLandmark.LEFT_EYE)
+                    val rightEye = pose.getPoseLandmark(PoseLandmark.RIGHT_EYE)
+                    val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
+
+                    // Filtro Anti-Fantasmas Estricto: Exigir rostro visible mirando al frente
+                    val hasFace = (nose != null && nose.inFrameLikelihood > 0.45f) ||
+                                  (leftEye != null && leftEye.inFrameLikelihood > 0.45f) ||
+                                  (rightEye != null && rightEye.inFrameLikelihood > 0.45f)
+
+                    if (!hasFace) {
+                        result.success(
+                            mapOf(
+                                "detected" to false,
+                                "reason" to "NO_FACE_FOUND",
+                                "message" to "No se detectó un rostro humano de frente. Asegúrate de encuadrarte de pie mirando a la cámara a ~1.7 metros."
                             )
                         )
                         bitmap.recycle()
@@ -173,6 +194,34 @@ class MainActivity : FlutterActivity() {
                     val shoulderPixelDist = sqrt(dxPixels * dxPixels + dyPixels * dyPixels)
                     val shoulderRatio = shoulderPixelDist / imageWidth
 
+                    // Estimar distancia física real a partir de la relación de encuadre
+                    val estimatedDistanceMeters = kotlin.math.round((0.76 / kotlin.math.max(shoulderRatio, 0.08)) * 10.0) / 10.0
+
+                    // Validar distancia razonable
+                    if (shoulderRatio < 0.18) {
+                        result.success(
+                            mapOf(
+                                "detected" to false,
+                                "reason" to "TOO_FAR",
+                                "message" to "Estás demasiado lejos (~${estimatedDistanceMeters}m). Acércate a ~1.7 metros para medir con precisión."
+                            )
+                        )
+                        bitmap.recycle()
+                        return@addOnSuccessListener
+                    }
+
+                    if (shoulderRatio > 0.60) {
+                        result.success(
+                            mapOf(
+                                "detected" to false,
+                                "reason" to "TOO_CLOSE",
+                                "message" to "Estás demasiado cerca. Da un paso atrás para encuadrar tu torso completo a ~1.7 metros."
+                            )
+                        )
+                        bitmap.recycle()
+                        return@addOnSuccessListener
+                    }
+
                     // Ángulo de hombros en RADIANES para Transform.rotate en Flutter (horizontal ≈ 0.0 rad)
                     val shoulderAngleRad = atan2(screenDy, screenDx)
 
@@ -182,22 +231,18 @@ class MainActivity : FlutterActivity() {
 
                     // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO CALIBRADO (TALLAS REALES S, M, L, XL) ---
                     val isFemale = gender.equals("MUJER", ignoreCase = true)
-                    val baseCm = if (isFemale) 38.0 else 46.5
+                    val baseCm = if (isFemale) 38.0 else 45.0
                     val refIpd = if (isFemale) 6.1 else 6.3      // Distancia interpupilar humana adulta promedio en cm
                     val refHeadH = if (isFemale) 15.0 else 16.5  // Distancia nariz-cuello promedio en cm
-                    val minRange = if (isFemale) 34.0 else 40.0
-                    val maxRange = if (isFemale) 49.0 else 56.0
+                    val minRange = if (isFemale) 34.0 else 40.5
+                    val maxRange = if (isFemale) 48.0 else 56.0
 
                     // Factor de expansión deltoidea: ML Kit detecta los centros articulares esqueléticos (glenohumerales).
-                    // El contorno exterior real de hombros en prendas de vestir añade ~28% al 32% sobre la distancia articular.
-                    val deltoidExpansion = 1.30
+                    // El contorno exterior real de hombros en prendas de vestir añade ~25% al 28% sobre la distancia articular.
+                    val deltoidExpansion = 1.26
 
                     var estimatedCm = baseCm
                     var methodApplied = false
-
-                    val leftEye = pose.getPoseLandmark(PoseLandmark.LEFT_EYE)
-                    val rightEye = pose.getPoseLandmark(PoseLandmark.RIGHT_EYE)
-                    val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
 
                     // 1. Método Interpupilar: Invariante a la distancia de la persona a la cámara
                     if (leftEye != null && rightEye != null &&
@@ -236,7 +281,7 @@ class MainActivity : FlutterActivity() {
 
                     // 3. Método FOV Calibrado según proporción en encuadre de torso (~1.4m - 1.8m)
                     if (!methodApplied) {
-                        val fovFactor = if (isFemale) 122.0 else 148.0
+                        val fovFactor = if (isFemale) 122.0 else 146.0
                         estimatedCm = (shoulderRatio * fovFactor).coerceIn(minRange, maxRange)
                     }
 
@@ -249,6 +294,7 @@ class MainActivity : FlutterActivity() {
                         mapOf(
                             "detected" to true,
                             "estimatedShouldersCm" to finalShouldersCm,
+                            "estimatedDistanceMeters" to estimatedDistanceMeters,
                             "shoulderRatio" to shoulderRatio,
                             "shoulderAngle" to shoulderAngleRad,
                             "neck" to mapOf("x" to neckX, "y" to neckY),

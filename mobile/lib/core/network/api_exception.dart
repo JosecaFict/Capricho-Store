@@ -59,7 +59,7 @@ class ApiException implements Exception {
         statusCode: 404,
       ),
       409 => const ApiException(
-        'Este correo ya está registrado.',
+        'El correo electrónico o carnet de identidad (CI) ya se encuentra registrado.',
         statusCode: 409,
       ),
       422 => const ApiException(

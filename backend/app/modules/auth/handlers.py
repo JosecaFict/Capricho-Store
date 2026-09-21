@@ -21,7 +21,7 @@ async def email_already_registered_handler(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
-        content={"detail": "Email already registered"},
+        content={"detail": "El correo electrónico ya se encuentra registrado con otra cuenta."},
     )
 
 

@@ -83,12 +83,29 @@ import Vision
         }
         
         let recognizedPoints = try observation.recognizedPoints(.all)
-        guard let leftShoulder = recognizedPoints[.leftShoulder], leftShoulder.confidence > 0.28,
-              let rightShoulder = recognizedPoints[.rightShoulder], rightShoulder.confidence > 0.28 else {
+        guard let leftShoulder = recognizedPoints[.leftShoulder], leftShoulder.confidence > 0.50,
+              let rightShoulder = recognizedPoints[.rightShoulder], rightShoulder.confidence > 0.50 else {
           result([
             "detected": false,
             "reason": "SHOULDERS_NOT_VISIBLE",
-            "message": "Hombros no detectados con claridad. Por favor párate de pie y de frente a la cámara (no sentado de lado)."
+            "message": "Hombros no detectados con claridad. Por favor párate de pie y de frente a la cámara a ~1.7 metros."
+          ])
+          return
+        }
+        
+        let leftEye = recognizedPoints[.leftEye]
+        let rightEye = recognizedPoints[.rightEye]
+        let nose = recognizedPoints[.nose]
+        
+        // Filtro Anti-Fantasmas Estricto: Exigir rostro visible mirando al frente
+        let hasFace = (nose != nil && nose!.confidence > 0.45) ||
+                      (leftEye != nil && leftEye!.confidence > 0.45) ||
+                      (rightEye != nil && rightEye!.confidence > 0.45)
+        if !hasFace {
+          result([
+            "detected": false,
+            "reason": "NO_FACE_FOUND",
+            "message": "No se detectó un rostro de frente. Por favor párate de pie erguido mirando a la cámara a ~1.7 metros."
           ])
           return
         }
@@ -115,14 +132,15 @@ import Vision
           return
         }
         
-        // Validar que la persona no esté al revés o excesivamente agachada
+        // Validar que la cabeza esté arriba de los hombros
         var neckX = (lsX + rsX) / 2.0
         var neckY = (lsY + rsY) / 2.0
-        if let neck = recognizedPoints[.neck], neck.confidence > 0.25 {
+        let avgShoulderY = (lsY + rsY) / 2.0
+        
+        if let neck = recognizedPoints[.neck], neck.confidence > 0.30 {
           neckX = Double(neck.location.x)
           neckY = Double(1.0 - neck.location.y)
-          let avgShoulderY = (lsY + rsY) / 2.0
-          if neckY > avgShoulderY + 0.08 {
+          if neckY > avgShoulderY + 0.06 {
             result([
               "detected": false,
               "reason": "POSTURE_INVALID",
@@ -132,50 +150,48 @@ import Vision
           }
         }
         
-        // Si el ancho relativo es minúsculo (< 0.12), la persona está muy lejos
-        if shoulderDist < 0.12 {
+        // Estimar distancia física real a partir de la relación de encuadre
+        let estimatedDistanceMeters = Double(round((0.76 / max(shoulderDist, 0.08)) * 10) / 10)
+        
+        // Validar distancia razonable: no muy lejos (>2.2m) ni muy cerca (<1.3m)
+        if shoulderDist < 0.18 {
           result([
             "detected": false,
             "reason": "TOO_FAR",
-            "message": "Estás demasiado lejos para medir con precisión. Acércate a ~1.7 metros."
+            "message": "Estás demasiado lejos (~" + String(format: "%.1f", estimatedDistanceMeters) + "m). Acércate a ~1.7 metros para medir con precisión."
           ])
           return
         }
         
-        // Si el ancho relativo es gigantesco (> 0.65), la persona está demasiado cerca
-        if shoulderDist > 0.65 {
+        if shoulderDist > 0.60 {
           result([
             "detected": false,
             "reason": "TOO_CLOSE",
-            "message": "Estás demasiado cerca. Da un paso atrás para encuadrar tu torso completo."
+            "message": "Estás demasiado cerca. Da un paso atrás para encuadrar tu torso completo a ~1.7 metros."
           ])
           return
         }
         
         // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO DIFERENCIADO POR GÉNERO ---
         let isFemale = gender.uppercased() == "MUJER"
-        let baseCm = isFemale ? 37.0 : 43.0
+        let baseCm = isFemale ? 38.0 : 45.0
         let refIpd = isFemale ? 6.1 : 6.3
         let refHeadH = isFemale ? 15.0 : 16.5
-        let minRange = isFemale ? 32.0 : 37.0
-        let maxRange = isFemale ? 46.0 : 54.0
+        let minRange = isFemale ? 34.0 : 40.5
+        let maxRange = isFemale ? 48.0 : 56.0
 
         var estimatedCm: Double = baseCm
         var estimationMethod = "calibrated_fov"
         
-        let leftEye = recognizedPoints[.leftEye]
-        let rightEye = recognizedPoints[.rightEye]
-        let nose = recognizedPoints[.nose]
-        
         // 1. Método Interpupilar: Invariante a distancia
-        if let le = leftEye, le.confidence > 0.3,
-           let re = rightEye, re.confidence > 0.3 {
+        if let le = leftEye, le.confidence > 0.35,
+           let re = rightEye, re.confidence > 0.35 {
           let eyeDx = abs(Double(le.location.x) - Double(re.location.x))
           let eyeDy = abs(Double(le.location.y) - Double(re.location.y))
           let eyeDist = sqrt(eyeDx * eyeDx + eyeDy * eyeDy)
           if eyeDist > 0.018 {
             let anthropometricScale = refIpd / eyeDist
-            let rawCm = shoulderDist * anthropometricScale
+            let rawCm = shoulderDist * anthropometricScale * 1.25
             if rawCm >= minRange && rawCm <= maxRange {
               estimatedCm = rawCm
               estimationMethod = "interpupillary_ratio"
@@ -185,12 +201,12 @@ import Vision
         
         // 2. Método Nariz-Cuello: Invariante a distancia
         if estimationMethod == "calibrated_fov" {
-          if let n = nose, n.confidence > 0.3,
-             let neck = recognizedPoints[.neck], neck.confidence > 0.3 {
+          if let n = nose, n.confidence > 0.35,
+             let neck = recognizedPoints[.neck], neck.confidence > 0.30 {
             let headDy = abs(Double(n.location.y) - Double(neck.location.y))
             if headDy > 0.04 {
               let headScale = refHeadH / headDy
-              let rawHeadCm = shoulderDist * headScale
+              let rawHeadCm = shoulderDist * headScale * 1.25
               if rawHeadCm >= minRange && rawHeadCm <= maxRange {
                 estimatedCm = rawHeadCm
                 estimationMethod = "head_height_ratio"
@@ -199,10 +215,10 @@ import Vision
           }
         }
         
-        // 3. Método FOV Calibrado (iPhone 15 Pro Max a ~1.7m de distancia)
+        // 3. Método FOV Calibrado (iPhone a ~1.7m de distancia)
         if estimationMethod == "calibrated_fov" {
-          let delta = (shoulderDist - 0.25) * 55.0
-          estimatedCm = baseCm + delta
+          let fovFactor = isFemale ? 122.0 : 146.0
+          estimatedCm = (shoulderDist * fovFactor).clamped(to: minRange...maxRange)
         }
         
         // Redondear a 1 decimal y limitar al rango humano real según género
@@ -213,6 +229,7 @@ import Vision
           "shoulderRatio": shoulderDist,
           "shoulderAngle": shoulderAngle,
           "estimatedShouldersCm": finalCm,
+          "estimatedDistanceMeters": estimatedDistanceMeters,
           "gender": isFemale ? "MUJER" : "HOMBRE",
           "method": estimationMethod,
           "leftShoulder": ["x": lsX, "y": lsY, "confidence": Double(leftShoulder.confidence)],
