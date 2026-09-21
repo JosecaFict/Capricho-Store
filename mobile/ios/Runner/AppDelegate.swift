@@ -174,11 +174,18 @@ import Vision
         
         // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO DIFERENCIADO POR GÉNERO ---
         let isFemale = gender.uppercased() == "MUJER"
-        let baseCm = isFemale ? 38.0 : 45.0
-        let refIpd = isFemale ? 6.1 : 6.3
-        let refHeadH = isFemale ? 15.0 : 16.5
-        let minRange = isFemale ? 34.0 : 40.5
-        let maxRange = isFemale ? 48.0 : 56.0
+        let baseCm = isFemale ? 36.0 : 44.5
+        let refIpd = isFemale ? 6.0 : 6.35
+        let refHeadH = isFemale ? 14.5 : 16.5
+        let minRange = isFemale ? 33.0 : 40.0
+        let maxRange = isFemale ? 46.0 : 54.0
+
+        // Factor de expansión deltoidea anatómica (de articulación ósea a borde exterior)
+        let deltoidExpansion = isFemale ? 1.15 : 1.25
+
+        // Compensación óptica por distancia: mantiene invariante el cálculo en cm
+        // tanto a 1.4m como a 2.1m
+        let distanceComp = (estimatedDistanceMeters / 1.70).clamped(to: 0.80...1.25)
 
         var estimatedCm: Double = baseCm
         var estimationMethod = "calibrated_fov"
@@ -191,7 +198,7 @@ import Vision
           let eyeDist = sqrt(eyeDx * eyeDx + eyeDy * eyeDy)
           if eyeDist > 0.018 {
             let anthropometricScale = refIpd / eyeDist
-            let rawCm = shoulderDist * anthropometricScale * 1.25
+            let rawCm = shoulderDist * anthropometricScale * deltoidExpansion
             if rawCm >= minRange && rawCm <= maxRange {
               estimatedCm = rawCm
               estimationMethod = "interpupillary_ratio"
@@ -206,7 +213,7 @@ import Vision
             let headDy = abs(Double(n.location.y) - Double(neck.location.y))
             if headDy > 0.04 {
               let headScale = refHeadH / headDy
-              let rawHeadCm = shoulderDist * headScale * 1.25
+              let rawHeadCm = shoulderDist * headScale * deltoidExpansion
               if rawHeadCm >= minRange && rawHeadCm <= maxRange {
                 estimatedCm = rawHeadCm
                 estimationMethod = "head_height_ratio"
@@ -215,9 +222,9 @@ import Vision
           }
         }
         
-        // 3. Método FOV Calibrado (iPhone a ~1.7m de distancia)
+        // 3. Método FOV Calibrado compensado por distancia métrica
         if estimationMethod == "calibrated_fov" {
-          let fovFactor = isFemale ? 122.0 : 146.0
+          let fovFactor = (isFemale ? 116.0 : 142.0) * distanceComp
           estimatedCm = (shoulderDist * fovFactor).clamped(to: minRange...maxRange)
         }
         

@@ -231,15 +231,17 @@ class MainActivity : FlutterActivity() {
 
                     // --- CÁLCULO ANTROPOMÉTRICO ROBUSTO CALIBRADO (TALLAS REALES S, M, L, XL) ---
                     val isFemale = gender.equals("MUJER", ignoreCase = true)
-                    val baseCm = if (isFemale) 38.0 else 45.0
-                    val refIpd = if (isFemale) 6.1 else 6.3      // Distancia interpupilar humana adulta promedio en cm
-                    val refHeadH = if (isFemale) 15.0 else 16.5  // Distancia nariz-cuello promedio en cm
-                    val minRange = if (isFemale) 34.0 else 40.5
-                    val maxRange = if (isFemale) 48.0 else 56.0
+                    val baseCm = if (isFemale) 36.0 else 44.5
+                    val refIpd = if (isFemale) 6.0 else 6.35      // Distancia interpupilar humana adulta promedio en cm
+                    val refHeadH = if (isFemale) 14.5 else 16.5  // Distancia nariz-cuello promedio en cm
+                    val minRange = if (isFemale) 33.0 else 40.0
+                    val maxRange = if (isFemale) 46.0 else 54.0
 
-                    // Factor de expansión deltoidea: ML Kit detecta los centros articulares esqueléticos (glenohumerales).
-                    // El contorno exterior real de hombros en prendas de vestir añade ~25% al 28% sobre la distancia articular.
-                    val deltoidExpansion = 1.26
+                    // Factor de expansión deltoidea anatómica (de articulación ósea a borde exterior)
+                    val deltoidExpansion = if (isFemale) 1.15 else 1.25
+
+                    // Compensación óptica por distancia: mantiene invariante el cálculo en cm
+                    val distanceComp = (estimatedDistanceMeters / 1.70).coerceIn(0.80, 1.25)
 
                     var estimatedCm = baseCm
                     var methodApplied = false
@@ -279,9 +281,9 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
-                    // 3. Método FOV Calibrado según proporción en encuadre de torso (~1.4m - 1.8m)
+                    // 3. Método FOV Calibrado según proporción en encuadre de torso compensado por distancia métrica
                     if (!methodApplied) {
-                        val fovFactor = if (isFemale) 122.0 else 146.0
+                        val fovFactor = (if (isFemale) 116.0 else 142.0) * distanceComp
                         estimatedCm = (shoulderRatio * fovFactor).coerceIn(minRange, maxRange)
                     }
 

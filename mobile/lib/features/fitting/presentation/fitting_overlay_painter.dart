@@ -52,16 +52,76 @@ class FittingOverlayPainter extends CustomPainter {
             ? const Color(0xFFF59E0B) // Ámbar/Naranja (Ángulo desalineado)
             : (isScanning ? const Color(0xFF38BDF8) : AppColors.cobalt));
 
-    // 1. Línea guía de hombros con resplandor
-    final guidePaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.85)
+    // 1. Silueta Fantasma: Contorno anatómico de Cabeza (ARRIBA de los hombros)
+    final headCenterY = shoulderY - 82;
+    final headRadiusX = baseShoulderWidth * 0.21;
+    final headRadiusY = baseShoulderWidth * 0.28;
+    final headRect = Rect.fromCenter(
+      center: Offset(centerX, headCenterY),
+      width: headRadiusX * 2,
+      height: headRadiusY * 2,
+    );
+
+    final headPaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+
+    final headFillPaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.04)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawOval(headRect, headFillPaint);
+    canvas.drawOval(headRect, headPaint);
+
+    // Etiqueta indicativa "CABEZA" en el contorno superior
+    _drawTextBadge(
+      canvas,
+      text: '👤 CABEZA',
+      center: Offset(centerX, headCenterY - headRadiusY - 10),
+      color: primaryColor,
+    );
+
+    // 2. Curvas de Trapecio / Cuello anatómico hacia los hombros
+    final neckBaseY = shoulderY - 16;
+    final neckHalfWidth = baseShoulderWidth * 0.14;
+
+    final trapeziusPath = Path()
+      ..moveTo(centerX - neckHalfWidth, neckBaseY)
+      ..quadraticBezierTo(
+        leftShoulderX + (baseShoulderWidth * 0.15),
+        shoulderY - 8,
+        leftShoulderX,
+        shoulderY,
+      );
+
+    final rightTrapeziusPath = Path()
+      ..moveTo(centerX + neckHalfWidth, neckBaseY)
+      ..quadraticBezierTo(
+        rightShoulderX - (baseShoulderWidth * 0.15),
+        shoulderY - 8,
+        rightShoulderX,
+        shoulderY,
+      );
+
+    final slopePaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.70)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    final glowPaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.25)
+    canvas.drawPath(trapeziusPath, slopePaint);
+    canvas.drawPath(rightTrapeziusPath, slopePaint);
+
+    // 3. Línea guía de hombros con resplandor
+    final guidePaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.90)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6.0;
+      ..strokeWidth = 2.4;
+
+    final glowPaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.28)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7.0;
 
     canvas.drawLine(
       Offset(leftShoulderX, shoulderY),
@@ -74,41 +134,63 @@ class FittingOverlayPainter extends CustomPainter {
       guidePaint,
     );
 
-    // 2. Marcadores en hombro izquierdo y derecho
+    // 4. Marcadores en hombro izquierdo y derecho con etiquetas
     final markerPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
 
-    canvas.drawCircle(Offset(leftShoulderX, shoulderY), 5.0, markerPaint);
-    canvas.drawCircle(Offset(leftShoulderX, shoulderY), 7.0, guidePaint);
+    canvas.drawCircle(Offset(leftShoulderX, shoulderY), 5.5, markerPaint);
+    canvas.drawCircle(Offset(leftShoulderX, shoulderY), 8.0, guidePaint);
 
-    canvas.drawCircle(Offset(rightShoulderX, shoulderY), 5.0, markerPaint);
-    canvas.drawCircle(Offset(rightShoulderX, shoulderY), 7.0, guidePaint);
+    canvas.drawCircle(Offset(rightShoulderX, shoulderY), 5.5, markerPaint);
+    canvas.drawCircle(Offset(rightShoulderX, shoulderY), 8.0, guidePaint);
 
-    // 3. Indicador de cuello / centroide de anclaje de prenda
-    final neckPaint = Paint()
-      ..color = isCalibrated ? const Color(0xFF34D399) : Colors.amberAccent
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(centerX, shoulderY + 15), 4.0, neckPaint);
-
-    // 4. Caja guía de encuadre de torso
-    final torsoRect = Rect.fromCenter(
-      center: Offset(centerX, centerY + 40),
-      width: baseShoulderWidth * 1.05,
-      height: baseShoulderWidth * 1.35,
+    // Etiquetas indicativas de hombros
+    _drawTextBadge(
+      canvas,
+      text: 'HOMBRO IZQ',
+      center: Offset(leftShoulderX - 28, shoulderY - 14),
+      color: primaryColor,
+    );
+    _drawTextBadge(
+      canvas,
+      text: 'HOMBRO DER',
+      center: Offset(rightShoulderX + 28, shoulderY - 14),
+      color: primaryColor,
     );
 
-    final rrect = RRect.fromRectAndRadius(torsoRect, const Radius.circular(20));
+    // 5. Indicador de base del cuello / collar
+    final neckDotPaint = Paint()
+      ..color = isCalibrated ? const Color(0xFF34D399) : Colors.amberAccent
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(centerX, shoulderY + 8), 4.0, neckDotPaint);
+
+    // 6. Caja guía de encuadre de torso (desde clavículas a cintura)
+    final torsoRect = Rect.fromCenter(
+      center: Offset(centerX, centerY + 45),
+      width: baseShoulderWidth * 1.05,
+      height: baseShoulderWidth * 1.30,
+    );
+
+    final rrect = RRect.fromRectAndRadius(torsoRect, const Radius.circular(22));
     final torsoOutlinePaint = Paint()
       ..color = isScanning || isCalibrated
           ? primaryColor.withValues(alpha: 0.35)
-          : Colors.white.withValues(alpha: 0.20)
+          : Colors.white.withValues(alpha: 0.18)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
+      ..strokeWidth = 1.4;
 
     canvas.drawRRect(rrect, torsoOutlinePaint);
 
-    // 5. Brackets HUD en las 4 esquinas de la caja de escaneo
+    // Etiqueta del Torso
+    _drawTextBadge(
+      canvas,
+      text: 'TORSO (PECHO Y CINTURA)',
+      center: Offset(centerX, torsoRect.bottom + 12),
+      color: primaryColor,
+    );
+
+    // 7. Brackets HUD en las 4 esquinas de la caja de escaneo
     final bracketPaint = Paint()
       ..color = primaryColor
       ..style = PaintingStyle.stroke
@@ -227,6 +309,53 @@ class FittingOverlayPainter extends CustomPainter {
     }
   }
 
+  void _drawTextBadge(
+    Canvas canvas, {
+    required String text,
+    required Offset center,
+    required Color color,
+  }) {
+    final textSpan = TextSpan(
+      text: text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 9.5,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
+      ),
+    );
+    final textPainter = TextPainter(
+      text: textSpan,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+
+    final bgRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: center,
+        width: textPainter.width + 12,
+        height: textPainter.height + 6,
+      ),
+      const Radius.circular(4),
+    );
+
+    final bgPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.65)
+      ..style = PaintingStyle.fill;
+    final borderPaint = Paint()
+      ..color = color.withValues(alpha: 0.70)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    canvas.drawRRect(bgRect, bgPaint);
+    canvas.drawRRect(bgRect, borderPaint);
+
+    textPainter.paint(
+      canvas,
+      Offset(center.dx - textPainter.width / 2, center.dy - textPainter.height / 2),
+    );
+  }
+
   @override
   bool shouldRepaint(covariant FittingOverlayPainter oldDelegate) {
     return oldDelegate.scaleMultiplier != scaleMultiplier ||
@@ -244,3 +373,4 @@ class FittingOverlayPainter extends CustomPainter {
         oldDelegate.guidanceHeadline != guidanceHeadline;
   }
 }
+

@@ -982,27 +982,31 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 _telemetryChip(
                   icon: Icons.straighten_rounded,
                   label: 'Distancia',
-                  value: _distanceState.estimatedDistanceMeters > 0
-                      ? '~${_distanceState.estimatedDistanceMeters.toStringAsFixed(1)}m'
-                      : '--',
-                  status: distOk
-                      ? 'ÓPTIMA'
-                      : (_distanceState.estimatedDistanceMeters < 1.50
-                          ? 'ALÉJATE'
-                          : 'ACÉRCATE'),
+                  value: _isAnalyzingPose
+                      ? 'CALCULANDO'
+                      : (_distanceState.estimatedDistanceMeters > 0
+                          ? '~${_distanceState.estimatedDistanceMeters.toStringAsFixed(2)}m'
+                          : '~1.70m'),
+                  status: _isAnalyzingPose
+                      ? 'ESCANEANDO'
+                      : (distOk
+                          ? 'ÓPTIMA'
+                          : (_distanceState.estimatedDistanceMeters < 1.40
+                              ? 'ALÉJATE'
+                              : 'ACÉRCATE')),
                   isOk: distOk,
                 ),
               ],
             ),
             const SizedBox(height: 5),
             Text(
-              isCalibrated
-                  ? '✓ Nivelado a 90° y distancia lista: Presiona "Escanear Silueta Ahora"'
-                  : (!angleOk ? 'Inclina el teléfono vertical a 90°' : 'Ajusta tu distancia a ~1.7 metros'),
+              angleOk
+                  ? '✓ Nivelado a 90°: Presiona "Escanear Silueta Ahora"'
+                  : 'Inclina el teléfono vertical a 90°',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: isCalibrated ? const Color(0xFF34D399) : Colors.white70,
+                color: angleOk ? const Color(0xFF34D399) : Colors.white70,
               ),
             ),
           ],
@@ -1078,61 +1082,6 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
       child: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 70),
-
-            // Badge Superior de Estado Dinámico (Verde cuando está listo a 90°)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isGreen
-                    ? const Color(0xFF0F172A).withValues(alpha: 0.9)
-                    : Colors.black.withValues(alpha: 0.75),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isGreen
-                      ? const Color(0xFF10B981)
-                      : const Color(0xFFF59E0B),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isGreen
-                        ? const Color(0xFF10B981).withValues(alpha: 0.35)
-                        : const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                    blurRadius: 14,
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isGreen
-                        ? Icons.check_circle_rounded
-                        : Icons.screen_rotation_rounded,
-                    color: isGreen
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFFF59E0B),
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isGreen
-                        ? 'TELÉFONO A 90° LISTO - PRESIONA ESCANEAR'
-                        : '1. COLOCA EL TELÉFONO VERTICAL A 90°',
-                    style: TextStyle(
-                      color: isGreen
-                          ? const Color(0xFF34D399)
-                          : Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.9,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
             const Spacer(),
 
             // Tarjeta inferior de estado y control de escaneo
@@ -1173,7 +1122,34 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
+                    Text(
+                      '👤 Alinea la cabeza en el óvalo y el torso (hombros a cintura) en el marco',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.70),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Selector de silueta anatómica (Hombre / Mujer)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Silueta:',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildGenderSelector(),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
 
                     // Selector de contextura previa al escaneo
                     Row(
@@ -1182,7 +1158,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                         Text(
                           'Contextura:',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.75),
+                            color: Colors.white.withValues(alpha: 0.85),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1532,7 +1508,131 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 ),
               ),
 
-              const SizedBox(height: 12),
+              // Telemetría Escaneada (Distancia métrica y ancho de hombros real)
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.straighten_rounded, color: Color(0xFF34D399), size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Distancia: ~${_distanceState.estimatedDistanceMeters.toStringAsFixed(2)}m',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    Container(width: 1, height: 16, color: Colors.white24),
+                    Row(
+                      children: [
+                        const Icon(Icons.accessibility_new_rounded, color: Color(0xFF38BDF8), size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Hombros: ~${_userShouldersCm.toStringAsFixed(1)} cm',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Comparador Interactivo de Tallas Regulares
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Comparar calce en vivo:',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Talla regular',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: (widget.product.sizes.isNotEmpty
+                              ? widget.product.sizes
+                              : ['S', 'M', 'L', 'XL'])
+                          .map((size) {
+                        final isSelected = _activeSize == size;
+                        final isRecommended = size == _recommendation.recommendedSize;
+                        return ChoiceChip(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(size),
+                              if (isRecommended) ...[
+                                const SizedBox(width: 4),
+                                const Icon(Icons.star_rounded, size: 13, color: Colors.amberAccent),
+                              ],
+                            ],
+                          ),
+                          selected: isSelected,
+                          selectedColor: AppColors.cobalt,
+                          backgroundColor: Colors.white.withValues(alpha: 0.08),
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.white : Colors.white70,
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: isRecommended
+                                  ? const Color(0xFF10B981)
+                                  : (isSelected ? AppColors.cobalt : Colors.white.withValues(alpha: 0.15)),
+                              width: isRecommended ? 1.4 : 1.0,
+                            ),
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              HapticFeedback.selectionClick();
+                              setState(() {
+                                _activeSize = size;
+                                _findActiveVariant();
+                              });
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
 
               // Selector interactivo de contextura para ajuste instantáneo
               Container(
@@ -1723,7 +1823,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
               Text(
                 _activeSize == _recommendation.recommendedSize
                     ? 'Talla $_activeSize · Recomendada por calce (${_recommendation.confidence}%)'
-                    : 'Talla $_activeSize · Modo ${(_currentScaleMultiplier > 1.0) ? "Oversize / Holgado" : "Slim / Ceñido"}',
+                    : 'Talla $_activeSize · Calce Regular (${(_currentScaleMultiplier > 1.0) ? "Confortable" : "Entallado"})',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
@@ -2046,7 +2146,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
         HapticFeedback.selectionClick();
         setState(() {
           _selectedGender = genderKey;
-          _userShouldersCm = genderKey == 'MUJER' ? 38.0 : 44.0;
+          _userShouldersCm = genderKey == 'MUJER' ? 36.0 : 44.0;
           _recalculateFit();
         });
       },
