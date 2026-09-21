@@ -332,5 +332,43 @@ async def test_mark_notifications_as_read_persists_leido() -> None:
     mock_session.commit.assert_awaited()
 
 
+@pytest.mark.asyncio
+async def test_notify_staff_and_admins_banzer_and_global_admin() -> None:
+    from app.modules.commerce.service import CommerceService
+    from unittest.mock import MagicMock
+
+    mock_session = AsyncMock()
+    mock_repo = AsyncMock()
+    mock_fcm = AsyncMock()
+    mock_fcm.send_push_notification.return_value = 1
+
+    # Branch 2 (Banzer) staff user #33 (Mario - Cajero Banzer)
+    mock_res_branch = MagicMock()
+    mock_res_branch.all.return_value = [(33,)]
+
+    # Global Admin user #2 (Jose Carlos - Role ADMIN)
+    mock_res_admin = MagicMock()
+    mock_res_admin.all.return_value = [(2,)]
+
+    mock_session.execute.side_effect = [mock_res_branch, mock_res_admin]
+    mock_repo.get_user_device_tokens.side_effect = lambda uid: [f"token-user-{uid}"]
+    mock_repo.add.return_value = None
+
+    service = CommerceService(mock_session, mock_repo, fcm_sender=mock_fcm)
+
+    await service._notify_staff_and_admins(
+        branch_id=2,
+        kind="NUEVO_PEDIDO",
+        title="Nuevo Pedido #26 por preparar 🛍️",
+        content="Julio Villa realizó un pedido por Bs 200,00 (Retiro en tienda - CAPRICHO STORE BANZER).",
+        data={"type": "NUEVO_PEDIDO", "id": "26", "route": "/pedidos"},
+    )
+
+    # Both Mario (Cajero Banzer #33) and Admin (Jose Carlos #2) receive the notification
+    assert mock_repo.add.await_count == 2
+    assert mock_fcm.send_push_notification.await_count == 2
+
+
+
 
 

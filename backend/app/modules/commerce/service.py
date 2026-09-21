@@ -2481,20 +2481,13 @@ class CommerceService:
         content: str,
         data: dict | None = None,
     ) -> None:
-        try:
-            from app.modules.auth.models import Empleado
-            stmt = select(Empleado.id_usuario).where(
-                Empleado.id_sucursal == branch_id,
-                Empleado.estado_laboral == "ACTIVO",
-            )
-            res = await self.session.execute(stmt)
-            rows = res.all() if res else []
-            if hasattr(rows, "__await__"):
-                rows = await rows
-            for row in (rows or []):
-                await self._notify(row[0], "STOCK_CRITICO", title, content, data=data)
-        except Exception as exc:
-            logger.warning("No se pudo notificar al personal de sucursal: %s", exc)
+        await self._notify_staff_and_admins(
+            branch_id=branch_id,
+            kind="STOCK_CRITICO",
+            title=title,
+            content=content,
+            data=data,
+        )
 
     async def _notify_staff_and_admins(
         self,
@@ -2509,35 +2502,76 @@ class CommerceService:
 
             user_ids_to_notify: set[int] = set()
 
+            def _parse_row_uid(row) -> int | None:
+                if row is None:
+                    return None
+                if isinstance(row, (tuple, list)) or hasattr(row, "__getitem__"):
+                    try:
+                        return int(row[0])
+                    except (IndexError, TypeError, ValueError):
+                        pass
+                try:
+                    return int(row)
+                except (TypeError, ValueError):
+                    return None
+
             # 1. Colaboradores activos de la sucursal asignada (Cajero, Encargado, Auxiliar)
-            if branch_id:
-                stmt_branch = select(Empleado.id_usuario).where(
-                    Empleado.id_sucursal == branch_id,
-                    Empleado.estado_laboral == "ACTIVO",
+            if branch_id is not None:
+                try:
+                    b_id = int(branch_id)
+                except (TypeError, ValueError):
+                    b_id = branch_id
+
+                stmt_branch = (
+                    select(Empleado.id_usuario)
+                    .join(Usuario, Usuario.id_usuario == Empleado.id_usuario)
+                    .where(
+                        Empleado.id_sucursal == b_id,
+                        func.trim(func.upper(func.coalesce(Empleado.estado_laboral, "ACTIVO"))) != "INACTIVO",
+                        func.trim(func.upper(func.coalesce(Usuario.estado, "ACTIVO"))) != "INACTIVO",
+                    )
                 )
                 res_branch = await self.session.execute(stmt_branch)
                 rows_branch = res_branch.all() if res_branch else []
                 if hasattr(rows_branch, "__await__"):
                     rows_branch = await rows_branch
-                for row in (rows_branch or []):
-                    user_ids_to_notify.add(row[0])
+                for r in (rows_branch or []):
+                    uid = _parse_row_uid(r)
+                    if uid is not None:
+                        user_ids_to_notify.add(uid)
 
-            # 2. Administradores y propietarios globales activos
+            # 2. Administradores y propietarios globales activos (reciben notificaciones de TODAS las sucursales)
             stmt_admin = (
                 select(UsuarioRol.id_usuario)
                 .join(Rol, Rol.id_rol == UsuarioRol.id_rol)
                 .join(Usuario, Usuario.id_usuario == UsuarioRol.id_usuario)
                 .where(
-                    Rol.nombre.in_(["ADMINISTRADOR", "PROPIETARIO"]),
-                    Usuario.estado == "ACTIVO",
+                    func.trim(func.upper(Rol.nombre)).in_([
+                        "ADMIN",
+                        "ADMINISTRADOR",
+                        "PROPIETARIO",
+                        "DUEÑO",
+                        "DUENO",
+                        "GERENTE",
+                    ]),
+                    func.trim(func.upper(func.coalesce(Usuario.estado, "ACTIVO"))) != "INACTIVO",
                 )
             )
             res_admin = await self.session.execute(stmt_admin)
             rows_admin = res_admin.all() if res_admin else []
             if hasattr(rows_admin, "__await__"):
                 rows_admin = await rows_admin
-            for row in (rows_admin or []):
-                user_ids_to_notify.add(row[0])
+            for r in (rows_admin or []):
+                uid = _parse_row_uid(r)
+                if uid is not None:
+                    user_ids_to_notify.add(uid)
+
+            logger.info(
+                "_notify_staff_and_admins: branch_id=%s, kind=%s -> destinatarios resueltos: %s",
+                branch_id,
+                kind,
+                user_ids_to_notify,
+            )
 
             for uid in user_ids_to_notify:
                 await self._notify(uid, kind, title, content, data=data)
@@ -2559,7 +2593,87 @@ class CommerceService:
             registrado=True,
         )
 
+    async def _backfill_pending_order_notifications(self, user_id: int) -> None:
+        """
+        Sincroniza pedidos recientes en estado 'PENDIENTE' (Por Preparar) que aún no
+        tienen registro en la bandeja de notificaciones para este colaborador o administrador.
+        """
+        from datetime import timedelta
+        from app.modules.auth.models import Empleado, Rol, Sucursal, UsuarioRol
+
+        user_roles_stmt = (
+            select(func.upper(Rol.nombre))
+            .join(UsuarioRol, UsuarioRol.id_rol == Rol.id_rol)
+            .where(UsuarioRol.id_usuario == user_id)
+        )
+        roles = set((await self.session.scalars(user_roles_stmt)).all())
+        is_global_admin = any(
+            r in {"ADMIN", "ADMINISTRADOR", "PROPIETARIO", "DUEÑO", "DUENO", "GERENTE"}
+            for r in roles
+        )
+
+        emp_stmt = select(Empleado.id_sucursal).where(
+            Empleado.id_usuario == user_id,
+            func.trim(func.upper(func.coalesce(Empleado.estado_laboral, "ACTIVO"))) != "INACTIVO",
+        )
+        emp_branch = (await self.session.scalars(emp_stmt)).first()
+
+        if not is_global_admin and emp_branch is None:
+            return
+
+        since = datetime.now(UTC) - timedelta(hours=48)
+        stmt_orders = (
+            select(Pedido, Venta)
+            .join(Venta, Venta.id_venta == Pedido.id_venta)
+            .where(
+                Pedido.estado == "PENDIENTE",
+                Pedido.fecha_creacion >= since,
+            )
+        )
+        if not is_global_admin and emp_branch is not None:
+            stmt_orders = stmt_orders.where(Venta.id_sucursal == emp_branch)
+
+        res = await self.session.execute(stmt_orders)
+        orders_sales = res.all() if res else []
+        added_any = False
+
+        for row in orders_sales:
+            order, sale = row[0], row[1]
+            notif_exists_stmt = select(Notificacion.id_notificacion).where(
+                Notificacion.id_usuario == user_id,
+                Notificacion.tipo == "NUEVO_PEDIDO",
+                Notificacion.contenido.like(f"%Pedido #{order.id_pedido}%"),
+            )
+            exists = (await self.session.scalars(notif_exists_stmt)).first()
+            if not exists:
+                branch = await self.repository.get(Sucursal, sale.id_sucursal)
+                branch_name = getattr(branch, "nombre", None) or f"Sucursal #{sale.id_sucursal}"
+                mode_label = "Retiro en tienda" if sale.modalidad_entrega == "RETIRO_SUCURSAL" else "Delivery"
+                now = datetime.now(UTC)
+                notif = Notificacion(
+                    id_usuario=user_id,
+                    id_campania=None,
+                    tipo="NUEVO_PEDIDO",
+                    canal="PUSH",
+                    proveedor="SISTEMA",
+                    titulo=f"Nuevo Pedido #{order.id_pedido} por preparar 🛍️",
+                    contenido=f"Pedido por Bs {sale.total:,.2f} ({mode_label} - {branch_name}). Requiere preparación.",
+                    estado="ENVIADO",
+                    fecha_creacion=order.fecha_creacion or now,
+                    fecha_envio=order.fecha_creacion or now,
+                    fecha_entrega=order.fecha_creacion or now,
+                )
+                self.session.add(notif)
+                added_any = True
+
+        if added_any:
+            await self.session.commit()
+
     async def list_notifications(self, user_id: int):
+        try:
+            await self._backfill_pending_order_notifications(user_id)
+        except Exception as exc:
+            logger.debug("No se pudo ejecutar backfill de pedidos pendientes para notificaciones: %s", exc)
         return await self.repository.notifications(user_id)
 
     async def mark_notification_as_read(
