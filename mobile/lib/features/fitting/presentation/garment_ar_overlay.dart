@@ -24,23 +24,38 @@ class GarmentArOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
 
-    // 1. Convertir coordenadas normalizadas (0.0 a 1.0) a píxeles de pantalla
-    final neckPixelX = pose.neck.dx * screenSize.width;
-    final neckPixelY = pose.neck.dy * screenSize.height;
+    final centerX = screenSize.width / 2.0;
+    final centerY = screenSize.height * 0.44;
+    final defaultShoulderY = centerY - 45.0;
 
-    // 2. Ancho proporcional de la polera ajustado por escala de talla
-    // Un ancho de hombros estándar ocupa ~60-70% del ancho del torso
-    final baseWidth = (pose.shoulderRatio * screenSize.width * 1.38)
-        .clamp(screenSize.width * 0.52, screenSize.width * 0.88);
+    // 1. Coordenadas del cuello: usar cuello detectado si está centrado en el encuadre (0.25 - 0.75),
+    // o anclar al centro natural de la silueta del vestidor (centerX, shoulderY)
+    final bool isNeckCentered = pose.neck.dx >= 0.25 &&
+        pose.neck.dx <= 0.75 &&
+        pose.neck.dy >= 0.15 &&
+        pose.neck.dy <= 0.65;
+
+    final neckPixelX = isNeckCentered
+        ? pose.neck.dx * screenSize.width
+        : centerX;
+    final neckPixelY = isNeckCentered
+        ? pose.neck.dy * screenSize.height
+        : (defaultShoulderY + 8);
+
+    // 2. Ancho proporcional de la prenda regular alineado con la silueta (~38% del ancho de pantalla)
+    final baseWidth = screenSize.width * 0.38;
     final garmentWidth = baseWidth * pose.scaleMultiplier;
-    final garmentHeight = garmentWidth * 1.18; // Proporción natural de polera
+    final garmentHeight = garmentWidth * 1.25; // Proporción natural de polera
 
-    // 3. Punto de anclaje: el centro del cuello de la polera está a ~12% de la parte superior
+    // 3. Punto de anclaje: el centro del cuello de la polera está a ~10% de la parte superior
     final collarAnchorX = garmentWidth / 2.0;
-    final collarAnchorY = garmentHeight * 0.12;
+    final collarAnchorY = garmentHeight * 0.10;
 
     final leftPosition = neckPixelX - collarAnchorX;
     final topPosition = neckPixelY - collarAnchorY;
+
+    // Ángulo seguro: limitar inclinaciones corporales a ±25° (evitar rotaciones de 90° por sensor)
+    final safeAngle = (pose.shoulderAngle.abs() < 0.45) ? pose.shoulderAngle : 0.0;
 
     return Positioned(
       left: leftPosition,
@@ -48,7 +63,7 @@ class GarmentArOverlay extends StatelessWidget {
       width: garmentWidth,
       height: garmentHeight,
       child: Transform.rotate(
-        angle: pose.shoulderAngle,
+        angle: safeAngle,
         origin: Offset(collarAnchorX, collarAnchorY),
         child: AnimatedOpacity(
           opacity: opacity,

@@ -57,8 +57,9 @@ import Vision
   }
 
   private func analyzePose(imagePath: String, gender: String, result: @escaping FlutterResult) {
-    let fileURL = URL(fileURLWithPath: imagePath)
-    guard FileManager.default.fileExists(atPath: imagePath) else {
+    guard FileManager.default.fileExists(atPath: imagePath),
+          let uiImage = UIImage(contentsOfFile: imagePath),
+          let cgImage = uiImage.cgImage else {
       result([
         "detected": false,
         "reason": "FILE_NOT_FOUND",
@@ -69,7 +70,8 @@ import Vision
 
     if #available(iOS 14.0, *) {
       let request = VNDetectHumanBodyPoseRequest()
-      let handler = VNImageRequestHandler(url: fileURL, options: [:])
+      let orientation = CGImagePropertyOrientation(uiImage.imageOrientation)
+      let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
       
       do {
         try handler.perform([request])
@@ -266,3 +268,20 @@ private extension Comparable {
     return min(max(self, limits.lowerBound), limits.upperBound)
   }
 }
+
+private extension CGImagePropertyOrientation {
+  init(_ uiOrientation: UIImage.Orientation) {
+    switch uiOrientation {
+    case .up: self = .up
+    case .upMirrored: self = .upMirrored
+    case .down: self = .down
+    case .downMirrored: self = .downMirrored
+    case .left: self = .left
+    case .leftMirrored: self = .leftMirrored
+    case .right: self = .right
+    case .rightMirrored: self = .rightMirrored
+    @unknown default: self = .right
+    }
+  }
+}
+
