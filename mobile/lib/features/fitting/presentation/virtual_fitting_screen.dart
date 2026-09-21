@@ -250,9 +250,9 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           setState(() {
             _userShouldersCm = estimatedCm;
             if (distMeters != null && distMeters > 0) {
-              _distanceState = UserDistanceState(
-                estimatedDistanceMeters: distMeters,
-                isDistanceOptimal: distMeters >= 1.4 && distMeters <= 2.2,
+              _distanceState = UserDistanceState.fromDistanceAndRatio(
+                meters: distMeters,
+                ratio: ratio,
               );
             } else {
               _distanceState = UserDistanceState.fromShoulderRatio(ratio);

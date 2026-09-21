@@ -134,6 +134,26 @@ class UserDistanceState {
     );
   }
 
+  /// Crea el estado utilizando la distancia métrica real calculada por la visión artificial
+  factory UserDistanceState.fromDistanceAndRatio({
+    required double meters,
+    required double ratio,
+  }) {
+    final isOptimal = meters >= 1.40 && meters <= 2.15;
+    DistanceGuidance guidance = DistanceGuidance.perfect;
+    if (meters < 1.40) {
+      guidance = DistanceGuidance.stepBack;
+    } else if (meters > 2.15) {
+      guidance = DistanceGuidance.stepCloser;
+    }
+    return UserDistanceState(
+      estimatedDistanceMeters: meters,
+      shoulderRatio: ratio,
+      isDistanceOptimal: isOptimal,
+      guidance: guidance,
+    );
+  }
+
   static const UserDistanceState optimalDefault = UserDistanceState(
     estimatedDistanceMeters: 1.70,
     shoulderRatio: 0.45,
