@@ -441,3 +441,104 @@
 │  Relacional) ││ own, Bloqueo)││  Prendas AR) ││  nes Push)   │
 └──────────────┘└──────────────┘└──────────────┘└──────────────┘
 ```
+
+---
+
+## 👗 ANEXO TÉCNICO ESPECIAL: ¿CÓMO FUNCIONA LA VESTIMENTA AUMENTADA (PROBADOR VIRTUAL AR) Y QUÉ SE UTILIZÓ?
+
+El módulo de **Vestimenta Aumentada (Probador Virtual AR)** corresponde al **CU-18** del sistema y representa una de las mayores innovaciones técnicas de Capricho Store. Permite a los clientes usar la cámara frontal de su teléfono móvil como si fuera un **espejo interactivo**, detectando su cuerpo, estimando sus medidas reales, recomendando su talla exacta y superponiendo la ropa en tiempo real con calce realista.
+
+---
+
+### 1. 🛠️ Tecnologías y Frameworks Utilizados
+
+El sistema está construido mediante una arquitectura híbrida de alto rendimiento que combina visión artificial nativa con renderizado fluido en Flutter:
+
+| Componente / Tecnología | Rol en el Sistema | Función Técnica |
+| :--- | :--- | :--- |
+| **Flutter (Dart 3.x)** | Núcleo de la Aplicación | Renderizado a 60 FPS, control de cámara, sensor de orientación del dispositivo, `CustomPainter` y widgets de superposición AR reactiva. |
+| **Apple Vision Framework (iOS - Swift)** | Visión Artificial en iOS | Utiliza `VNDetectHumanBodyPoseRequest` para ejecutar detección de puntos anatómicos clave (19 articulaciones corporales) directamente sobre el **Neural Engine** del procesador Apple A-Series / Bionic con aceleración por hardware. |
+| **Google ML Kit Pose Detection (Android - Kotlin)** | Visión Artificial en Android | Modelo de Deep Learning optimizado para móviles que reconoce la postura corporal (hombros, cuello, torso, cadera) en tiempo real a baja latencia. |
+| **Platform Channels (`MethodChannel`)** | Puente Nativo-Flutter | Canal `com.capricho.store/body_pose` que transfiere las coordenadas normalizadas y métricas estimadas desde Swift/Kotlin hacia Dart sin bloquear el hilo de la UI. |
+| **Sensors Plus (`accelerometerEventStream`)** | Nivel de Inclinación | Monitorea el acelerómetro y giroscopio del teléfono en los ejes X, Y, Z para calcular los ángulos de cabeceo (*pitch*) y balanceo (*roll*). |
+| **Cloudinary Media CDN** | Pipeline de Procesamiento de Imagen | Almacenamiento de catálogo con transformaciones automáticas al vuelo (`e_make_transparent:22,f_png`) que eliminan el fondo blanco de estudio de las fotos de catálogo para convertirlas en PNGs transparentes. |
+
+---
+
+### 2. 🧮 Algoritmos y Fórmulas Matemáticas Implementadas
+
+Para lograr que una cámara 2D estime medidas corporales del mundo real en 3D y calce la ropa sin sensores LiDAR dedicados, se implementaron 6 principios matemáticos:
+
+#### A. Calibración de Orientación e Inclinación del Teléfono
+Para evitar distorsiones de perspectiva en la cámara, el usuario debe colocar el teléfono erguido como un espejo vertical. Se calculan los ángulos de cabeceo (*pitch*) y balanceo (*roll*) mediante trigonometría vectorial:
+
+$$\text{pitch} = \arctan\left(\frac{a_y}{\sqrt{a_x^2 + a_z^2}}\right) \times \frac{180}{\pi}$$
+
+$$\text{roll} = \arctan\left(\frac{-a_x}{a_z}\right) \times \frac{180}{\pi}$$
+
+- **Rango óptimo:** El sistema valida que el teléfono esté en posición vertical ($80^\circ \le \text{pitch} \le 95^\circ$) y nivelado ($|\text{roll}| \le 6^\circ$). Si se inclina demasiado hacia adelante o hacia atrás, el estarcido cambia de color verde a ámbar y alerta al usuario.
+
+#### B. Estimación de Distancia Métrica (Modelo Pinhole Camera)
+La distancia del usuario a la cámara se calcula en tiempo real relacionando el ancho angular de los hombros en pantalla con la distancia focal óptica equivalente:
+
+$$\text{Distancia (metros)} = \frac{K}{\text{shoulderRatio}}$$
+
+Donde:
+- $\text{shoulderRatio} = \frac{\text{distancia en píxeles entre hombro izquierdo y derecho}}{\text{ancho total de pantalla en píxeles}}$
+- $K = 0.48$ (constante óptica empírica calibrada).
+- **Rango óptimo para prueba:** Entre $1.40\text{ m}$ y $2.00\text{ m}$. Si el usuario está muy cerca o muy lejos, el sistema le indica por voz y texto que retroceda o se acerque al estarcido guía.
+
+#### C. Cálculo del Ancho Biacromial (Hombro a Hombro en cm)
+El ancho real de los hombros del cliente (ancho biacromial) se determina mediante la escala FOV antropométrica calibrada según el género:
+
+$$\text{Ancho Hombros (cm)} = \text{shoulderRatio} \times \text{FOV\_Scale} \times \text{Factor de Distancia}$$
+
+- **Calibración de Escalas de Género:**
+  - **Hombres:** $\text{FOV\_Scale} = 168.0$ (Calibrado para base biacromial de $47.0\text{ cm} \rightarrow \text{Talla L}$).
+  - **Mujeres:** $\text{FOV\_Scale} = 148.0$ (Calibrado para base biacromial de $36.0\text{ cm} \rightarrow \text{Talla S}$).
+
+#### D. Motor de Recomendación de Tallas y Porcentaje de Calce
+Una vez calculado el ancho biacromial en centímetros, el sistema contrasta la medida contra la tabla estándar de patronaje textil de Capricho Store:
+
+| Talla | Hombres (Ancho Hombros) | Mujeres (Ancho Hombros) |
+| :---: | :---: | :---: |
+| **XS** | $< 40.0\text{ cm}$ | $< 35.5\text{ cm}$ |
+| **S** | $40.0\text{ cm} - 42.5\text{ cm}$ | $35.5\text{ cm} - 37.5\text{ cm}$ |
+| **M** | $42.5\text{ cm} - 45.5\text{ cm}$ | $37.5\text{ cm} - 40.5\text{ cm}$ |
+| **L** | $45.5\text{ cm} - 49.0\text{ cm}$ | $40.5\text{ cm} - 44.0\text{ cm}$ |
+| **XL** | $> 49.0\text{ cm}$ | $> 44.0\text{ cm}$ |
+
+El porcentaje de calce (ej. `96%`) se calcula evaluando la cercanía de la medida del usuario al punto óptimo de la talla mediante una función normalizada de desviación cuadrática.
+
+#### E. Suavizado de Movimiento Anatómico (`PoseSmoother`)
+Para evitar temblores o saltos bruscos en pantalla por pequeñas variaciones de luz o ruido del sensor, las coordenadas del cuello, hombros y ángulo pasan por un filtro de media móvil exponencial (**EMA - Exponential Moving Average**):
+
+$$P_t = \alpha \cdot P_{\text{nuevo}} + (1 - \alpha) \cdot P_{t-1}$$
+
+Con factor de amortiguamiento $\alpha = 0.35$, logrando una respuesta suave y orgánica al moverse.
+
+#### F. Renderizado y Superposición de la Prenda Aumentada
+1. **Eliminación del fondo blanco:** Las fotos de catálogo de ropa suelen tener fondo blanco `#FFFFFF`. Mediante la directiva `e_make_transparent:22,f_png` inyectada en Cloudinary, el servidor detecta el tono de fondo de estudio y lo convierte en transparencia alfa pura sin cortar la prenda.
+2. **Alineación anatómica:**
+   - El punto de anclaje superior de la prenda (el cuello) se fija exactamente en la línea horizontal de los hombros (`defaultShoulderY`).
+   - El ancho total de la imagen (que incluye mangas) se calibra a $1.36 \times \text{ancho de hombros}$, haciendo que las costuras del polo caigan exactamente sobre `HOMBRO IZQ` y `HOMBRO DER`, y el cuerpo cubra el marco `TORSO (PECHO Y CINTURA)`.
+   - La prenda se rota dinámicamente con el ángulo de los hombros: $\theta = \arctan\left(\frac{y_{\text{der}} - y_{\text{izq}}}{x_{\text{der}} - x_{\text{izq}}}\right)$, limitado a $\pm 25^\circ$ para estabilidad visual.
+
+---
+
+### 3. 📱 Flujo de Experiencia de Usuario en la App
+
+```mermaid
+flowchart LR
+    A[1. Guía de Espejo] --> B[2. Escaneo 3s]
+    B --> C[3. Diagnóstico Antropométrico]
+    C --> D[4. Vestimenta Aumentada AR]
+    D --> E[5. Compra Directa]
+```
+
+1. **Guía de Espejo:** El usuario activa la cámara frontal. El estarcido visual le guía para colocar el teléfono vertical y alinearse dentro de la silueta verde.
+2. **Escaneo de 3 Segundos:** Una vez alineado correctamente, una cuenta regresiva con retroalimentación háptica (vibración) captura el fotograma y ejecuta el modelo de visión artificial.
+3. **Diagnóstico Antropométrico:** Muestra el ancho estimado de hombros en cm, la talla recomendada (ej. `Talla L`) y el porcentaje de precisión de calce.
+4. **Modo Espejo con Vestimenta Aumentada:** El cliente se mira en la pantalla con la prenda puesta, pudiendo alternar colores, probar tallas contiguas (ej. ver cómo le quedaría una M más ajustada o una XL más holgada).
+5. **Compra Directa:** Un botón fijo en la parte inferior permite pulsar *"Agregar Talla Recomendada al Carrito"* y proceder de inmediato al checkout.
+
