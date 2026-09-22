@@ -793,3 +793,87 @@ async def test_transfer_receipt_clones_cost_layers_without_fake_receipt() -> Non
     assert all(item.id_sucursal == 2 and item.cantidad_disponible == 0 for item in destination_lots)
     assert entry.tipo_movimiento == "TRANSFERENCIA_ENTRADA"
     assert entry.referencia_id == transfer.id_transferencia
+
+
+@pytest.mark.asyncio
+async def test_list_movements_unpacks_row_correctly():
+    repository = Mock(spec=InventoryRepository)
+    mov = MovimientoInventario(
+        id_movimiento=101,
+        id_inventario=5,
+        tipo_movimiento="VENTA",
+        cantidad=2,
+        referencia_tipo="VENTA",
+        referencia_id=45,
+        motivo="Venta presencial",
+        fecha_hora=datetime.now(UTC),
+    )
+    row = (
+        mov,
+        "Sucursal Central",
+        "Polera Casual",
+        "POL-NEG-M",
+        "M",
+        "Negro",
+        "#000000",
+    )
+    repository.list_movements = AsyncMock(return_value=[row])
+    repository.movement_lots = AsyncMock(
+        return_value=[
+            MovimientoLote(
+                id_movimiento=101, id_lote=1, cantidad=2, costo_unitario=Decimal("50.00")
+            )
+        ]
+    )
+    service = InventoryService(AsyncMock(), repository)
+    result = await service.list_movements()
+    assert len(result) == 1
+    assert result[0].id_movimiento == 101
+    assert result[0].sucursal == "Sucursal Central"
+    assert result[0].producto == "Polera Casual"
+    assert result[0].sku == "POL-NEG-M"
+    assert result[0].talla == "M"
+    assert result[0].color == "Negro"
+    assert result[0].codigo_hex == "#000000"
+    assert result[0].costo_fifo_consumido == Decimal("100.00")
+    assert len(result[0].lotes) == 1
+
+
+@pytest.mark.asyncio
+async def test_movement_response_fallback_inventory():
+    repository = Mock(spec=InventoryRepository)
+    mov = MovimientoInventario(
+        id_movimiento=102,
+        id_inventario=5,
+        tipo_movimiento="AJUSTE_POSITIVO",
+        cantidad=1,
+        fecha_hora=datetime.now(UTC),
+    )
+    repository.get_inventory_record = AsyncMock(
+        return_value=(
+            Mock(
+                stock_fisico=10,
+                stock_reservado=0,
+                stock_minimo=2,
+                id_inventario=5,
+                id_sucursal=1,
+                id_variante=1,
+            ),
+            "Sucursal Norte",
+            "SKU-123",
+            "Vestido",
+            "S",
+            "Rojo",
+            "Vestidos",
+            Decimal("40"),
+            "#ff0000",
+        )
+    )
+    repository.movement_lots = AsyncMock(return_value=[])
+    service = InventoryService(AsyncMock(), repository)
+    result = await service._movement_response(mov)
+    assert result.id_movimiento == 102
+    assert result.sucursal == "Sucursal Norte"
+    assert result.producto == "Vestido"
+    assert result.codigo_hex == "#ff0000"
+
