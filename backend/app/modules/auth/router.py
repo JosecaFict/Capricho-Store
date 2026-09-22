@@ -30,7 +30,7 @@ from app.modules.auth.service import AuthService
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
-@router.post(
+@router.post(  # [CU-01] Registro de cliente
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
@@ -43,7 +43,7 @@ async def register_customer(
     return await service.register_customer(payload, build_request_audit_context(request))
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse)  # [CU-01] Inicio de sesión (Login)
 async def login(
     payload: LoginRequest,
     request: Request,
@@ -52,7 +52,7 @@ async def login(
     return await service.login(payload, build_request_audit_context(request))
 
 
-@router.post("/password-recovery/request", response_model=MessageResponse)
+@router.post("/password-recovery/request", response_model=MessageResponse)  # [CU-08] Solicitar código OTP
 async def request_password_recovery(
     payload: PasswordRecoveryRequest,
     service: Annotated[PasswordRecoveryService, Depends(get_password_recovery_service)],
@@ -60,7 +60,7 @@ async def request_password_recovery(
     return await service.request_code(payload)
 
 
-@router.post(
+@router.post(  # [CU-08] Verificar código OTP
     "/password-recovery/verify",
     response_model=PasswordRecoveryVerifyResponse,
 )
@@ -71,7 +71,7 @@ async def verify_password_recovery_code(
     return await service.verify_code(payload)
 
 
-@router.post("/password-recovery/reset", response_model=MessageResponse)
+@router.post("/password-recovery/reset", response_model=MessageResponse)  # [CU-08] Restablecer contraseña con token OTP
 async def reset_password(
     payload: PasswordResetRequest,
     request: Request,
@@ -80,7 +80,7 @@ async def reset_password(
     return await service.reset_password(payload, build_request_audit_context(request))
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse)  # [CU-01] Consultar perfil y sesión activa
 async def me(
     principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
 ) -> UserResponse:
@@ -102,7 +102,7 @@ async def me(
     )
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch("/me", response_model=UserResponse)  # [CU-01] Actualizar datos del perfil
 async def update_profile(
     payload: UpdateProfileRequest,
     principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
@@ -132,7 +132,7 @@ async def update_profile(
     )
 
 
-@router.post("/me/avatar", response_model=UserResponse)
+@router.post("/me/avatar", response_model=UserResponse)  # [CU-01] Subir foto de perfil (Avatar) a Cloudinary
 async def upload_avatar(
     principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
     service: Annotated[AuthService, Depends(get_auth_service)],
@@ -163,7 +163,7 @@ async def upload_avatar(
     )
 
 
-@router.delete("/me/avatar", response_model=UserResponse)
+@router.delete("/me/avatar", response_model=UserResponse)  # [CU-01] Eliminar foto de perfil (Avatar)
 async def delete_avatar(
     principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],
     service: Annotated[AuthService, Depends(get_auth_service)],
@@ -192,7 +192,7 @@ async def delete_avatar(
     )
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post("/change-password", response_model=MessageResponse)  # [CU-01] Cambiar contraseña
 async def change_password(
     payload: ChangePasswordRequest,
     principal: Annotated[CurrentPrincipal, Depends(get_current_principal)],

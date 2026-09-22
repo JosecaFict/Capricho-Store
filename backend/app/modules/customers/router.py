@@ -19,7 +19,7 @@ from app.modules.customers.service import CustomerAdminService
 router = APIRouter(tags=["customer administration"])
 
 
-@router.get("/customers", response_model=list[CustomerAdminSummary])
+@router.get("/customers", response_model=list[CustomerAdminSummary])  # [CU-01 / CU-11] Listar clientes en panel/POS
 async def list_customers(
     _: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
     service: Annotated[CustomerAdminService, Depends(get_customer_admin_service)],
@@ -31,7 +31,7 @@ async def list_customers(
     return await service.list_customers(q=q, estado=estado, limit=limit, offset=offset)
 
 
-@router.get("/customers/{customer_id}", response_model=CustomerAdminDetail)
+@router.get("/customers/{customer_id}", response_model=CustomerAdminDetail)  # [CU-01] Consultar detalle de cliente
 async def get_customer(
     customer_id: int,
     _: Annotated[CurrentPrincipal, Depends(require_permission("ventas.ver"))],
@@ -40,7 +40,7 @@ async def get_customer(
     return await service.get_customer(customer_id)
 
 
-@router.patch("/customers/{customer_id}", response_model=CustomerAdminDetail)
+@router.patch("/customers/{customer_id}", response_model=CustomerAdminDetail)  # [CU-01] Actualizar cliente desde administración
 async def update_customer(
     customer_id: int,
     payload: CustomerAdminUpdateRequest,
@@ -61,7 +61,7 @@ async def update_customer(
     )
 
 
-@router.post(
+@router.post(  # [CU-11] Alta rápida de cliente desde caja POS
     "/customers/quick",
     response_model=CustomerAdminSummary,
     status_code=status.HTTP_201_CREATED,

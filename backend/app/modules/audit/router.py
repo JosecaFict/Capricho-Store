@@ -11,7 +11,7 @@ from app.modules.auth.dependencies import CurrentPrincipal, require_permission
 router = APIRouter(prefix="/audit-logs", tags=["security audit"])
 
 
-@router.get("", response_model=AuditLogPage)
+@router.get("", response_model=AuditLogPage)  # [CU-16] Listar registros de auditoría
 async def list_audit_logs(
     _: Annotated[CurrentPrincipal, Depends(require_permission("permisos.asignar"))],
     service: Annotated[AuditService, Depends(get_audit_service)],
@@ -38,7 +38,7 @@ async def list_audit_logs(
     )
 
 
-@router.get("/{audit_id}", response_model=AuditLogDetail)
+@router.get("/{audit_id}", response_model=AuditLogDetail)  # [CU-16] Detalle de registro de auditoría
 async def get_audit_log(
     audit_id: Annotated[int, Path(gt=0)],
     _: Annotated[CurrentPrincipal, Depends(require_permission("permisos.asignar"))],

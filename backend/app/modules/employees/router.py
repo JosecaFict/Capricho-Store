@@ -33,7 +33,7 @@ def audit_context_for(request: Request, principal: CurrentPrincipal):
     )
 
 
-@router.get("/employees", response_model=list[EmployeeResponse])
+@router.get("/employees", response_model=list[EmployeeResponse])  # [CU-02] Listar personal de sucursales
 async def list_employees(
     _: Annotated[CurrentPrincipal, Depends(require_permission("empleados.ver"))],
     service: Annotated[EmployeeService, Depends(get_employee_service)],
@@ -41,7 +41,7 @@ async def list_employees(
     return await service.list_employees()
 
 
-@router.get("/employees/{employee_id}", response_model=EmployeeResponse)
+@router.get("/employees/{employee_id}", response_model=EmployeeResponse)  # [CU-02] Consultar datos de un empleado
 async def get_employee(
     employee_id: int,
     _: Annotated[CurrentPrincipal, Depends(require_permission("empleados.ver"))],
@@ -50,7 +50,7 @@ async def get_employee(
     return await service.get_employee(employee_id)
 
 
-@router.post(
+@router.post(  # [CU-02] Crear nuevo empleado asignado a sucursal
     "/employees",
     response_model=EmployeeResponse,
     status_code=status.HTTP_201_CREATED,
@@ -71,7 +71,7 @@ async def create_employee(
     )
 
 
-@router.patch("/employees/{employee_id}", response_model=EmployeeResponse)
+@router.patch("/employees/{employee_id}", response_model=EmployeeResponse)  # [CU-02] Actualizar datos o estado de empleado
 async def update_employee(
     employee_id: int,
     payload: EmployeeUpdateRequest,
@@ -89,7 +89,7 @@ async def update_employee(
     )
 
 
-@router.get("/roles", response_model=list[RoleResponse])
+@router.get("/roles", response_model=list[RoleResponse])  # [CU-02] Listar catálogo de roles
 async def list_roles(
     _: Annotated[CurrentPrincipal, Depends(require_permission("permisos.asignar"))],
     service: Annotated[EmployeeService, Depends(get_employee_service)],
@@ -97,7 +97,7 @@ async def list_roles(
     return await service.list_roles()
 
 
-@router.get("/permissions", response_model=list[PermissionResponse])
+@router.get("/permissions", response_model=list[PermissionResponse])  # [CU-02] Listar catálogo de permisos
 async def list_permissions(
     _: Annotated[CurrentPrincipal, Depends(require_permission("permisos.asignar"))],
     service: Annotated[EmployeeService, Depends(get_employee_service)],
@@ -105,7 +105,7 @@ async def list_permissions(
     return await service.list_permissions()
 
 
-@router.get("/roles/{role_id}/permissions", response_model=RolePermissionSummary)
+@router.get("/roles/{role_id}/permissions", response_model=RolePermissionSummary)  # [CU-02] Consultar permisos de un rol
 async def get_role_permissions(
     role_id: int,
     principal: Annotated[CurrentPrincipal, Depends(require_permission("permisos.asignar"))],
@@ -114,7 +114,7 @@ async def get_role_permissions(
     return await service.get_role_permissions(role_id, actor=principal)
 
 
-@router.put(
+@router.put(  # [CU-02] Configurar permisos a un rol
     "/roles/{role_id}/permissions/{permission_id}",
     response_model=RolePermissionSummary,
 )
@@ -135,7 +135,7 @@ async def set_role_permission(
     )
 
 
-@router.get(
+@router.get(  # [CU-02] Consultar permisos individuales de un empleado
     "/employees/{employee_id}/permissions",
     response_model=EmployeePermissionSummary,
 )
@@ -147,7 +147,7 @@ async def get_employee_permissions(
     return await service.get_employee_permissions(employee_id)
 
 
-@router.put(
+@router.put(  # [CU-02] Sobreescribir permiso individual a empleado (RBAC Dinámico)
     "/employees/{employee_id}/permissions/{permission_id}",
     response_model=EmployeePermissionSummary,
 )
@@ -171,7 +171,7 @@ async def set_employee_permission(
     )
 
 
-@router.delete(
+@router.delete(  # [CU-02] Eliminar sobreescritura de permiso a empleado
     "/employees/{employee_id}/permissions/{permission_id}",
     response_model=EmployeePermissionSummary,
 )
@@ -192,7 +192,7 @@ async def clear_employee_permission(
     )
 
 
-@router.put("/employees/{employee_id}/role", response_model=EmployeeResponse)
+@router.put("/employees/{employee_id}/role", response_model=EmployeeResponse)  # [CU-02] Cambiar rol a un empleado
 async def change_employee_role(
     employee_id: int,
     payload: RoleAssignmentRequest,
