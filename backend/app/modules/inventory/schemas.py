@@ -163,7 +163,13 @@ class LotResponse(ORMResponse):
     id_lote: int
     id_detalle_recepcion: int
     id_sucursal: int
+    sucursal: str | None = None
     id_variante: int
+    producto: str | None = None
+    sku: str | None = None
+    talla: str | None = None
+    color: str | None = None
+    codigo_hex: str | None = None
     numero_lote: str | None
     cantidad_inicial: int
     cantidad_disponible: int

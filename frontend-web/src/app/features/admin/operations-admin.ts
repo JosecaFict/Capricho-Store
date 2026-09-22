@@ -2042,7 +2042,7 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
 
 @Component({
   selector: 'app-trace-admin',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, BolivianosPipe],
   template: `<div class="admin-page">
     <header class="admin-page-heading">
       <div>
@@ -2056,98 +2056,302 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
         </button>
       }
     </header>
+
     @if (message()) {
       <div class="notice" [class.notice--error]="error()">{{ message() }}</div>
     }
-    @if (show()) {
-      <section class="admin-editor">
-        <form [formGroup]="transfer" (ngSubmit)="createTransfer()" class="admin-form-grid">
-          <label class="field"
-            ><span>Sucursal origen</span
-            ><select formControlName="id_sucursal_origen">
-              <option value="">Seleccionar sucursal</option>
+
+    <!-- SECCIÓN ESPECIAL PARA LOTES (OPCIÓN A) -->
+    @if (mode() === 'lots') {
+      <!-- Métricas Rápidas KPI de Lotes -->
+      <div class="inventory-kpi-bar">
+        <div class="inventory-kpi-card">
+          <small>Total Lotes</small>
+          <strong>{{ lotCounts().total }}</strong>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Con Stock Activo</small>
+          <strong class="text-emerald">{{ lotCounts().withStock }}</strong>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Agotados / Consumidos</small>
+          <strong [class.text-red]="lotCounts().outOfStock > 0">{{ lotCounts().outOfStock }}</strong>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Valor en Inventario</small>
+          <strong class="text-blue">{{ lotTotalValue() | bolivianos }}</strong>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros Reactiva de Lotes -->
+      <div class="inventory-toolbar">
+        <div class="inventory-toolbar__controls">
+          <label class="field field--branch">
+            <span>Sucursal</span>
+            <select [value]="branchFilter() ?? ''" (change)="onBranchChange($event)">
+              <option value="">Todas las sucursales</option>
               @for (branch of branches(); track branch['id_sucursal']) {
                 <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
               }
-            </select></label
-          ><label class="field"
-            ><span>Sucursal destino</span
-            ><select formControlName="id_sucursal_destino">
-              <option value="">Seleccionar sucursal</option>
-              @for (branch of branches(); track branch['id_sucursal']) {
-                <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
-              }
-            </select></label
-          >
-          <div formArrayName="detalles" class="admin-repeater field--wide">
-            @for (row of transferDetails.controls; track $index) {
-              <div [formGroupName]="$index">
-                <label class="field"
-                  ><span>Producto y variante</span
-                  ><select formControlName="id_variante">
-                    <option value="">Seleccionar variante</option>
-                    @for (variant of variants(); track variant['id_variante']) {
-                      <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
-                    }
-                  </select></label
-                ><label class="field"
-                  ><span>Cantidad</span
-                  ><input type="number" min="1" formControlName="cantidad" /></label
-                ><button
+            </select>
+          </label>
+
+          <div class="field field--search">
+            <span>Búsqueda rápida</span>
+            <div class="search-input-wrap">
+              <input
+                type="text"
+                [value]="lotSearchTerm()"
+                (input)="onSearchInput($event)"
+                placeholder="Buscar por lote #, prenda, SKU, talla o color..."
+              />
+              @if (lotSearchTerm()) {
+                <button
                   type="button"
-                  class="button button--quiet"
-                  [disabled]="transferDetails.length === 1"
-                  (click)="transferDetails.removeAt($index)"
+                  class="search-clear-btn"
+                  (click)="clearSearch()"
+                  title="Borrar búsqueda"
                 >
-                  Quitar
+                  ✕
                 </button>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Pastillas de Selección de Filtro -->
+        <div class="inventory-chips-row">
+          <div class="inventory-chips-group">
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeLotFilter() === 'ALL'"
+              (click)="setLotFilter('ALL')"
+            >
+              <span>Todos los lotes</span>
+              <span class="chip-badge">{{ lotCounts().total }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeLotFilter() === 'WITH_STOCK'"
+              (click)="setLotFilter('WITH_STOCK')"
+            >
+              <span>📦 Con stock disponible</span>
+              <span class="chip-badge">{{ lotCounts().withStock }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip inventory-chip--danger"
+              [class.is-active]="activeLotFilter() === 'OUT_OF_STOCK'"
+              (click)="setLotFilter('OUT_OF_STOCK')"
+            >
+              <span>🚫 Agotados</span>
+              <span class="chip-badge">{{ lotCounts().outOfStock }}</span>
+            </button>
+          </div>
+
+          @if (hasActiveLotFilters()) {
+            <button type="button" class="inventory-reset-btn" (click)="resetLotFilters()">
+              ✕ Restablecer filtros
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Tabla Tabular de Lotes (Opción A) -->
+      <div class="admin-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Lote #</th>
+              <th>Fecha Ingreso</th>
+              <th>Producto</th>
+              <th class="cell-center">Talla</th>
+              <th>Color</th>
+              <th>Sucursal</th>
+              <th>Disponibilidad FIFO</th>
+              <th class="cell-right">Costo U.</th>
+              <th class="cell-right">Valor Restante</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (lot of filteredLots(); track lot['id_lote']) {
+              <tr>
+                <td>
+                  <strong>#{{ lot['id_lote'] }}</strong>
+                  @if (lot['numero_lote']) {
+                    <small class="sku-tag">Lote: {{ lot['numero_lote'] }}</small>
+                  }
+                </td>
+                <td>
+                  <span class="num-cell">{{ lot['fecha_ingreso'] | date: 'short' }}</span>
+                </td>
+                <td class="product-cell">
+                  <strong>{{ lot['producto'] || ('Variante #' + lot['id_variante']) }}</strong>
+                  @if (lot['sku']) {
+                    <small class="sku-tag">SKU: {{ lot['sku'] }}</small>
+                  }
+                </td>
+                <td class="cell-center">
+                  <span class="size-pill">{{ lot['talla'] || '-' }}</span>
+                </td>
+                <td>
+                  <div class="color-cell">
+                    <span
+                      class="color-swatch"
+                      [style.backgroundColor]="getColorHex(lot)"
+                      [class.color-swatch--light]="isLightColor(getColorHex(lot))"
+                    ></span>
+                    <span class="color-name">{{ lot['color'] || '-' }}</span>
+                  </div>
+                </td>
+                <td class="branch-cell">{{ lot['sucursal'] || branchName(lot['id_sucursal']) }}</td>
+                <td>
+                  <div class="lot-progress-wrap">
+                    <div class="lot-progress-bar">
+                      <div
+                        class="lot-progress-fill"
+                        [class.lot-progress-fill--warning]="lotState(lot) === 'EN_CONSUMO'"
+                        [class.lot-progress-fill--empty]="lotState(lot) === 'AGOTADO'"
+                        [style.width.%]="lotPercentage(lot)"
+                      ></div>
+                    </div>
+                    <div class="lot-progress-text">
+                      <strong>{{ lot['cantidad_disponible'] }} / {{ lot['cantidad_inicial'] }} u.</strong>
+                      <span>{{ lotPercentage(lot) }}%</span>
+                    </div>
+                  </div>
+                </td>
+                <td class="cell-right num-cell">
+                  {{ lot['costo_unitario'] | bolivianos }}
+                </td>
+                <td class="cell-right num-cell">
+                  <strong class="text-blue">{{ lotRemainingValue(lot) | bolivianos }}</strong>
+                </td>
+                <td>
+                  <span
+                    class="status-chip"
+                    [class]="'status-chip--' + (lotState(lot) | lowercase)"
+                  >
+                    {{ lotState(lot) === 'EN_CONSUMO' ? 'EN CONSUMO' : lotState(lot) }}
+                  </span>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="10" class="empty-state-cell">
+                  <p>No se encontraron lotes con los filtros aplicados.</p>
+                  @if (hasActiveLotFilters()) {
+                    <button
+                      type="button"
+                      class="button button--secondary button--compact"
+                      (click)="resetLotFilters()"
+                    >
+                      Restablecer filtros
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <!-- VISTA PARA MOVIMIENTOS Y TRANSFERENCIAS -->
+      @if (show()) {
+        <section class="admin-editor">
+          <form [formGroup]="transfer" (ngSubmit)="createTransfer()" class="admin-form-grid">
+            <label class="field"
+              ><span>Sucursal origen</span
+              ><select formControlName="id_sucursal_origen">
+                <option value="">Seleccionar sucursal</option>
+                @for (branch of branches(); track branch['id_sucursal']) {
+                  <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+                }
+              </select></label
+            ><label class="field"
+              ><span>Sucursal destino</span
+              ><select formControlName="id_sucursal_destino">
+                <option value="">Seleccionar sucursal</option>
+                @for (branch of branches(); track branch['id_sucursal']) {
+                  <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+                }
+              </select></label
+            >
+            <div formArrayName="detalles" class="admin-repeater field--wide">
+              @for (row of transferDetails.controls; track $index) {
+                <div [formGroupName]="$index">
+                  <label class="field"
+                    ><span>Producto y variante</span
+                    ><select formControlName="id_variante">
+                      <option value="">Seleccionar variante</option>
+                      @for (variant of variants(); track variant['id_variante']) {
+                        <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
+                      }
+                    </select></label
+                  ><label class="field"
+                    ><span>Cantidad</span
+                    ><input type="number" min="1" formControlName="cantidad" /></label
+                  ><button
+                    type="button"
+                    class="button button--quiet"
+                    [disabled]="transferDetails.length === 1"
+                    (click)="transferDetails.removeAt($index)"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              }
+            </div>
+            <div class="admin-form-actions">
+              <button type="button" class="button button--secondary" (click)="addTransferRow()">
+                Añadir línea
+              </button>
+              <button class="button button--primary" [disabled]="transfer.invalid">
+                Crear transferencia
+              </button>
+            </div>
+          </form>
+        </section>
+      }
+      <div class="admin-card-list">
+        @for (x of items(); track identity(x)) {
+          <article>
+            <header>
+              <div>
+                <span class="eyebrow">#{{ identity(x) }}</span>
+                <h2>{{ primary(x) }}</h2>
+              </div>
+              <span>{{ dateOf(x) | date: 'short' }}</span>
+            </header>
+            <p>{{ summary(x) }}</p>
+            @if (mode() === 'movements' && x['lotes']?.length) {
+              <div class="admin-lot-trace">
+                @for (l of x['lotes']; track l['id_lote']) {
+                  <span
+                    >Lote {{ l['id_lote'] }} · {{ l['cantidad'] }} u. · Bs
+                    {{ l['costo_unitario'] }}</span
+                  >
+                }
               </div>
             }
-          </div>
-          <div class="admin-form-actions">
-            <button type="button" class="button button--secondary" (click)="addTransferRow()">
-              Añadir línea
-            </button>
-            <button class="button button--primary" [disabled]="transfer.invalid">
-              Crear transferencia
-            </button>
-          </div>
-        </form>
-      </section>
+            @if (mode() === 'transfers' && canMove()) {
+              <div class="admin-row-actions">
+                @for (s of transferStates(x['estado']); track s) {
+                  <button (click)="changeTransfer(x, s)">{{ s }}</button>
+                }
+              </div>
+            }
+          </article>
+        } @empty {
+          <p>No hay registros.</p>
+        }
+      </div>
     }
-    <div class="admin-card-list">
-      @for (x of items(); track identity(x)) {
-        <article>
-          <header>
-            <div>
-              <span class="eyebrow">#{{ identity(x) }}</span>
-              <h2>{{ primary(x) }}</h2>
-            </div>
-            <span>{{ dateOf(x) | date: 'short' }}</span>
-          </header>
-          <p>{{ summary(x) }}</p>
-          @if (mode() === 'movements' && x['lotes']?.length) {
-            <div class="admin-lot-trace">
-              @for (l of x['lotes']; track l['id_lote']) {
-                <span
-                  >Lote {{ l['id_lote'] }} · {{ l['cantidad'] }} u. · Bs
-                  {{ l['costo_unitario'] }}</span
-                >
-              }
-            </div>
-          }
-          @if (mode() === 'transfers' && canMove()) {
-            <div class="admin-row-actions">
-              @for (s of transferStates(x['estado']); track s) {
-                <button (click)="changeTransfer(x, s)">{{ s }}</button>
-              }
-            </div>
-          }
-        </article>
-      } @empty {
-        <p>No hay registros.</p>
-      }
-    </div>
   </div>`,
 })
 export class TraceAdmin extends BaseAdmin implements OnInit {
@@ -2159,6 +2363,11 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
   branches = signal<Entity[]>([]);
   variants = signal<Entity[]>([]);
   show = signal(false);
+
+  branchFilter = signal<number | null>(null);
+  activeLotFilter = signal<'ALL' | 'WITH_STOCK' | 'OUT_OF_STOCK'>('ALL');
+  lotSearchTerm = signal<string>('');
+
   transfer = this.fb.group({
     id_sucursal_origen: [null as number | null, Validators.required],
     id_sucursal_destino: [null as number | null, Validators.required],
@@ -2167,6 +2376,69 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
   get transferDetails() {
     return this.transfer.controls.detalles as FormArray;
   }
+
+  lotCounts = computed(() => {
+    if (this.mode() !== 'lots') return { total: 0, withStock: 0, outOfStock: 0 };
+    const list = this.items();
+    let withStock = 0;
+    let outOfStock = 0;
+    for (const lot of list) {
+      if ((Number(lot['cantidad_disponible']) || 0) > 0) withStock++;
+      else outOfStock++;
+    }
+    return { total: list.length, withStock, outOfStock };
+  });
+
+  lotTotalValue = computed(() => {
+    if (this.mode() !== 'lots') return 0;
+    return this.items().reduce((acc, lot) => {
+      return (
+        acc + (Number(lot['cantidad_disponible']) || 0) * (Number(lot['costo_unitario']) || 0)
+      );
+    }, 0);
+  });
+
+  hasActiveLotFilters = computed(() => {
+    return (
+      this.branchFilter() !== null ||
+      this.activeLotFilter() !== 'ALL' ||
+      this.lotSearchTerm().trim().length > 0
+    );
+  });
+
+  filteredLots = computed(() => {
+    if (this.mode() !== 'lots') return this.items();
+    const list = this.items();
+    const filter = this.activeLotFilter();
+    const q = this.lotSearchTerm().trim().toLowerCase();
+
+    return list.filter((lot) => {
+      const disp = Number(lot['cantidad_disponible']) || 0;
+      if (filter === 'WITH_STOCK' && disp <= 0) return false;
+      if (filter === 'OUT_OF_STOCK' && disp > 0) return false;
+
+      if (q) {
+        const prod = String(lot['producto'] ?? '').toLowerCase();
+        const sku = String(lot['sku'] ?? '').toLowerCase();
+        const talla = String(lot['talla'] ?? '').toLowerCase();
+        const col = String(lot['color'] ?? '').toLowerCase();
+        const suc = String(lot['sucursal'] ?? '').toLowerCase();
+        const num = String(lot['numero_lote'] ?? lot['id_lote'] ?? '').toLowerCase();
+        if (
+          !prod.includes(q) &&
+          !sku.includes(q) &&
+          !talla.includes(q) &&
+          !col.includes(q) &&
+          !suc.includes(q) &&
+          !num.includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  });
+
   ngOnInit() {
     this.route.data.subscribe((d) => {
       this.mode.set(d['mode']);
@@ -2176,6 +2448,7 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
       }
     });
   }
+
   title() {
     return this.mode() === 'lots'
       ? 'Lotes'
@@ -2183,6 +2456,7 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
         ? 'Movimientos'
         : 'Transferencias';
   }
+
   description() {
     return this.mode() === 'lots'
       ? 'Origen histórico, costos y disponibilidad por lote.'
@@ -2190,6 +2464,7 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
         ? 'Registro inmutable de entradas y salidas.'
         : 'Flujo entre sucursales sin exponer controles internos FIFO.';
   }
+
   path() {
     return this.mode() === 'lots'
       ? 'inventory/lots'
@@ -2197,7 +2472,25 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
         ? 'inventory/movements'
         : 'inventory/transfers';
   }
+
   load() {
+    if (this.mode() === 'lots') {
+      const params: Record<string, any> = {};
+      if (this.branchFilter() !== null) {
+        params['sucursal'] = this.branchFilter();
+      }
+      forkJoin({
+        lots: this.api.list('inventory/lots', params),
+        branches: this.api.list('branches'),
+      }).subscribe({
+        next: (res) => {
+          this.items.set(res.lots);
+          this.branches.set(res.branches);
+        },
+        error: (e) => this.fail(e),
+      });
+      return;
+    }
     if (this.mode() !== 'transfers') {
       this.api
         .list(this.path())
@@ -2217,6 +2510,104 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
       error: (e) => this.fail(e),
     });
   }
+
+  onBranchChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const val = target.value ? Number(target.value) : null;
+    this.branchFilter.set(val);
+    this.load();
+  }
+
+  onSearchInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.lotSearchTerm.set(target.value);
+  }
+
+  clearSearch() {
+    this.lotSearchTerm.set('');
+  }
+
+  setLotFilter(filter: 'ALL' | 'WITH_STOCK' | 'OUT_OF_STOCK') {
+    if (this.activeLotFilter() === filter && filter !== 'ALL') {
+      this.activeLotFilter.set('ALL');
+    } else {
+      this.activeLotFilter.set(filter);
+    }
+  }
+
+  resetLotFilters() {
+    this.branchFilter.set(null);
+    this.activeLotFilter.set('ALL');
+    this.lotSearchTerm.set('');
+    this.load();
+  }
+
+  lotPercentage(lot: Entity): number {
+    const init = Number(lot['cantidad_inicial']) || 0;
+    const disp = Number(lot['cantidad_disponible']) || 0;
+    if (init <= 0) return 0;
+    return Math.round((disp / init) * 100);
+  }
+
+  lotRemainingValue(lot: Entity): number {
+    const disp = Number(lot['cantidad_disponible']) || 0;
+    const cost = Number(lot['costo_unitario']) || 0;
+    return disp * cost;
+  }
+
+  lotState(lot: Entity): 'INTACTO' | 'EN_CONSUMO' | 'AGOTADO' {
+    const init = Number(lot['cantidad_inicial']) || 0;
+    const disp = Number(lot['cantidad_disponible']) || 0;
+    if (disp <= 0) return 'AGOTADO';
+    if (disp < init) return 'EN_CONSUMO';
+    return 'INTACTO';
+  }
+
+  getColorHex(item: Entity): string {
+    if (item['codigo_hex']) return item['codigo_hex'];
+    const colorName = String(item['color'] ?? '')
+      .trim()
+      .toLowerCase();
+    const map: Record<string, string> = {
+      blanco: '#ffffff',
+      negro: '#18181b',
+      azul: '#2563eb',
+      rojo: '#ef4444',
+      verde: '#10b981',
+      amarillo: '#f59e0b',
+      gris: '#64748b',
+      rosa: '#ec4899',
+      rosado: '#ec4899',
+      beige: '#e2d9cc',
+      cafe: '#78350f',
+      'marrón': '#78350f',
+      marron: '#78350f',
+      morado: '#8b5cf6',
+      naranja: '#f97316',
+      celeste: '#38bdf8',
+      marino: '#1e3a8a',
+    };
+    return map[colorName] || '#94a3b8';
+  }
+
+  isLightColor(hex: string): boolean {
+    if (!hex) return true;
+    const clean = hex.replace('#', '');
+    if (clean.length === 3) {
+      const r = parseInt(clean[0] + clean[0], 16);
+      const g = parseInt(clean[1] + clean[1], 16);
+      const b = parseInt(clean[2] + clean[2], 16);
+      return (r * 299 + g * 587 + b * 114) / 1000 > 185;
+    }
+    if (clean.length === 6) {
+      const r = parseInt(clean.substring(0, 2), 16);
+      const g = parseInt(clean.substring(2, 4), 16);
+      const b = parseInt(clean.substring(4, 6), 16);
+      return (r * 299 + g * 587 + b * 114) / 1000 > 185;
+    }
+    return false;
+  }
+
   identity(x: Entity) {
     return x['id_lote'] ?? x['id_movimiento'] ?? x['id_transferencia'];
   }
@@ -2246,7 +2637,8 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
   }
   branchName(id: number) {
     return (
-      this.branches().find((branch) => branch['id_sucursal'] === id)?.['nombre'] ?? `Sucursal ${id}`
+      this.branches().find((branch) => branch['id_sucursal'] === id)?.['nombre'] ??
+      `Sucursal ${id}`
     );
   }
   createTransfer() {

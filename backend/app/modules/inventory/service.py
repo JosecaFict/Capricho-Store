@@ -328,8 +328,31 @@ class InventoryService:
         return await self._receipt_response(receipt)
 
     async def list_lots(self, **filters: Any) -> list[LotResponse]:
-        lots = await self.repository.list_lots(**filters)
-        return [LotResponse.model_validate(item) for item in lots]
+        rows = await self.repository.list_lots(**filters)
+        result: list[LotResponse] = []
+        for row in rows:
+            lot = row[0]
+            result.append(
+                LotResponse(
+                    id_lote=lot.id_lote,
+                    id_detalle_recepcion=lot.id_detalle_recepcion,
+                    id_sucursal=lot.id_sucursal,
+                    sucursal=row[1],
+                    id_variante=lot.id_variante,
+                    producto=row[2],
+                    sku=row[3],
+                    talla=row[4],
+                    color=row[5],
+                    codigo_hex=row[6],
+                    numero_lote=lot.numero_lote,
+                    cantidad_inicial=lot.cantidad_inicial,
+                    cantidad_disponible=lot.cantidad_disponible,
+                    costo_unitario=lot.costo_unitario,
+                    fecha_ingreso=lot.fecha_ingreso,
+                    activo=lot.activo,
+                )
+            )
+        return result
 
     async def list_inventory(self, **filters: Any) -> list[InventoryResponse]:
         rows = await self.repository.list_inventory(**filters)

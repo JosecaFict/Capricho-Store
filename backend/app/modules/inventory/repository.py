@@ -277,9 +277,22 @@ class InventoryRepository:
             ).all()
         )
 
-    async def list_lots(self, **filters: Any) -> list[LoteInventario]:
+    async def list_lots(self, **filters: Any) -> list[Any]:
         statement = (
-            select(LoteInventario)
+            select(
+                LoteInventario,
+                Sucursal.nombre,
+                Producto.nombre,
+                VarianteProducto.sku,
+                Talla.codigo,
+                Color.nombre,
+                Color.codigo_hex,
+            )
+            .join(Sucursal, Sucursal.id_sucursal == LoteInventario.id_sucursal)
+            .join(VarianteProducto, VarianteProducto.id_variante == LoteInventario.id_variante)
+            .join(Producto, Producto.id_producto == VarianteProducto.id_producto)
+            .join(Talla, Talla.id_talla == VarianteProducto.id_talla)
+            .join(Color, Color.id_color == VarianteProducto.id_color)
             .join(
                 DetalleRecepcion,
                 DetalleRecepcion.id_detalle_recepcion == LoteInventario.id_detalle_recepcion,
@@ -291,7 +304,6 @@ class InventoryRepository:
             .outerjoin(
                 OrdenCompra, OrdenCompra.id_orden_compra == RecepcionMercaderia.id_orden_compra
             )
-            .join(VarianteProducto, VarianteProducto.id_variante == LoteInventario.id_variante)
         )
         mapping = {
             "branch_id": LoteInventario.id_sucursal,
@@ -312,8 +324,8 @@ class InventoryRepository:
             statement = statement.where(operator)
         return list(
             (
-                await self.session.scalars(
-                    statement.order_by(LoteInventario.fecha_ingreso, LoteInventario.id_lote)
+                await self.session.execute(
+                    statement.order_by(LoteInventario.fecha_ingreso.desc(), LoteInventario.id_lote.desc())
                 )
             ).all()
         )
