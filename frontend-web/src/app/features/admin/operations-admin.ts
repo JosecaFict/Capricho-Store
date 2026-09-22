@@ -2260,8 +2260,248 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
           </tbody>
         </table>
       </div>
+    } @else if (mode() === 'movements') {
+      <!-- Métricas Rápidas KPI de Movimientos (Kardex) -->
+      <div class="inventory-kpi-bar">
+        <div class="inventory-kpi-card">
+          <small>Total Movimientos</small>
+          <strong>{{ movementCounts().total }}</strong>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Unidades Ingreso (+)</small>
+          <strong class="text-emerald">+{{ movementStats().totalInflowUnits }} u.</strong>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Unidades Salida (-)</small>
+          <strong class="text-red">-{{ movementStats().totalOutflowUnits }} u.</strong>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Costo FIFO Consumido</small>
+          <strong class="text-blue">{{ movementStats().totalFifoCost | bolivianos }}</strong>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros Reactiva de Movimientos -->
+      <div class="inventory-toolbar">
+        <div class="inventory-toolbar__controls">
+          <label class="field field--branch">
+            <span>Sucursal</span>
+            <select [value]="branchFilter() ?? ''" (change)="onBranchChange($event)">
+              <option value="">Todas las sucursales</option>
+              @for (branch of branches(); track branch['id_sucursal']) {
+                <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+              }
+            </select>
+          </label>
+
+          <div class="field field--search">
+            <span>Búsqueda en Kardex</span>
+            <div class="search-input-wrap">
+              <input
+                type="text"
+                [value]="movementSearchTerm()"
+                (input)="onMovementSearchInput($event)"
+                placeholder="Buscar por ID #, prenda, SKU, talla, motivo o referencia..."
+              />
+              @if (movementSearchTerm()) {
+                <button
+                  type="button"
+                  class="search-clear-btn"
+                  (click)="clearMovementSearch()"
+                  title="Borrar búsqueda"
+                >
+                  ✕
+                </button>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Pastillas de Selección de Filtro de Movimientos -->
+        <div class="inventory-chips-row">
+          <div class="inventory-chips-group">
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeMovementFilter() === 'ALL'"
+              (click)="setMovementFilter('ALL')"
+            >
+              <span>Todos</span>
+              <span class="chip-badge">{{ movementCounts().total }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeMovementFilter() === 'VENTAS'"
+              (click)="setMovementFilter('VENTAS')"
+            >
+              <span>🛍️ Ventas</span>
+              <span class="chip-badge">{{ movementCounts().ventas }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeMovementFilter() === 'ENTRADAS'"
+              (click)="setMovementFilter('ENTRADAS')"
+            >
+              <span>📥 Entradas Prov.</span>
+              <span class="chip-badge">{{ movementCounts().entradas }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeMovementFilter() === 'TRANSFERENCIAS'"
+              (click)="setMovementFilter('TRANSFERENCIAS')"
+            >
+              <span>🔄 Transferencias</span>
+              <span class="chip-badge">{{ movementCounts().transferencias }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeMovementFilter() === 'AJUSTES'"
+              (click)="setMovementFilter('AJUSTES')"
+            >
+              <span>⚖️ Ajustes</span>
+              <span class="chip-badge">{{ movementCounts().ajustes }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeMovementFilter() === 'RESERVAS'"
+              (click)="setMovementFilter('RESERVAS')"
+            >
+              <span>📌 Reservas</span>
+              <span class="chip-badge">{{ movementCounts().reservas }}</span>
+            </button>
+          </div>
+
+          @if (hasActiveMovementFilters()) {
+            <button type="button" class="inventory-reset-btn" (click)="resetMovementFilters()">
+              ✕ Restablecer filtros
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Tabla Kardex de Movimientos -->
+      <div class="admin-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID #</th>
+              <th>Fecha / Hora</th>
+              <th>Tipo</th>
+              <th>Producto / Prenda</th>
+              <th class="cell-center">Talla</th>
+              <th>Color</th>
+              <th>Sucursal</th>
+              <th class="cell-center">Cantidad</th>
+              <th>Lotes FIFO / Costo</th>
+              <th>Referencia / Motivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of filteredMovements(); track m['id_movimiento']) {
+              <tr>
+                <td>
+                  <strong>#{{ m['id_movimiento'] }}</strong>
+                </td>
+                <td>
+                  <span class="num-cell">{{ m['fecha_hora'] | date: 'dd/MM/yy HH:mm' }}</span>
+                </td>
+                <td>
+                  <span
+                    class="status-chip"
+                    [class]="'status-chip--' + (m['tipo_movimiento'] | lowercase)"
+                  >
+                    {{ movementTypeLabel(m['tipo_movimiento']) }}
+                  </span>
+                </td>
+                <td class="product-cell">
+                  <strong>{{ m['producto'] || ('Inventario #' + m['id_inventario']) }}</strong>
+                  @if (m['sku']) {
+                    <small class="sku-tag">SKU: {{ m['sku'] }}</small>
+                  }
+                </td>
+                <td class="cell-center">
+                  <span class="size-pill">{{ m['talla'] || '-' }}</span>
+                </td>
+                <td>
+                  <div class="color-cell">
+                    <span
+                      class="color-swatch"
+                      [style.backgroundColor]="getColorHex(m)"
+                      [class.color-swatch--light]="isLightColor(getColorHex(m))"
+                    ></span>
+                    <span class="color-name">{{ m['color'] || '-' }}</span>
+                  </div>
+                </td>
+                <td class="branch-cell">{{ m['sucursal'] || ('Sucursal ' + m['id_sucursal']) }}</td>
+                <td class="cell-center">
+                  <span
+                    class="kardex-qty"
+                    [class.kardex-qty--in]="isMovementInflow(m['tipo_movimiento'])"
+                    [class.kardex-qty--out]="isMovementOutflow(m['tipo_movimiento'])"
+                    [class.kardex-qty--neutral]="!isMovementInflow(m['tipo_movimiento']) && !isMovementOutflow(m['tipo_movimiento'])"
+                  >
+                    {{ isMovementInflow(m['tipo_movimiento']) ? '+' : isMovementOutflow(m['tipo_movimiento']) ? '-' : '' }}{{ m['cantidad'] }} u.
+                  </span>
+                </td>
+                <td>
+                  @if (m['lotes']?.length) {
+                    <div class="kardex-lots">
+                      @for (l of m['lotes']; track l['id_lote']) {
+                        <span
+                          class="kardex-lot-tag"
+                          [title]="'Lote #' + l['id_lote'] + ': ' + l['cantidad'] + ' u. a ' + (l['costo_unitario'] | bolivianos)"
+                        >
+                          Lote #{{ l['id_lote'] }} · {{ l['cantidad'] }}u × {{ l['costo_unitario'] | bolivianos }}
+                        </span>
+                      }
+                      @if (m['costo_fifo_consumido'] > 0) {
+                        <span class="kardex-cost-total">Costo: {{ m['costo_fifo_consumido'] | bolivianos }}</span>
+                      }
+                    </div>
+                  } @else {
+                    <span class="text-muted">—</span>
+                  }
+                </td>
+                <td>
+                  <div class="kardex-ref">
+                    <span class="kardex-ref-badge">{{ movementReference(m) }}</span>
+                    @if (m['motivo']) {
+                      <span class="kardex-ref-reason">{{ m['motivo'] }}</span>
+                    }
+                  </div>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="10" class="empty-state-cell">
+                  <p>No se encontraron movimientos con los filtros aplicados.</p>
+                  @if (hasActiveMovementFilters()) {
+                    <button
+                      type="button"
+                      class="button button--secondary button--compact"
+                      (click)="resetMovementFilters()"
+                    >
+                      Restablecer filtros
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     } @else {
-      <!-- VISTA PARA MOVIMIENTOS Y TRANSFERENCIAS -->
+      <!-- VISTA PARA TRANSFERENCIAS -->
       @if (show()) {
         <section class="admin-editor">
           <form [formGroup]="transfer" (ngSubmit)="createTransfer()" class="admin-form-grid">
@@ -2329,16 +2569,6 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
               <span>{{ dateOf(x) | date: 'short' }}</span>
             </header>
             <p>{{ summary(x) }}</p>
-            @if (mode() === 'movements' && x['lotes']?.length) {
-              <div class="admin-lot-trace">
-                @for (l of x['lotes']; track l['id_lote']) {
-                  <span
-                    >Lote {{ l['id_lote'] }} · {{ l['cantidad'] }} u. · Bs
-                    {{ l['costo_unitario'] }}</span
-                  >
-                }
-              </div>
-            }
             @if (mode() === 'transfers' && canMove()) {
               <div class="admin-row-actions">
                 @for (s of transferStates(x['estado']); track s) {
@@ -2367,6 +2597,11 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
   branchFilter = signal<number | null>(null);
   activeLotFilter = signal<'ALL' | 'WITH_STOCK' | 'OUT_OF_STOCK'>('ALL');
   lotSearchTerm = signal<string>('');
+
+  activeMovementFilter = signal<
+    'ALL' | 'VENTAS' | 'ENTRADAS' | 'TRANSFERENCIAS' | 'AJUSTES' | 'RESERVAS'
+  >('ALL');
+  movementSearchTerm = signal<string>('');
 
   transfer = this.fb.group({
     id_sucursal_origen: [null as number | null, Validators.required],
@@ -2439,6 +2674,106 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
     });
   });
 
+  movementCounts = computed(() => {
+    if (this.mode() !== 'movements') {
+      return { total: 0, ventas: 0, entradas: 0, transferencias: 0, ajustes: 0, reservas: 0 };
+    }
+    const list = this.items();
+    let ventas = 0;
+    let entradas = 0;
+    let transferencias = 0;
+    let ajustes = 0;
+    let reservas = 0;
+    for (const m of list) {
+      const t = String(m['tipo_movimiento'] || '');
+      if (t === 'VENTA' || t === 'VENTA_RESERVA') ventas++;
+      else if (t === 'ENTRADA_PROVEEDOR') entradas++;
+      else if (t === 'TRANSFERENCIA_ENTRADA' || t === 'TRANSFERENCIA_SALIDA') transferencias++;
+      else if (t === 'AJUSTE_POSITIVO' || t === 'AJUSTE_NEGATIVO') ajustes++;
+      else if (t === 'RESERVA' || t === 'LIBERACION_RESERVA') reservas++;
+    }
+    return { total: list.length, ventas, entradas, transferencias, ajustes, reservas };
+  });
+
+  movementStats = computed(() => {
+    if (this.mode() !== 'movements') {
+      return { totalInflowUnits: 0, totalOutflowUnits: 0, totalFifoCost: 0 };
+    }
+    let totalInflowUnits = 0;
+    let totalOutflowUnits = 0;
+    let totalFifoCost = 0;
+    for (const m of this.items()) {
+      const t = String(m['tipo_movimiento'] || '');
+      const qty = Number(m['cantidad']) || 0;
+      const cost = Number(m['costo_fifo_consumido']) || 0;
+      if (this.isMovementInflow(t)) {
+        totalInflowUnits += qty;
+      } else if (this.isMovementOutflow(t)) {
+        totalOutflowUnits += qty;
+      }
+      totalFifoCost += cost;
+    }
+    return { totalInflowUnits, totalOutflowUnits, totalFifoCost };
+  });
+
+  hasActiveMovementFilters = computed(() => {
+    return (
+      this.branchFilter() !== null ||
+      this.activeMovementFilter() !== 'ALL' ||
+      this.movementSearchTerm().trim().length > 0
+    );
+  });
+
+  filteredMovements = computed(() => {
+    if (this.mode() !== 'movements') return this.items();
+    const list = this.items();
+    const filter = this.activeMovementFilter();
+    const q = this.movementSearchTerm().trim().toLowerCase();
+
+    return list.filter((m) => {
+      const tipo = String(m['tipo_movimiento'] || '');
+      if (filter === 'VENTAS' && tipo !== 'VENTA' && tipo !== 'VENTA_RESERVA') return false;
+      if (filter === 'ENTRADAS' && tipo !== 'ENTRADA_PROVEEDOR') return false;
+      if (
+        filter === 'TRANSFERENCIAS' &&
+        tipo !== 'TRANSFERENCIA_ENTRADA' &&
+        tipo !== 'TRANSFERENCIA_SALIDA'
+      )
+        return false;
+      if (filter === 'AJUSTES' && tipo !== 'AJUSTE_POSITIVO' && tipo !== 'AJUSTE_NEGATIVO')
+        return false;
+      if (filter === 'RESERVAS' && tipo !== 'RESERVA' && tipo !== 'LIBERACION_RESERVA')
+        return false;
+
+      if (q) {
+        const id = String(m['id_movimiento'] ?? '');
+        const prod = String(m['producto'] ?? '').toLowerCase();
+        const sku = String(m['sku'] ?? '').toLowerCase();
+        const talla = String(m['talla'] ?? '').toLowerCase();
+        const col = String(m['color'] ?? '').toLowerCase();
+        const suc = String(m['sucursal'] ?? '').toLowerCase();
+        const mot = String(m['motivo'] ?? '').toLowerCase();
+        const refTipo = String(m['referencia_tipo'] ?? '').toLowerCase();
+        const refId = String(m['referencia_id'] ?? '');
+
+        if (
+          !id.includes(q) &&
+          !prod.includes(q) &&
+          !sku.includes(q) &&
+          !talla.includes(q) &&
+          !col.includes(q) &&
+          !suc.includes(q) &&
+          !mot.includes(q) &&
+          !refTipo.includes(q) &&
+          !refId.includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  });
+
   ngOnInit() {
     this.route.data.subscribe((d) => {
       this.mode.set(d['mode']);
@@ -2461,7 +2796,7 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
     return this.mode() === 'lots'
       ? 'Origen histórico, costos y disponibilidad por lote.'
       : this.mode() === 'movements'
-        ? 'Registro inmutable de entradas y salidas.'
+        ? 'Kardex inmutable de auditoría: entradas, salidas y asignaciones FIFO.'
         : 'Flujo entre sucursales sin exponer controles internos FIFO.';
   }
 
@@ -2491,10 +2826,21 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
       });
       return;
     }
-    if (this.mode() !== 'transfers') {
-      this.api
-        .list(this.path())
-        .subscribe({ next: (v) => this.items.set(v), error: (e) => this.fail(e) });
+    if (this.mode() === 'movements') {
+      const params: Record<string, any> = {};
+      if (this.branchFilter() !== null) {
+        params['sucursal'] = this.branchFilter();
+      }
+      forkJoin({
+        items: this.api.list('inventory/movements', params),
+        branches: this.api.list('branches'),
+      }).subscribe({
+        next: (res) => {
+          this.items.set(res.items);
+          this.branches.set(res.branches);
+        },
+        error: (e) => this.fail(e),
+      });
       return;
     }
     forkJoin({
@@ -2540,6 +2886,71 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
     this.activeLotFilter.set('ALL');
     this.lotSearchTerm.set('');
     this.load();
+  }
+
+  onMovementSearchInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.movementSearchTerm.set(target.value);
+  }
+
+  clearMovementSearch() {
+    this.movementSearchTerm.set('');
+  }
+
+  setMovementFilter(
+    filter: 'ALL' | 'VENTAS' | 'ENTRADAS' | 'TRANSFERENCIAS' | 'AJUSTES' | 'RESERVAS',
+  ) {
+    if (this.activeMovementFilter() === filter && filter !== 'ALL') {
+      this.activeMovementFilter.set('ALL');
+    } else {
+      this.activeMovementFilter.set(filter);
+    }
+  }
+
+  resetMovementFilters() {
+    this.branchFilter.set(null);
+    this.activeMovementFilter.set('ALL');
+    this.movementSearchTerm.set('');
+    this.load();
+  }
+
+  isMovementInflow(tipo: string): boolean {
+    return [
+      'ENTRADA_PROVEEDOR',
+      'TRANSFERENCIA_ENTRADA',
+      'AJUSTE_POSITIVO',
+      'DEVOLUCION',
+    ].includes(tipo);
+  }
+
+  isMovementOutflow(tipo: string): boolean {
+    return ['VENTA', 'VENTA_RESERVA', 'TRANSFERENCIA_SALIDA', 'AJUSTE_NEGATIVO'].includes(tipo);
+  }
+
+  movementTypeLabel(tipo: string): string {
+    const map: Record<string, string> = {
+      VENTA: 'Venta',
+      VENTA_RESERVA: 'Venta (Reserva)',
+      ENTRADA_PROVEEDOR: 'Entrada Proveedor',
+      TRANSFERENCIA_ENTRADA: 'Transf. Entrada',
+      TRANSFERENCIA_SALIDA: 'Transf. Salida',
+      AJUSTE_POSITIVO: 'Ajuste (+)',
+      AJUSTE_NEGATIVO: 'Ajuste (-)',
+      RESERVA: 'Reserva Stock',
+      LIBERACION_RESERVA: 'Lib. Reserva',
+      DEVOLUCION: 'Devolución',
+    };
+    return map[tipo] || tipo;
+  }
+
+  movementReference(x: Entity): string {
+    const refType = x['referencia_tipo'];
+    const refId = x['referencia_id'];
+    if (refType && refId) {
+      return `${refType} #${refId}`;
+    }
+    if (refType) return refType;
+    return 'Directo';
   }
 
   lotPercentage(lot: Entity): number {

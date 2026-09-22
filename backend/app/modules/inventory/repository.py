@@ -330,10 +330,26 @@ class InventoryRepository:
             ).all()
         )
 
-    async def list_movements(self, **filters: Any) -> list[MovimientoInventario]:
-        statement = select(MovimientoInventario).join(
-            InventarioSucursal,
-            InventarioSucursal.id_inventario == MovimientoInventario.id_inventario,
+    async def list_movements(self, **filters: Any) -> list[Any]:
+        statement = (
+            select(
+                MovimientoInventario,
+                Sucursal.nombre,
+                Producto.nombre,
+                VarianteProducto.sku,
+                Talla.codigo,
+                Color.nombre,
+                Color.codigo_hex,
+            )
+            .join(
+                InventarioSucursal,
+                InventarioSucursal.id_inventario == MovimientoInventario.id_inventario,
+            )
+            .join(Sucursal, Sucursal.id_sucursal == InventarioSucursal.id_sucursal)
+            .join(VarianteProducto, VarianteProducto.id_variante == InventarioSucursal.id_variante)
+            .join(Producto, Producto.id_producto == VarianteProducto.id_producto)
+            .join(Talla, Talla.id_talla == VarianteProducto.id_talla)
+            .join(Color, Color.id_color == VarianteProducto.id_color)
         )
         mapping = {
             "inventory_id": MovimientoInventario.id_inventario,
@@ -350,8 +366,11 @@ class InventoryRepository:
             statement = statement.where(MovimientoInventario.fecha_hora <= filters["date_to"])
         return list(
             (
-                await self.session.scalars(
-                    statement.order_by(MovimientoInventario.fecha_hora.desc())
+                await self.session.execute(
+                    statement.order_by(
+                        MovimientoInventario.fecha_hora.desc(),
+                        MovimientoInventario.id_movimiento.desc(),
+                    )
                 )
             ).all()
         )

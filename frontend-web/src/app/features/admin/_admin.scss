@@ -7579,6 +7579,144 @@ textarea {
   border: 1px solid rgba(245, 158, 11, 0.35) !important;
 }
 
+/* ==========================================================================
+   KARDEX DE MOVIMIENTOS (INVENTORY MOVEMENTS)
+   ========================================================================== */
+.kardex-qty {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: -0.01em;
+}
+
+.kardex-qty--in {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.kardex-qty--out {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.kardex-qty--neutral {
+  color: #475569;
+  background: rgba(100, 116, 139, 0.1);
+  border: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+.kardex-ref {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kardex-ref-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+}
+
+.kardex-ref-reason {
+  font-size: 0.74rem;
+  color: var(--ink-soft, #64748b);
+  line-height: 1.25;
+  max-width: 220px;
+}
+
+.kardex-lots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kardex-lot-tag {
+  display: inline-block;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  background: var(--surface-muted, #f1f5f9);
+  color: var(--ink, #0f172a);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.kardex-cost-total {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+/* Status chips for movement types */
+.status-chip--venta {
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: #b91c1c !important;
+  border: 1px solid rgba(239, 68, 68, 0.25) !important;
+}
+
+.status-chip--venta_reserva {
+  background: rgba(234, 88, 12, 0.1) !important;
+  color: #c2410c !important;
+  border: 1px solid rgba(234, 88, 12, 0.25) !important;
+}
+
+.status-chip--entrada_proveedor {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #047857 !important;
+  border: 1px solid rgba(16, 185, 129, 0.28) !important;
+}
+
+.status-chip--transferencia_entrada {
+  background: rgba(6, 182, 212, 0.12) !important;
+  color: #0e7490 !important;
+  border: 1px solid rgba(6, 182, 212, 0.28) !important;
+}
+
+.status-chip--transferencia_salida {
+  background: rgba(59, 130, 246, 0.12) !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(59, 130, 246, 0.28) !important;
+}
+
+.status-chip--ajuste_positivo {
+  background: rgba(16, 185, 129, 0.1) !important;
+  color: #059669 !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+}
+
+.status-chip--ajuste_negativo {
+  background: rgba(245, 158, 11, 0.12) !important;
+  color: #b45309 !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.status-chip--reserva {
+  background: rgba(139, 92, 246, 0.12) !important;
+  color: #6d28d9 !important;
+  border: 1px solid rgba(139, 92, 246, 0.28) !important;
+}
+
+.status-chip--liberacion_reserva {
+  background: rgba(100, 116, 139, 0.12) !important;
+  color: #475569 !important;
+  border: 1px solid rgba(100, 116, 139, 0.25) !important;
+}
+
+.status-chip--devolucion {
+  background: rgba(20, 184, 166, 0.12) !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(20, 184, 166, 0.28) !important;
+}
+
+
 
 
 

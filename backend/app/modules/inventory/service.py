@@ -753,11 +753,43 @@ class InventoryService:
             codigo_hex=row[8] if len(row) > 8 else None,
         )
 
-    async def _movement_response(self, movement: MovimientoInventario) -> MovementResponse:
+    async def _movement_response(self, row: Any) -> MovementResponse:
+        if isinstance(row, (tuple, list)) and len(row) > 1:
+            movement = row[0]
+            sucursal = row[1]
+            producto = row[2]
+            sku = row[3]
+            talla = row[4]
+            color = row[5]
+            codigo_hex = row[6] if len(row) > 6 else None
+        else:
+            movement = row
+            inv_row = await self.repository.get_inventory_record(movement.id_inventario)
+            if inv_row:
+                sucursal = inv_row[1]
+                sku = inv_row[2]
+                producto = inv_row[3]
+                talla = inv_row[4]
+                color = inv_row[5]
+                codigo_hex = inv_row[8] if len(inv_row) > 8 else None
+            else:
+                sucursal = None
+                producto = None
+                sku = None
+                talla = None
+                color = None
+                codigo_hex = None
+
         lots = await self.repository.movement_lots(movement.id_movimiento)
         return MovementResponse(
             id_movimiento=movement.id_movimiento,
             id_inventario=movement.id_inventario,
+            sucursal=sucursal,
+            producto=producto,
+            sku=sku,
+            talla=talla,
+            color=color,
+            codigo_hex=codigo_hex,
             id_empleado=movement.id_empleado,
             tipo_movimiento=movement.tipo_movimiento,
             cantidad=movement.cantidad,

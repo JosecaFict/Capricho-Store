@@ -210,6 +210,12 @@ class MovementLotResponse(ORMResponse):
 class MovementResponse(ORMResponse):
     id_movimiento: int
     id_inventario: int
+    sucursal: str | None = None
+    producto: str | None = None
+    sku: str | None = None
+    talla: str | None = None
+    color: str | None = None
+    codigo_hex: str | None = None
     id_empleado: int | None
     tipo_movimiento: str
     cantidad: int
