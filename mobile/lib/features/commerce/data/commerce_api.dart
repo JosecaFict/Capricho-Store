@@ -24,7 +24,7 @@ class CommerceApi {
   // -------------------------------------------------------------
   // CARRITO DE COMPRAS (Regla: 1 Carrito = 1 Sucursal)
   // -------------------------------------------------------------
-  Future<Cart> getCart() async {
+  Future<Cart> getCart() async {  // [CU-09] Consultar carrito activo
     try {
       final response = await _dio.get('/cart');
       return Cart.fromJson(_asMap(response.data));
@@ -33,7 +33,7 @@ class CommerceApi {
     }
   }
 
-  Future<Cart> addCartItem({
+  Future<Cart> addCartItem({  // [CU-09] Agregar prenda al carrito
     required int variantId,
     required int quantity,
     int? branchId,
@@ -53,7 +53,7 @@ class CommerceApi {
     }
   }
 
-  Future<Cart> updateCartItem({
+  Future<Cart> updateCartItem({  // [CU-09] Modificar cantidad de prenda
     required int itemId,
     required int quantity,
   }) async {
@@ -68,7 +68,7 @@ class CommerceApi {
     }
   }
 
-  Future<Cart> removeCartItem({required int itemId}) async {
+  Future<Cart> removeCartItem({required int itemId}) async {  // [CU-09] Quitar prenda del carrito
     try {
       final response = await _dio.post('/cart/items/$itemId/remove');
       return Cart.fromJson(_asMap(response.data));
@@ -77,7 +77,7 @@ class CommerceApi {
     }
   }
 
-  Future<Cart> clearCart() async {
+  Future<Cart> clearCart() async {  // [CU-09] Vaciar carrito de compras
     try {
       final response = await _dio.post('/cart/clear');
       return Cart.fromJson(_asMap(response.data));
@@ -89,7 +89,7 @@ class CommerceApi {
   // -------------------------------------------------------------
   // DIRECCIONES Y COTIZACIÓN DE ENVÍO (OpenRouteService)
   // -------------------------------------------------------------
-  Future<List<Address>> listAddresses() async {
+  Future<List<Address>> listAddresses() async {  // [CU-09] Listar direcciones de entrega
     try {
       final response = await _dio.get('/addresses');
       final list = (response.data as List? ?? []);
@@ -99,7 +99,7 @@ class CommerceApi {
     }
   }
 
-  Future<Address> createAddress({
+  Future<Address> createAddress({  // [CU-09] Registrar dirección de entrega
     required int cityId,
     String? alias,
     String? zone,
@@ -129,7 +129,7 @@ class CommerceApi {
     }
   }
 
-  Future<ShippingQuote> quoteShipping({
+  Future<ShippingQuote> quoteShipping({  // [CU-09] Cotizar flete de envío a domicilio
     required int branchId,
     required int addressId,
   }) async {
@@ -150,7 +150,7 @@ class CommerceApi {
   // -------------------------------------------------------------
   // CHECKOUT Y PASARELA STRIPE
   // -------------------------------------------------------------
-  Future<StripeCheckoutResponse> checkout({
+  Future<StripeCheckoutResponse> checkout({  // [CU-12] Iniciar checkout y pago con Stripe
     required int branchId,
     required String deliveryMode,
     int? addressId,
@@ -174,7 +174,7 @@ class CommerceApi {
     }
   }
 
-  Future<StripeCheckoutStatusResponse> getCheckoutStatus(String sessionId) async {
+  Future<StripeCheckoutStatusResponse> getCheckoutStatus(String sessionId) async {  // [CU-12] Consultar estado de sesión Stripe
     try {
       final response = await _dio.get('/checkout/$sessionId/status');
       return StripeCheckoutStatusResponse.fromJson(_asMap(response.data));
@@ -183,7 +183,7 @@ class CommerceApi {
     }
   }
 
-  Future<void> cancelCheckout(String sessionId) async {
+  Future<void> cancelCheckout(String sessionId) async {  // [CU-12] Cancelar sesión de checkout
     try {
       await _dio.post('/checkout/$sessionId/cancel');
     } on DioException catch (e) {
@@ -194,7 +194,7 @@ class CommerceApi {
   // -------------------------------------------------------------
   // RESERVAS DE PRENDAS
   // -------------------------------------------------------------
-  Future<List<Reservation>> listReservations() async {
+  Future<List<Reservation>> listReservations() async {  // [CU-10] Listar reservas del cliente
     try {
       final response = await _dio.get('/reservations');
       final list = (response.data as List? ?? []);
@@ -204,7 +204,7 @@ class CommerceApi {
     }
   }
 
-  Future<Reservation> createReservation({
+  Future<Reservation> createReservation({  // [CU-10] Crear reserva presencial (48h)
     required int branchId,
     DateTime? appointmentDate,
     String? observation,
@@ -226,7 +226,7 @@ class CommerceApi {
     }
   }
 
-  Future<Reservation> cancelReservation(int reservationId) async {
+  Future<Reservation> cancelReservation(int reservationId) async {  // [CU-10] Cancelar reserva presencial
     try {
       final response = await _dio.post('/reservations/$reservationId/cancel');
       return Reservation.fromJson(_asMap(response.data));
@@ -238,7 +238,7 @@ class CommerceApi {
   // -------------------------------------------------------------
   // PEDIDOS Y SEGUIMIENTO DEL CLIENTE
   // -------------------------------------------------------------
-  Future<List<Order>> listOrders() async {
+  Future<List<Order>> listOrders() async {  // [CU-13] Listar pedidos online
     try {
       final response = await _dio.get('/orders');
       final list = (response.data as List? ?? []);
@@ -248,7 +248,7 @@ class CommerceApi {
     }
   }
 
-  Future<Order> getOrder(int orderId) async {
+  Future<Order> getOrder(int orderId) async {  // [CU-13] Detalle de pedido online
     try {
       final response = await _dio.get('/orders/$orderId');
       return Order.fromJson(_asMap(response.data));
@@ -257,7 +257,7 @@ class CommerceApi {
     }
   }
 
-  Future<List<int>> getOrderInvoicePdf(int orderId) async {
+  Future<List<int>> getOrderInvoicePdf(int orderId) async {  // [CU-12] Descargar factura en PDF
     try {
       final response = await _dio.get<List<int>>(
         '/orders/$orderId/invoice',
@@ -269,7 +269,7 @@ class CommerceApi {
     }
   }
 
-  Future<Order> confirmDelivery(int orderId) async {
+  Future<Order> confirmDelivery(int orderId) async {  // [CU-13] Confirmar entrega de pedido
     try {
       final response = await _dio.post('/orders/$orderId/confirm-delivery');
       return Order.fromJson(_asMap(response.data));
@@ -281,7 +281,7 @@ class CommerceApi {
   // -------------------------------------------------------------
   // NOTIFICACIONES OPERATIVAS
   // -------------------------------------------------------------
-  Future<List<CustomerNotification>> listNotifications() async {
+  Future<List<CustomerNotification>> listNotifications() async {  // [CU-20] Consultar bandeja de notificaciones
     try {
       final response = await _dio.get('/notifications');
       final list = (response.data as List? ?? []);
@@ -291,7 +291,7 @@ class CommerceApi {
     }
   }
 
-  Future<void> registerDeviceToken({
+  Future<void> registerDeviceToken({  // [CU-20] Registrar token de dispositivo FCM
     required String token,
     String platform = 'ios',
     String? deviceInfo,
@@ -310,7 +310,7 @@ class CommerceApi {
     }
   }
 
-  Future<void> markNotificationAsRead(int notificationId) async {
+  Future<void> markNotificationAsRead(int notificationId) async {  // [CU-20] Marcar notificación como leída
     try {
       await _dio.patch('/notifications/$notificationId/read');
     } on DioException {
@@ -318,7 +318,7 @@ class CommerceApi {
     }
   }
 
-  Future<void> markAllNotificationsAsRead() async {
+  Future<void> markAllNotificationsAsRead() async {  // [CU-20] Marcar todas como leídas
     try {
       await _dio.patch('/notifications/read-all');
     } on DioException {

@@ -98,6 +98,7 @@ abstract class BaseAdmin {
     </div>
   </div>`,
 })
+/** [CU-06] Gestión de Proveedores y Abastecimiento */
 export class SuppliersAdmin extends BaseAdmin implements OnInit {
   private perms = inject(PermissionService);
   items = signal<Entity[]>([]);

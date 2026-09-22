@@ -346,6 +346,7 @@ export class MasterDataAdmin implements OnInit {
     </div>
   </div>`,
 })
+/** [CU-05] Administración de Prendas, Precios y Variantes */
 export class ProductsAdmin implements OnInit {
   private api = inject(AdminApiService);
   private fb = inject(FormBuilder);

@@ -21,6 +21,7 @@ enum FittingStep {
   activeFitting, // Paso 3: Vestidor interactivo en tiempo real
 }
 
+/// [CU-18] Pantalla de Probador Virtual con Realidad Aumentada (AR)
 class VirtualFittingScreen extends ConsumerStatefulWidget {
   const VirtualFittingScreen({
     super.key,

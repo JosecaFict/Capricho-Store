@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+/// [CU-09] Pantalla de Carrito de Compras y Entrega
 class CartScreen extends ConsumerWidget {
   const CartScreen({super.key});
 

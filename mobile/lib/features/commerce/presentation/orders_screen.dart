@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+/// [CU-13] Pantalla de Pedidos y Seguimiento Logístico
 class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 

@@ -84,6 +84,7 @@ export function resolveLoginDestination(user: UserResponse, returnUrl: string | 
     </section>
   `,
 })
+/** [CU-01] Componente de Inicio de Sesión (Login) */
 export class Login {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);

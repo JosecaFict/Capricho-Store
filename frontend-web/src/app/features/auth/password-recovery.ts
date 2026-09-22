@@ -173,6 +173,7 @@ type RecoveryStep = 'email' | 'otp' | 'password' | 'complete';
     </section>
   `,
 })
+/** [CU-08] Componente de Recuperación de Contraseña vía OTP */
 export class PasswordRecovery {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);

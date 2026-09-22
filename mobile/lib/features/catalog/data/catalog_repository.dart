@@ -12,7 +12,7 @@ class CatalogRepository {
   const CatalogRepository(this._dio);
   final Dio _dio;
 
-  Future<ProductPage> products(CatalogQuery query) async {
+  Future<ProductPage> products(CatalogQuery query) async {  // [CU-04] Consultar catálogo con filtros
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/products',
@@ -24,7 +24,7 @@ class CatalogRepository {
     }
   }
 
-  Future<Product> product(int id, {int? branchId}) async {
+  Future<Product> product(int id, {int? branchId}) async {  // [CU-04] Ver detalle de prenda y stock por sucursal
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/products/$id',
@@ -36,7 +36,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<BranchItem>> branches() async {
+  Future<List<BranchItem>> branches() async {  // [CU-03] Listar sucursales activas
     try {
       final response = await _dio.get<List<dynamic>>('/branches');
       return (response.data ?? const [])
@@ -47,7 +47,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<CategoryItem>> categories() async {
+  Future<List<CategoryItem>> categories() async {  // [CU-04] Listar categorías
     try {
       final response = await _dio.get<List<dynamic>>('/categories');
       return (response.data ?? const [])
@@ -59,7 +59,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<BrandItem>> brands() async {
+  Future<List<BrandItem>> brands() async {  // [CU-04] Listar marcas
     try {
       final response = await _dio.get<List<dynamic>>('/brands');
       return (response.data ?? const [])
@@ -71,7 +71,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<SizeItem>> sizes() async {
+  Future<List<SizeItem>> sizes() async {  // [CU-04] Listar tallas
     try {
       final response = await _dio.get<List<dynamic>>('/sizes');
       return (response.data ?? const [])
@@ -82,7 +82,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<ColorItem>> colors() async {
+  Future<List<ColorItem>> colors() async {  // [CU-04] Listar colores
     try {
       final response = await _dio.get<List<dynamic>>('/colors');
       return (response.data ?? const [])
@@ -93,7 +93,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<SeasonItem>> seasons() async {
+  Future<List<SeasonItem>> seasons() async {  // [CU-04] Listar temporadas
     try {
       final response = await _dio.get<List<dynamic>>('/seasons');
       return (response.data ?? const [])
@@ -104,7 +104,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<ProductImage>> productImages(int productId) async {
+  Future<List<ProductImage>> productImages(int productId) async {  // [CU-04] Consultar imágenes de prenda
     try {
       final response = await _dio.get<List<dynamic>>(
         '/products/$productId/images',
@@ -117,7 +117,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<ProductVariant>> productVariants(
+  Future<List<ProductVariant>> productVariants(  // [CU-04] Consultar variantes y stock
     int productId, {
     int? branchId,
   }) async {
@@ -134,7 +134,7 @@ class CatalogRepository {
     }
   }
 
-  Future<List<ProductMeasurement>> productMeasurements(int productId) async {
+  Future<List<ProductMeasurement>> productMeasurements(int productId) async {  // [CU-18] Consultar medidas de patronaje para probador AR
     try {
       final response = await _dio.get<List<dynamic>>(
         '/products/$productId/measurements',

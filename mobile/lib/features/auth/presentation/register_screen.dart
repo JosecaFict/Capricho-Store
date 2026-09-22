@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+/// [CU-01] Pantalla de Registro de Nuevos Clientes
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 

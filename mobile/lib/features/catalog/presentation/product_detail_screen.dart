@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+/// [CU-04 / CU-18] Pantalla de Detalle de Prenda y Botón de Probador AR
 class ProductDetailScreen extends ConsumerStatefulWidget {
   const ProductDetailScreen({
     required this.productId,

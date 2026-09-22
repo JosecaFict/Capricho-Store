@@ -17,7 +17,7 @@ class AuthRepository {
   final Dio _dio;
   final TokenStorage _storage;
 
-  Future<AppUser> register({
+  Future<AppUser> register({  // [CU-01] Registro de cliente
     required String names,
     required String surnames,
     required String email,
@@ -43,7 +43,7 @@ class AuthRepository {
     }
   }
 
-  Future<AppUser> login(String email, String password) async {
+  Future<AppUser> login(String email, String password) async {  // [CU-01] Inicio de sesión (Login)
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/auth/login',
@@ -56,7 +56,7 @@ class AuthRepository {
     }
   }
 
-  Future<AppUser> me() async {
+  Future<AppUser> me() async {  // [CU-01] Consultar perfil y sesión activa
     try {
       final response = await _dio.get<Map<String, dynamic>>('/auth/me');
       return AppUser.fromJson(response.data!);
@@ -65,7 +65,7 @@ class AuthRepository {
     }
   }
 
-  Future<AppUser> updateProfile({
+  Future<AppUser> updateProfile({  // [CU-01] Actualizar datos del perfil
     required String names,
     required String surnames,
     String? phone,
@@ -87,7 +87,7 @@ class AuthRepository {
     }
   }
 
-  Future<AppUser> uploadAvatar(String filePath) async {
+  Future<AppUser> uploadAvatar(String filePath) async {  // [CU-01] Subir foto de perfil a Cloudinary
     try {
       final fileName = filePath.split('/').last.split(r'\').last;
       final formData = FormData.fromMap({
@@ -107,7 +107,7 @@ class AuthRepository {
     }
   }
 
-  Future<AppUser> deleteAvatar() async {
+  Future<AppUser> deleteAvatar() async {  // [CU-01] Eliminar foto de perfil
     try {
       final response = await _dio.delete<Map<String, dynamic>>('/auth/me/avatar');
       return AppUser.fromJson(response.data!);
@@ -119,7 +119,7 @@ class AuthRepository {
   Future<bool> hasSession() async => (await _storage.read()) != null;
   Future<void> logout() => _storage.clear();
 
-  Future<String> requestPasswordRecovery(String email) async {
+  Future<String> requestPasswordRecovery(String email) async {  // [CU-08] Solicitar código OTP
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/auth/password-recovery/request',
@@ -132,7 +132,7 @@ class AuthRepository {
     }
   }
 
-  Future<String> verifyPasswordRecoveryCode({
+  Future<String> verifyPasswordRecoveryCode({  // [CU-08] Verificar código OTP
     required String email,
     required String code,
   }) async {
@@ -147,7 +147,7 @@ class AuthRepository {
     }
   }
 
-  Future<String> resetPassword({
+  Future<String> resetPassword({  // [CU-08] Restablecer contraseña con token OTP
     required String resetToken,
     required String newPassword,
   }) async {

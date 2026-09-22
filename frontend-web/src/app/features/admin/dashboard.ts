@@ -523,6 +523,7 @@ interface DonutSegment {
     </div>
   `,
 })
+/** [CU-16] Dashboard Comercial y Métricas de Rendimiento */
 export class AdminDashboard implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly commerce = inject(CommerceService);

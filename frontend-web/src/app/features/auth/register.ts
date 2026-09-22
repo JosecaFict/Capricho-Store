@@ -113,6 +113,7 @@ import {
     </section>
   `,
 })
+/** [CU-01] Componente de Registro de Clientes */
 export class Register {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);

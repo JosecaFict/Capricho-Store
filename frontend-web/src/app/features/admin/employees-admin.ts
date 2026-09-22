@@ -172,6 +172,7 @@ import { AdminApiService, Entity } from './admin-api.service';
     }
   </div>`,
 })
+/** [CU-02] Administración de Personal, Empleados y Roles */
 export class EmployeesAdmin implements OnInit {
   private api = inject(AdminApiService);
   private errors = inject(ApiErrorService);

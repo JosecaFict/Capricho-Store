@@ -262,6 +262,7 @@ const EMPTY_PAGE: ProductPage = { items: [], page: 1, page_size: 12, total: 0, p
     </section>
   `,
 })
+/** [CU-04] Componente de Catálogo de Prendas con Filtros */
 export class Catalog {
   private readonly fb = inject(FormBuilder);
   private readonly catalog = inject(CatalogService);

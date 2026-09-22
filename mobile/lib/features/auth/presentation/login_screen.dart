@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+/// [CU-01] Pantalla de Inicio de Sesión (Login) y acceso a panel operativo
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 

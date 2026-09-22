@@ -363,6 +363,7 @@ function validSchedule(control: AbstractControl): ValidationErrors | null {
     }
   `,
 })
+/** [CU-03] Administración de Ciudades y Sucursales */
 export class BranchesAdmin implements OnInit, OnDestroy {
   private readonly api = inject(AdminApiService);
   private readonly fb = inject(FormBuilder);

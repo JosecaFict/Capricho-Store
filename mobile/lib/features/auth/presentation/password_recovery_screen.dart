@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 enum RecoveryStep { requestEmail, verifyCode, resetPassword, completed }
 
+/// [CU-08] Pantalla de Recuperación de Cuenta vía código OTP
 class PasswordRecoveryScreen extends ConsumerStatefulWidget {
   const PasswordRecoveryScreen({super.key});
 

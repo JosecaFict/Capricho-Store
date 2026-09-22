@@ -340,6 +340,7 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
     </section>
   `,
 })
+/** [CU-04 / CU-18] Detalle de Prenda y Probador Virtual */
 export class ProductDetail {
   private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);

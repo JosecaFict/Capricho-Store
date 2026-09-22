@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+/// [CU-10] Pantalla de Reservas de Prendas Presenciales (48h hábiles)
 class ReservationsScreen extends ConsumerWidget {
   const ReservationsScreen({super.key});
 
