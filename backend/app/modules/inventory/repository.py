@@ -201,6 +201,7 @@ class InventoryRepository:
                 Color.nombre,
                 Categoria.nombre,
                 weighted_cost,
+                Color.codigo_hex,
             )
             .join(Sucursal, Sucursal.id_sucursal == InventarioSucursal.id_sucursal)
             .join(VarianteProducto, VarianteProducto.id_variante == InventarioSucursal.id_variante)

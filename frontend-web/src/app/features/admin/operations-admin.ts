@@ -1500,58 +1500,195 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
         <p>Stock físico, reservado y disponible por variante y sucursal.</p>
       </div>
     </header>
-    <form [formGroup]="filters" (ngSubmit)="load()" class="admin-filterbar">
-      <label class="field"
-        ><span>Sucursal</span
-        ><select formControlName="sucursal">
-          <option value="">Todas las sucursales</option>
-          @for (branch of branches(); track branch['id_sucursal']) {
-            <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
-          }
-        </select></label
-      ><label class="check-field"
-        ><input type="checkbox" formControlName="stock_bajo" /> Solo stock bajo</label
-      ><label class="check-field"
-        ><input type="checkbox" formControlName="agotado" /> Solo agotado</label
-      ><button class="button button--secondary">Aplicar</button>
-    </form>
+
+    <!-- Métricas Rápidas KPI -->
+    <div class="inventory-kpi-bar">
+      <div class="inventory-kpi-card">
+        <small>Total Variantes</small>
+        <strong>{{ counts().total }}</strong>
+      </div>
+      <div class="inventory-kpi-card">
+        <small>Stock Físico</small>
+        <strong class="text-blue">{{ totalFisico() }}</strong>
+      </div>
+      <div class="inventory-kpi-card">
+        <small>Stock Reservado</small>
+        <strong [class.text-amber]="totalReservado() > 0">{{ totalReservado() }}</strong>
+      </div>
+      <div class="inventory-kpi-card">
+        <small>Alertas Stock Bajo</small>
+        <strong [class.text-amber]="counts().lowStock > 0">{{ counts().lowStock }}</strong>
+      </div>
+      <div class="inventory-kpi-card">
+        <small>Agotados</small>
+        <strong [class.text-red]="counts().outOfStock > 0">{{ counts().outOfStock }}</strong>
+      </div>
+    </div>
+
+    <!-- Barra de Filtros Reactiva -->
+    <div class="inventory-toolbar">
+      <div class="inventory-toolbar__controls">
+        <label class="field field--branch">
+          <span>Sucursal</span>
+          <select [value]="branchFilter() ?? ''" (change)="onBranchChange($event)">
+            <option value="">Todas las sucursales</option>
+            @for (branch of branches(); track branch['id_sucursal']) {
+              <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+            }
+          </select>
+        </label>
+
+        <div class="field field--search">
+          <span>Búsqueda rápida</span>
+          <div class="search-input-wrap">
+            <input
+              type="text"
+              [value]="searchTerm()"
+              (input)="onSearchInput($event)"
+              placeholder="Buscar por prenda, SKU, talla o color..."
+            />
+            @if (searchTerm()) {
+              <button
+                type="button"
+                class="search-clear-btn"
+                (click)="clearSearch()"
+                title="Borrar búsqueda"
+              >
+                ✕
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Pastillas de Selección de Filtro -->
+      <div class="inventory-chips-row">
+        <div class="inventory-chips-group">
+          <button
+            type="button"
+            class="inventory-chip"
+            [class.is-active]="activeFilter() === 'ALL'"
+            (click)="setFilter('ALL')"
+          >
+            <span>Todos</span>
+            <span class="chip-badge">{{ counts().total }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="inventory-chip inventory-chip--warning"
+            [class.is-active]="activeFilter() === 'LOW_STOCK'"
+            (click)="setFilter('LOW_STOCK')"
+          >
+            <span>⚠️ Stock bajo</span>
+            <span class="chip-badge">{{ counts().lowStock }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="inventory-chip inventory-chip--danger"
+            [class.is-active]="activeFilter() === 'OUT_OF_STOCK'"
+            (click)="setFilter('OUT_OF_STOCK')"
+          >
+            <span>🚫 Agotados</span>
+            <span class="chip-badge">{{ counts().outOfStock }}</span>
+          </button>
+        </div>
+
+        @if (hasActiveFilters()) {
+          <button type="button" class="inventory-reset-btn" (click)="resetFilters()">
+            ✕ Restablecer filtros
+          </button>
+        }
+      </div>
+    </div>
+
     @if (message()) {
       <div class="notice" [class.notice--error]="error()">{{ message() }}</div>
     }
+
+    <!-- Tabla de Existencias -->
     <div class="admin-table-wrap">
       <table>
         <thead>
           <tr>
             <th>Producto</th>
+            <th class="cell-center">Talla</th>
+            <th>Color</th>
             <th>Sucursal</th>
-            <th>Físico</th>
-            <th>Reservado</th>
-            <th>Disponible</th>
-            <th>Mínimo</th>
+            <th class="cell-center">Físico</th>
+            <th class="cell-center">Reservado</th>
+            <th class="cell-center">Disponible</th>
+            <th class="cell-center">Mínimo</th>
             <th>Estado</th>
-            <th>Acción</th>
+            <th class="cell-right">Acción</th>
           </tr>
         </thead>
         <tbody>
-          @for (i of items(); track i['id_inventario']) {
+          @for (i of filteredItems(); track i['id_inventario']) {
             <tr>
-              <td>
-                <strong>{{ i['producto'] }}</strong
-                ><small>{{ i['sku'] }} · {{ i['talla'] }} · {{ i['color'] }}</small>
+              <td class="product-cell">
+                <strong>{{ i['producto'] }}</strong>
+                <small class="sku-tag">SKU: {{ i['sku'] }}</small>
               </td>
-              <td>{{ i['sucursal'] }}</td>
-              <td>{{ i['stock_fisico'] }}</td>
-              <td>{{ i['stock_reservado'] }}</td>
-              <td>{{ i['stock_disponible'] }}</td>
-              <td>{{ i['stock_minimo'] }}</td>
-              <td>
-                <span class="status-chip">{{ i['estado_stock'] }}</span>
+              <td class="cell-center">
+                <span class="size-pill">{{ i['talla'] }}</span>
               </td>
-              <td class="admin-row-actions">
+              <td>
+                <div class="color-cell">
+                  <span
+                    class="color-swatch"
+                    [style.backgroundColor]="getColorHex(i)"
+                    [class.color-swatch--light]="isLightColor(getColorHex(i))"
+                  ></span>
+                  <span class="color-name">{{ i['color'] }}</span>
+                </div>
+              </td>
+              <td class="branch-cell">{{ i['sucursal'] }}</td>
+              <td class="cell-center num-cell">{{ i['stock_fisico'] }}</td>
+              <td class="cell-center num-cell" [class.num-cell--reserved]="i['stock_reservado'] > 0">
+                {{ i['stock_reservado'] }}
+              </td>
+              <td class="cell-center num-cell num-cell--available">
+                <strong>{{ i['stock_disponible'] }}</strong>
+              </td>
+              <td class="cell-center num-cell num-cell--min">
+                {{ i['stock_minimo'] }}
+              </td>
+              <td>
+                <span
+                  class="status-chip"
+                  [class]="'status-chip--' + (i['estado_stock'] | lowercase)"
+                >
+                  {{ i['estado_stock'] }}
+                </span>
+              </td>
+              <td class="cell-right">
                 @if (canMove()) {
-                  <button (click)="select(i)">Gestionar</button>
+                  <button
+                    type="button"
+                    class="button button--secondary button--compact"
+                    (click)="select(i)"
+                  >
+                    Gestionar
+                  </button>
                 } @else {
-                  <span>Solo lectura</span>
+                  <span class="readonly-tag">Solo lectura</span>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="10" class="empty-state-cell">
+                <p>No se encontraron existencias con los filtros aplicados.</p>
+                @if (hasActiveFilters()) {
+                  <button
+                    type="button"
+                    class="button button--secondary button--compact"
+                    (click)="resetFilters()"
+                  >
+                    Restablecer filtros
+                  </button>
                 }
               </td>
             </tr>
@@ -1559,80 +1696,314 @@ export class ReceiptsAdmin extends BaseAdmin implements OnInit {
         </tbody>
       </table>
     </div>
+
+    <!-- Modal Centrado de Gestión -->
     @if (selected(); as i) {
-      <section class="admin-editor">
-        <header>
-          <h2>{{ i['producto'] }} · {{ i['sku'] }}</h2>
-          <button class="button button--quiet" (click)="selected.set(null)">Cerrar</button>
-        </header>
-        <div class="admin-detail-grid">
-          <form [formGroup]="minimum" (ngSubmit)="saveMinimum(i)" class="admin-inline-form">
-            <label class="field"
-              ><span>Stock mínimo</span
-              ><input type="number" min="0" formControlName="stock_minimo" /></label
-            ><button class="button button--secondary">Actualizar</button>
-          </form>
-          <form
-            [formGroup]="adjustment"
-            (ngSubmit)="adjust(i)"
-            class="admin-form-grid admin-form-grid--two"
-          >
-            <label class="field"
-              ><span>Tipo</span
-              ><select formControlName="tipo">
-                <option>AJUSTE_POSITIVO</option>
-                <option>AJUSTE_NEGATIVO</option>
-              </select></label
-            ><label class="field"
-              ><span>Cantidad</span
-              ><input type="number" min="1" formControlName="cantidad" /></label
-            ><label class="field field--wide"
-              ><span>Motivo obligatorio</span><input formControlName="motivo" /></label
-            ><button class="button button--primary" [disabled]="adjustment.invalid">
-              Registrar ajuste
+      <div class="admin-modal-backdrop" (click)="selected.set(null)">
+        <div
+          class="admin-modal-card"
+          style="max-width: 580px; width: 100%;"
+          (click)="$event.stopPropagation()"
+        >
+          <header class="admin-modal-header">
+            <div>
+              <span class="admin-modal-kicker">Gestión de Inventario</span>
+              <h2 class="admin-modal-title">{{ i['producto'] }}</h2>
+              <div class="modal-variant-meta">
+                <span class="size-pill">{{ i['talla'] }}</span>
+                <span class="color-cell">
+                  <span
+                    class="color-swatch"
+                    [style.backgroundColor]="getColorHex(i)"
+                    [class.color-swatch--light]="isLightColor(getColorHex(i))"
+                  ></span>
+                  <span>{{ i['color'] }}</span>
+                </span>
+                <span class="sku-tag">SKU: {{ i['sku'] }}</span>
+                <span class="branch-tag">📍 {{ i['sucursal'] }}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="admin-modal-close"
+              (click)="selected.set(null)"
+              aria-label="Cerrar modal"
+            >
+              ✕
             </button>
-          </form>
+          </header>
+
+          <div class="admin-modal-body">
+            <!-- Stock actual consolidado -->
+            <div class="modal-stock-metrics">
+              <div class="stock-metric">
+                <small>Físico</small>
+                <strong>{{ i['stock_fisico'] }}</strong>
+              </div>
+              <div class="stock-metric">
+                <small>Reservado</small>
+                <strong [class.text-amber]="i['stock_reservado'] > 0">{{
+                  i['stock_reservado']
+                }}</strong>
+              </div>
+              <div class="stock-metric">
+                <small>Disponible</small>
+                <strong class="text-emerald">{{ i['stock_disponible'] }}</strong>
+              </div>
+              <div class="stock-metric">
+                <small>Mínimo</small>
+                <strong>{{ i['stock_minimo'] }}</strong>
+              </div>
+            </div>
+
+            <!-- Bloque 1: Stock Mínimo -->
+            <div class="modal-section-card">
+              <div class="modal-section-header">
+                <h3>Configurar Stock Mínimo</h3>
+                <p>Define el umbral para disparar la alerta STOCK_BAJO en esta sucursal.</p>
+              </div>
+              <form [formGroup]="minimum" (ngSubmit)="saveMinimum(i)" class="admin-inline-form">
+                <label class="field">
+                  <span>Stock mínimo</span>
+                  <input type="number" min="0" formControlName="stock_minimo" />
+                </label>
+                <button class="button button--secondary">Actualizar</button>
+              </form>
+            </div>
+
+            <!-- Bloque 2: Ajustes de Inventario -->
+            <div class="modal-section-card">
+              <div class="modal-section-header">
+                <h3>Registrar Ajuste de Inventario</h3>
+                <p>
+                  El stock físico no se edita directamente; el ajuste genera un movimiento
+                  inmutable auditado.
+                </p>
+              </div>
+              <form
+                [formGroup]="adjustment"
+                (ngSubmit)="adjust(i)"
+                class="admin-form-grid admin-form-grid--two"
+              >
+                <label class="field">
+                  <span>Tipo</span>
+                  <select formControlName="tipo">
+                    <option value="AJUSTE_POSITIVO">AJUSTE_POSITIVO (+)</option>
+                    <option value="AJUSTE_NEGATIVO">AJUSTE_NEGATIVO (-)</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Cantidad</span>
+                  <input type="number" min="1" formControlName="cantidad" />
+                </label>
+                <label class="field field--wide">
+                  <span>Motivo obligatorio</span>
+                  <input
+                    formControlName="motivo"
+                    placeholder="Ej: Conteo físico / Deterioro de prenda"
+                  />
+                </label>
+                <button class="button button--primary" [disabled]="adjustment.invalid">
+                  Registrar ajuste
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <footer class="admin-modal-footer">
+            <button
+              type="button"
+              class="admin-modal-btn admin-modal-btn--secondary"
+              (click)="selected.set(null)"
+            >
+              Cerrar
+            </button>
+          </footer>
         </div>
-        <p class="admin-help">
-          El stock físico no se edita directamente; el ajuste genera un movimiento inmutable.
-        </p>
-      </section>
+      </div>
     }
   </div>`,
 })
 export class InventoryAdmin extends BaseAdmin implements OnInit {
   private permissions = inject(PermissionService);
   canMove = () => this.permissions.has('inventario.movimiento');
+
   items = signal<Entity[]>([]);
   branches = signal<Entity[]>([]);
   selected = signal<Entity | null>(null);
-  filters = this.fb.group({
-    sucursal: [null as number | null],
-    stock_bajo: [false],
-    agotado: [false],
-  });
+
+  branchFilter = signal<number | null>(null);
+  activeFilter = signal<'ALL' | 'LOW_STOCK' | 'OUT_OF_STOCK'>('ALL');
+  searchTerm = signal<string>('');
+
   minimum = this.fb.group({ stock_minimo: [0, [Validators.required, Validators.min(0)]] });
   adjustment = this.fb.group({
     tipo: ['AJUSTE_POSITIVO', Validators.required],
     cantidad: [1, [Validators.required, Validators.min(1)]],
     motivo: ['', Validators.required],
   });
+
+  counts = computed(() => {
+    const list = this.items();
+    let lowStock = 0;
+    let outOfStock = 0;
+    for (const item of list) {
+      if (item['estado_stock'] === 'STOCK_BAJO') lowStock++;
+      else if (item['estado_stock'] === 'AGOTADO') outOfStock++;
+    }
+    return {
+      total: list.length,
+      lowStock,
+      outOfStock,
+    };
+  });
+
+  totalFisico = computed(() => {
+    return this.items().reduce((acc, i) => acc + (Number(i['stock_fisico']) || 0), 0);
+  });
+
+  totalReservado = computed(() => {
+    return this.items().reduce((acc, i) => acc + (Number(i['stock_reservado']) || 0), 0);
+  });
+
+  hasActiveFilters = computed(() => {
+    return (
+      this.branchFilter() !== null ||
+      this.activeFilter() !== 'ALL' ||
+      this.searchTerm().trim().length > 0
+    );
+  });
+
+  filteredItems = computed(() => {
+    const list = this.items();
+    const filter = this.activeFilter();
+    const q = this.searchTerm().trim().toLowerCase();
+
+    return list.filter((i) => {
+      if (filter === 'LOW_STOCK' && i['estado_stock'] !== 'STOCK_BAJO') return false;
+      if (filter === 'OUT_OF_STOCK' && i['estado_stock'] !== 'AGOTADO') return false;
+
+      if (q) {
+        const prod = String(i['producto'] ?? '').toLowerCase();
+        const sku = String(i['sku'] ?? '').toLowerCase();
+        const talla = String(i['talla'] ?? '').toLowerCase();
+        const col = String(i['color'] ?? '').toLowerCase();
+        const suc = String(i['sucursal'] ?? '').toLowerCase();
+        if (
+          !prod.includes(q) &&
+          !sku.includes(q) &&
+          !talla.includes(q) &&
+          !col.includes(q) &&
+          !suc.includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  });
+
   ngOnInit() {
     this.loadBranches();
     this.load();
   }
+
   load() {
-    this.api.list('inventory', this.filters.getRawValue()).subscribe({
+    const params: Record<string, any> = {};
+    if (this.branchFilter() !== null) {
+      params['sucursal'] = this.branchFilter();
+    }
+    this.api.list('inventory', params).subscribe({
       next: (inventory) => this.items.set(inventory),
       error: (e) => this.fail(e),
     });
   }
+
   private loadBranches() {
     this.api.list('branches').subscribe({
       next: (branches) => this.branches.set(branches),
       error: (e) => this.fail(e),
     });
   }
+
+  onBranchChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const val = target.value ? Number(target.value) : null;
+    this.branchFilter.set(val);
+    this.load();
+  }
+
+  onSearchInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.searchTerm.set(target.value);
+  }
+
+  clearSearch() {
+    this.searchTerm.set('');
+  }
+
+  setFilter(filter: 'ALL' | 'LOW_STOCK' | 'OUT_OF_STOCK') {
+    if (this.activeFilter() === filter && filter !== 'ALL') {
+      this.activeFilter.set('ALL');
+    } else {
+      this.activeFilter.set(filter);
+    }
+  }
+
+  resetFilters() {
+    this.branchFilter.set(null);
+    this.activeFilter.set('ALL');
+    this.searchTerm.set('');
+    this.load();
+  }
+
+  getColorHex(item: Entity): string {
+    if (item['codigo_hex']) {
+      return item['codigo_hex'];
+    }
+    const colorName = String(item['color'] ?? '')
+      .trim()
+      .toLowerCase();
+    const map: Record<string, string> = {
+      blanco: '#ffffff',
+      negro: '#18181b',
+      azul: '#2563eb',
+      rojo: '#ef4444',
+      verde: '#10b981',
+      amarillo: '#f59e0b',
+      gris: '#64748b',
+      rosa: '#ec4899',
+      rosado: '#ec4899',
+      beige: '#e2d9cc',
+      cafe: '#78350f',
+      marrón: '#78350f',
+      marron: '#78350f',
+      morado: '#8b5cf6',
+      naranja: '#f97316',
+      celeste: '#38bdf8',
+      marino: '#1e3a8a',
+    };
+    return map[colorName] || '#94a3b8';
+  }
+
+  isLightColor(hex: string): boolean {
+    if (!hex) return true;
+    const clean = hex.replace('#', '');
+    if (clean.length === 3) {
+      const r = parseInt(clean[0] + clean[0], 16);
+      const g = parseInt(clean[1] + clean[1], 16);
+      const b = parseInt(clean[2] + clean[2], 16);
+      return (r * 299 + g * 587 + b * 114) / 1000 > 185;
+    }
+    if (clean.length === 6) {
+      const r = parseInt(clean.substring(0, 2), 16);
+      const g = parseInt(clean.substring(2, 4), 16);
+      const b = parseInt(clean.substring(4, 6), 16);
+      return (r * 299 + g * 587 + b * 114) / 1000 > 185;
+    }
+    return false;
+  }
+
   select(i: Entity) {
     this.api.get(`inventory/${i['id_inventario']}`).subscribe({
       next: (detail) => {
@@ -1642,6 +2013,7 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
       error: (e) => this.fail(e),
     });
   }
+
   saveMinimum(i: Entity) {
     this.api
       .patch(`inventory/${i['id_inventario']}/minimum-stock`, this.minimum.getRawValue())
@@ -1653,6 +2025,7 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
         error: (e) => this.fail(e),
       });
   }
+
   adjust(i: Entity) {
     this.api
       .post(`inventory/${i['id_inventario']}/adjustments`, this.adjustment.getRawValue())

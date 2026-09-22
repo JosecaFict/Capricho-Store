@@ -188,6 +188,7 @@ class InventoryResponse(ORMResponse):
     stock_disponible: int
     estado_stock: Literal["DISPONIBLE", "STOCK_BAJO", "AGOTADO"]
     costo_promedio_ponderado: Decimal | None
+    codigo_hex: str | None = None
 
 
 class MinimumStockUpdate(BaseModel):

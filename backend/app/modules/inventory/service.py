@@ -727,6 +727,7 @@ class InventoryService:
             stock_disponible=available,
             estado_stock=state,
             costo_promedio_ponderado=row[7],
+            codigo_hex=row[8] if len(row) > 8 else None,
         )
 
     async def _movement_response(self, movement: MovimientoInventario) -> MovementResponse:
