@@ -44,20 +44,31 @@
     - Estado & Repositorio: `mobile/lib/features/auth/presentation/auth_controller.dart`, `mobile/lib/features/auth/data/auth_repository.dart`
   - **Web (Angular):**
     - Componentes: `frontend-web/src/app/features/auth/login.ts`, `register.ts`
-    - Servicio: `frontend-web/src/app/core/auth/auth.service.ts`
+    - Servicio & Guards: `frontend-web/src/app/core/auth/auth.service.ts`, `auth.guard.ts`
 - **Ruta Backend:**
   - Router: `backend/app/modules/auth/router.py` (`POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `GET /api/v1/auth/me`, `PATCH /api/v1/auth/profile`, `POST /api/v1/auth/avatar`)
   - Servicio: `backend/app/modules/auth/service.py` (`AuthService`)
   - Seguridad & Throttler: `backend/app/modules/auth/throttler.py` (`RedisLoginThrottler`)
   - Repositorio: `backend/app/modules/auth/repository.py` (`AuthRepository`)
   - Modelos DB: `Usuario`, `Rol`, `UsuarioRol` en `backend/app/modules/auth/models.py`.
-- **Lógica de Negocio Explicada:**
-  1. **Registro:** Valida unicidad de correo y CI en PostgreSQL; aplica hashing de contraseña con **Argon2id** y asigna el rol base `CLIENTE`.
-  2. **Login & Seguridad Progresiva:** Verifica credenciales contra el hash. Si falla:
-     - 3er fallo: Activa pausa de seguridad de **1 minuto** (HTTP 429).
-     - 6to fallo: Activa pausa de seguridad de **5 minutos** (HTTP 429).
-     - 9no fallo: Bloquea permanentemente la cuenta en PostgreSQL (`Usuario.estado = 'BLOQUEADO'`) y responde HTTP 403.
-  3. **Sesión:** Emite token **JWT (HS256)** con expiración y registra IP, User-Agent y timestamp en `AuditContext`.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL / Redis):**
+  1. **Registro:** Valida unicidad de correo y cédula (CI) en PostgreSQL; aplica hashing criptográfico con **Argon2id** (resistente a GPUs) y asigna automáticamente el rol base `CLIENTE`.
+  2. **Login & Seguridad Progresiva:** Verifica credenciales contra el hash Argon2id. Si la contraseña no coincide, invoca `RedisLoginThrottler`:
+     - Al 3er fallo consecutivo: Activa pausa de seguridad de **1 minuto** (responde HTTP 429 con cabecera `Retry-After: 60`).
+     - Al 6to fallo consecutivo: Activa pausa de seguridad de **5 minutos** (responde HTTP 429 con `Retry-After: 300`).
+     - Al 9no fallo consecutivo: Bloquea la cuenta en PostgreSQL (`Usuario.estado = 'BLOQUEADO'`) y responde HTTP 403 Forbidden.
+  3. **Sesión & Auditoría:** Al autenticar con éxito, emite un token **JWT (HS256)** con expiración y registra en `AuditContext` la IP cliente, User-Agent y timestamp.
+  4. **Perfil y Avatar:** `PATCH /profile` actualiza datos personales; `POST /avatar` sube la foto a Cloudinary y guarda la URL optimizada en la BD.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Formularios Reactivos:** Validación síncrona y asíncrona de email corporativo/personal, formato de CI y fortaleza de contraseña en tiempo real.
+  2. **Interceptor HTTP:** `auth.interceptor.ts` inyecta automáticamente el encabezado `Authorization: Bearer <token>` en todas las peticiones al backend.
+  3. **Control de Navegación & RBAC:** `AuthService` almacena el token en `localStorage` y decodifica roles/permisos. Los Guards (`adminGuard`, `roleGuard`) redirigen según el perfil: Administrador y Encargado van a `/admin/dashboard`, mientras que Cajero va directo al punto de venta `/admin/pos`.
+  4. **Manejo de Errores Visuales:** Si el backend responde HTTP 429, activa un contador regresivo visible en el botón; si responde HTTP 403 (bloqueo), muestra un modal de advertencia indicando acudir a restablecimiento de contraseña.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Gestión de Estado & Almacenamiento Seguro:** Usa Riverpod (`AuthController`) y guarda el JWT en `FlutterSecureStorage` (iOS Keychain / Android EncryptedSharedPreferences).
+  2. **Experiencia de Autenticación Fluida:** Teclados contextuales (email/numeric), visibilidad de contraseña con icono animado y feedback háptico en botones.
+  3. **Manejo Reactivo de Bloqueos:** Captura los códigos HTTP 429 y muestra un diálogo flotante con cuenta regresiva en segundos (cooldown); si la cuenta es bloqueada (HTTP 403), despliega botón directo hacia recuperación por código OTP.
+  4. **Edición de Perfil & Foto:** Permite capturar selfie o elegir foto de galería mediante `image_picker`, recorta la imagen y la envía como multipart/form-data al backend.
 
 ---
 
@@ -72,10 +83,19 @@
   - Servicio: `backend/app/modules/employees/service.py` (`EmployeeService`)
   - Repositorio: `backend/app/modules/employees/repository.py` (`EmployeeRepository`)
   - Modelos DB: `Empleado`, `Rol`, `Permiso`, `RolPermiso`, `UsuarioPermiso`, `Sucursal` en `backend/app/modules/auth/models.py`.
-- **Lógica de Negocio Explicada:**
-  1. Permite crear empleados vinculados a una sucursal específica con un cargo y rol operativo (`ENCARGADO_SUCURSAL`, `CAJERO`, `AUXILIAR_INVENTARIO`).
-  2. **RBAC Dinámico:** La función `resolve_effective_permissions` une los permisos otorgados por el rol (`RolPermiso`) y aplica sobreescrituras individuales (`UsuarioPermiso.otorgado = True/False`).
-  3. Control de concurrencia y auditoría: solo un administrador activo con permiso `empleados.gestionar` puede dar de alta o cambiar el estado del personal.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Autorización Granular:** Endpoints custodiados por el decorador `require_permission("empleados.gestionar")`.
+  2. **Alta de Empleado:** Vincula un usuario a una `Sucursal` física específica, define su cargo y le asigna un rol operativo (`ENCARGADO_SUCURSAL`, `CAJERO`, `AUXILIAR_INVENTARIO`).
+  3. **Motor RBAC Dinámico:** La función `resolve_effective_permissions` une los permisos base otorgados por el rol (`RolPermiso`) y aplica sobreescrituras individuales (`UsuarioPermiso.otorgado = True/False`), permitiendo conceder o revocar permisos específicos a un usuario sin crear un nuevo rol.
+  4. **Ciclo de Vida:** Modifica el estado del empleado (`ACTIVO`, `SUSPENDIDO`, `INACTIVO`) en una sola transacción atómica invalidando sesiones previas si es dado de baja.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Panel Maestro de Empleados:** Tabla paginada con filtros en tiempo real por sucursal, rol y estado de actividad.
+  2. **Modal Reactivo de Alta/Edición:** Formulario con selector dinámico de sucursales físicas cargadas desde la BD.
+  3. **Matriz Visual de Permisos:** Árbol interactivo con casillas de verificación que muestra qué permisos hereda del rol y cuáles han sido personalizados para ese empleado.
+  4. **Acciones Rápidas:** Botones contextuales para suspender o reactivar personal con modal de confirmación y feedback tipo toast.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Visualización Ejecutiva:** La administración pesada de personal se delega a la Web; en la app móvil, el administrador tiene una vista informativa de su propio rol y privilegios en `admin_profile_screen.dart`.
+  2. **Restricción de Acceso:** La app evalúa los claims del JWT al iniciar; si el usuario no tiene rol administrativo, oculta los accesos a configuraciones de personal.
 
 ---
 
@@ -84,15 +104,23 @@
 - **Prioridad:** Media
 - **Ruta Frontend:**
   - **Web (Angular):** `frontend-web/src/app/features/admin/branches-admin.ts` (con integración de mapas Leaflet y geocodificación GPS).
+  - **Móvil (Flutter):** `mobile/lib/features/commerce/presentation/branch_selector_modal.dart`
 - **Ruta Backend:**
   - Router: `backend/app/modules/catalog/router.py` (`GET /api/v1/branches`, `GET /api/v1/branches/admin`, `POST /api/v1/branches`, `PATCH /api/v1/branches/{id}`, `GET /api/v1/cities`, `POST /api/v1/cities`)
   - Servicio: `backend/app/modules/catalog/service.py` (`list_branches_admin`, `create_branch`, `update_branch`)
   - Repositorio: `backend/app/modules/catalog/repository.py`
   - Modelos DB: `Ciudad`, `Sucursal` en `backend/app/modules/auth/models.py`.
-- **Lógica de Negocio Explicada:**
-  1. Modela las sedes físicas de la cadena Capricho Store.
-  2. Cada sucursal tiene ciudad, dirección, teléfono, coordenadas geográficas (`latitud`, `longitud`), horarios de atención (`hora_apertura`, `hora_cierre`) y estado activo.
-  3. Las coordenadas son fundamentales para el cálculo de distancias y costo de envío a domicilio en el módulo de comercio.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Modelado Geográfico:** Almacena ciudades y sedes físicas con dirección textual, teléfono, horarios (`hora_apertura`, `hora_cierre`) y coordenadas GPS precisas (`latitud`, `longitud`).
+  2. **Pivote Logístico:** Las coordenadas de la sucursal actúan como origen obligatorio para el cálculo de flete a domicilio y despacho de pedidos.
+  3. **Filtro de Estado:** Expone endpoint público filtrando solo sucursales activas para clientes, y endpoint administrativo con todas las sedes para el Administrador.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Geolocalización con Leaflet:** Mapa interactivo sobre OpenStreetMap que permite al administrador buscar una dirección o arrastrar un marcador (*pin*) para capturar automáticamente latitud y longitud.
+  2. **Configuración de Operación:** Selectores de horarios de apertura y cierre, y conmutador visual para habilitar o cerrar temporalmente una sucursal.
+  3. **Listado en Tarjetas:** Visualización en cuadrícula con métricas rápidas de empleados e inventario asignado a cada tienda.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Selector de Sucursal para Retiro y Reservas:** Modal con lista de tiendas activas ordenadas por cercanía geográfica con respecto al GPS del celular del cliente.
+  2. **Ficha de Tienda:** Muestra horarios, número de teléfono con enlace para llamada directa y botón para abrir la ruta en Google Maps o Apple Maps.
 
 ---
 
@@ -110,10 +138,18 @@
   - Servicio: `backend/app/modules/catalog/service.py` (`CatalogService`)
   - Repositorio: `backend/app/modules/catalog/repository.py` (`CatalogRepository`)
   - Modelos DB: `Producto`, `Categoria`, `Marca`, `Coleccion`, `Variante`, `ImagenProducto`, `GuiaTallas`.
-- **Lógica de Negocio Explicada:**
-  1. Filtra prendas por categoría, género, rango de precios, talla, color y disponibilidad en tiempo real.
-  2. Retorna las variantes de cada prenda con sus imágenes en Cloudinary, stock agregado y precios promocionales si existe una campaña activa.
-  3. Entrega la tabla de medidas corporales (`GuiaTallas`) para orientar la compra y alimentar el probador virtual.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Búsqueda Facetada:** Filtra prendas combinando múltiples criterios (categoría, género, rango de precios, talla, color, marca y disponibilidad de existencias).
+  2. **Paginación & Optimización:** Paginación por cursor/offset con carga diferida (*lazy loading*) de variantes e imágenes de Cloudinary.
+  3. **Precios Dinámicos Promocionales:** Cruza en tiempo real el precio base con promociones y campañas activas, devolviendo el precio de oferta si aplica.
+  4. **Metadatos Antropométricos:** `GET /products/{id}` entrega la tabla de patronaje (`GuiaTallas`) con medidas en cm requeridas por el probador virtual AR.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Catálogo E-commerce:** Cuadrícula responsiva con filtros laterales, barra de búsqueda con operador *debounce* (espera 300ms antes de emitir la consulta) y selector de ordenamiento (precio ascendente/descendente, novedades).
+  2. **Detalle de Prenda:** Galería de fotos con zoom al pasar el ratón, selector de color y talla, y visualización de stock restante.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Navegación Táctil a 60 FPS:** `catalog_screen.dart` con scroll infinito, chips horizontales para filtrar por categoría y barra de búsqueda retráctil con animación.
+  2. **Ficha de Producto de Alto Impacto:** Carrusel interactivo de fotografías en WebP usando `CachedNetworkImage`, selector de tallas que deshabilita las que no tienen stock y muestra etiquetas tipo *"¡Solo quedan 2!"*.
+  3. **Integración con Espejo AR:** Botón destacado *"Probar en Espejo AR"* que transfiere los metadatos de la prenda a la cámara frontal.
 
 ---
 
@@ -122,15 +158,24 @@
 - **Prioridad:** Alta
 - **Ruta Frontend:**
   - **Web (Angular):** `frontend-web/src/app/features/admin/catalog-admin.ts`
+  - **Móvil (Flutter):** `mobile/lib/features/catalog/presentation/barcode_scanner_modal.dart`
 - **Ruta Backend:**
   - Router: `backend/app/modules/catalog/router.py` (`POST /api/v1/products`, `PATCH /api/v1/products/{id}`, `POST /api/v1/products/{id}/variants`, `POST /api/v1/products/{id}/images`)
   - Servicio: `backend/app/modules/catalog/service.py`
   - Integración Cloudinary: `backend/app/integrations/cloudinary.py`
   - Repositorio: `backend/app/modules/catalog/repository.py`
-- **Lógica de Negocio Explicada:**
-  1. CRUD maestro de prendas de vestir: creación de productos con código SKU, nombre, descripción, marca y categoría.
-  2. Generación de matriz de variantes combinando tallas (XS, S, M, L, XL) y colores con su respectivo código de barras.
-  3. Subida directa de fotografías a **Cloudinary** con optimización automática de formato (`WebP`) y resolución.
+  - Modelos DB: `Producto`, `Variante`, `ImagenProducto`, `GuiaTallas`.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL / Cloudinary):**
+  1. **CRUD Maestro de Prendas:** Crea productos con nombre, descripción, SKU base, género, categoría y marca.
+  2. **Generador de Matriz de Variantes:** Genera automáticamente registros de `Variante` cruzando tallas (XS a XL) con colores, asignando códigos de barra EAN-13 únicos.
+  3. **Pipeline Multimedia Cloudinary:** Sube imágenes al almacenamiento CDN de Cloudinary, optimizando el formato a WebP y almacenando la URL pública para el catálogo y la versión procesable para el probador AR.
+  4. **Patronaje Textil:** Asocia medidas anatómicas en centímetros (ancho de hombros, pecho, cintura) en `GuiaTallas`.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Administrador de Catálogo:** Tabla con paginación, filtros de búsqueda y previsualización de imágenes miniaturas.
+  2. **Carga Drag & Drop:** Zona para arrastrar múltiples fotografías simultáneas con barra de progreso de subida hacia Cloudinary.
+  3. **Constructor Visual de Variantes:** Interfaz matricial con checkboxes para seleccionar combinaciones de tallas y colores, asignando precios y SKU en lote.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Consulta Rápida por Código de Barras:** Permite a los auxiliares escanear con la cámara del teléfono el código de barras físico de una prenda para abrir su ficha técnica y ver existencias en todas las sucursales.
 
 ---
 
@@ -143,11 +188,17 @@
   - Router: `backend/app/modules/inventory/router.py` (`/api/v1/suppliers`, `/api/v1/purchase-orders`, `/api/v1/receipts`)
   - Servicio: `backend/app/modules/inventory/service.py` (`InventoryService`)
   - Repositorio: `backend/app/modules/inventory/repository.py` (`InventoryRepository`)
-  - Modelos DB: `Proveedor`, `OrdenCompra`, `DetalleOrdenCompra`, `RecepcionCompra`, `Lote` en `backend/app/modules/inventory/models.py`.
-- **Lógica de Negocio Explicada:**
-  1. **Orden de Compra:** Se genera un pedido de abastecimiento a un proveedor con fecha estimada y costo unitario pactado.
-  2. **Recepción de Mercadería:** Al llegar el camión a la sucursal, el auxiliar registra la recepción física contrastando cantidades pedidas vs. recibidas.
-  3. **Ingreso a Stock y Lote:** Cada recepción genera un `Lote` y un `MovimientoInventario` de tipo `ENTRADA_COMPRA`, actualizando el costo promedio ponderado de la prenda.
+  - Modelos DB: `Proveedor`, `OrdenCompra`, `DetalleOrdenCompra`, `RecepcionCompra`, `Lote`, `MovimientoInventario`.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Ciclo de Abastecimiento:** Gestiona estados de la orden de compra: `BORRADOR` $\rightarrow$ `ENVIADA` $\rightarrow$ `RECEPCION_PARCIAL` $\rightarrow$ `RECEPCIONADA` $\rightarrow$ `CANCELADA`.
+  2. **Recepción Física y Lotes:** Al llegar mercadería a bodega, contrasta unidades solicitadas vs. recibidas, registra un nuevo `Lote` con código de trazabilidad y genera un `MovimientoInventario` de tipo `ENTRADA_COMPRA`.
+  3. **Cálculo de Costo Promedio Ponderado (CPP):** Actualiza el costo de adquisición de la prenda en base a las unidades ingresadas y el costo unitario pactado con el proveedor.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Gestor de Proveedores:** Formulario con razón social, NIT, teléfono, correo y contacto comercial.
+  2. **Generador de Órdenes de Compra:** Formulario maestro-detalle interactivo que permite añadir prendas del catálogo, seleccionar tallas, especificar cantidades y costo de compra.
+  3. **Módulo de Recepción de Mercadería:** Lista de verificación (*checklist*) para que el encargado de bodega marque las prendas recibidas en buen estado o reporte faltantes/daños con notas de observación.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. No aplica para clientes; el personal de almacén utiliza la web para compras formales, pudiendo utilizar el móvil únicamente como escáner de códigos de barras para verificar bultos recibidos.
 
 ---
 
@@ -156,18 +207,26 @@
 - **Prioridad:** Alta
 - **Ruta Frontend:**
   - **Web (Angular):** `frontend-web/src/app/features/admin/operations-admin.ts` (pestaña Transferencias).
+  - **Móvil (Flutter):** Notificaciones y consulta de existencias inter-tienda.
 - **Ruta Backend:**
   - Router: `backend/app/modules/inventory/router.py` (`POST /api/v1/transfers`, `GET /api/v1/transfers`, `PATCH /api/v1/transfers/{id}/status`)
   - Servicio: `backend/app/modules/inventory/service.py` (`create_transfer`, `update_transfer_status`)
   - Repositorio: `backend/app/modules/inventory/repository.py`
   - Modelos DB: `Transferencia`, `DetalleTransferencia`, `InventarioSucursal`, `MovimientoInventario`.
-- **Lógica de Negocio Explicada:**
-  1. Permite equilibrar stock entre tiendas (ej. enviar 10 pantalones de Sucursal Central a Sucursal Equipetrol).
-  2. Flujo de estados con doble verificación:
-     - `SOLICITADA` -> Se genera el pedido.
-     - `EN_TRANSITO` -> Se descuenta inmediatamente de la sucursal origen y queda en custodia logística.
-     - `RECIBIDA` -> La sucursal destino confirma la recepción física y se incrementa su stock local.
-     - `CANCELADA` -> Revierte la reserva de stock si la transferencia no se concreta.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Equilibrio de Stock:** Permite mover existencias entre tiendas (ej. trasladar 15 poleras de Sucursal Central a Sucursal Equipetrol).
+  2. **Transacciones Seguras en 3 Fases:**
+     - `SOLICITADA`: Se crea la solicitud de traspaso entre dos sucursales.
+     - `EN_TRANSITO`: Se descuenta atómicamente el stock físico de la sucursal de origen (`SALIDA_TRANSFERENCIA`) para que no pueda venderse localmente.
+     - `RECIBIDA`: La sucursal de destino confirma la llegada física, incrementando su stock (`ENTRADA_TRANSFERENCIA`).
+     - `CANCELADA`: Si se anula antes de enviarse, se reincorpora el stock al origen.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Tablero de Transferencias:** Muestra transferencias entrantes y salientes con badges de estado y filtros de fecha.
+  2. **Formulario de Despacho:** Valida que la sucursal de origen cuente con stock físico disponible antes de autorizar la salida.
+  3. **Botones de Flujo:** Botón *"Despachar Mercadería"* para el encargado emisor y *"Confirmar Recepción"* para el encargado receptor.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. Notificaciones push al encargado de la sucursal receptora avisándole que un cargamento está en camino.
+  2. Consulta rápida de inventario de otras tiendas en caso de que un cliente presencial pregunte por una prenda agotada en esa sucursal.
 
 ---
 
@@ -182,11 +241,19 @@
   - Servicio: `backend/app/modules/auth/password_recovery_service.py` (`PasswordRecoveryService`)
   - Almacén temporal: `backend/app/modules/auth/password_recovery.py` (`RedisPasswordResetStore`)
   - Correo Transaccional: `BrevoEmailClient` (API Brevo / Sendinblue).
-- **Lógica de Negocio Explicada:**
-  1. **Solicitud de Código:** El usuario ingresa su correo. Se genera un código OTP numérico criptográfico de 6 dígitos con vigencia de 10 minutos en Redis.
-  2. **Envío:** Se despacha plantilla HTML por Brevo con el código.
-  3. **Validación:** Se verifica el OTP limitando a 5 intentos máximos contra fuerza bruta.
-  4. **Restablecimiento & Desbloqueo:** Se genera un token de un solo uso (`reset_token`). Al ingresar la nueva contraseña, si la cuenta estaba en estado `BLOQUEADO` (por 9 fallos de login), se restablece automáticamente a `ACTIVO` y se limpian las llaves de castigo en Redis.
+- **⚙️ Lógica Backend (FastAPI / Redis / Brevo):**
+  1. **Generación de OTP:** Crea un código numérico aleatorio criptoseguro de 6 dígitos con vigencia estricta de 10 minutos en Redis (`SETEX otp:<email> 600 <codigo>`).
+  2. **Envío de Correo:** Despacha mediante la API de Brevo un correo con plantilla corporativa HTML conteniendo el código de 6 dígitos.
+  3. **Validación Antifraude:** Verifica el código ingresado; limita a 5 intentos máximos en Redis para frenar ataques de fuerza bruta. Al validar con éxito, destruye el OTP y emite un `reset_token` firmado de un solo uso.
+  4. **Restablecimiento & Desbloqueo Automático:** Al recibir la nueva contraseña, la cifra con Argon2id. Si el usuario estaba en estado `BLOQUEADO` (por haber fallado 9 logins previos), el sistema cambia su estado a `ACTIVO` y borra todas las restricciones de Redis.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Flujo en 2 Pasos:** Vista para ingresar correo y posterior vista para introducir el código y la nueva clave.
+  2. **Medidor de Seguridad:** Barra visual que evalúa la complejidad de la nueva contraseña (mayúsculas, números, caracteres especiales).
+  3. **Temporizador:** Muestra cuenta regresiva de 10 minutos y habilita el botón de reenvío al expirar.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Casillas Numéricas OTP:** 6 casillas individuales con autoenfoque progresivo y soporte para autocompletar desde el portapapeles.
+  2. **Temporizador Animado:** Cuenta regresiva con vibración háptica suave al recibir el código.
+  3. **Finalización Directa:** Al restablecer, muestra diálogo de confirmación y redirige automáticamente al login con el correo prellenado.
 
 ---
 
@@ -201,10 +268,18 @@
   - Servicio: `backend/app/modules/commerce/service.py` (`CommerceService`)
   - Georutas & Flete: `backend/app/modules/commerce/openrouteservice.py`
   - Modelos DB: `Carrito`, `ItemCarrito`, `DireccionCliente`.
-- **Lógica de Negocio Explicada:**
-  1. Carrito sincronizado en base de datos: permite que el cliente agregue prendas desde la app móvil o web y se mantengan persistentes.
-  2. Valida stock en tiempo real antes de agregar prendas.
-  3. **Cotización de Entrega:** Si el cliente elige envío a domicilio, el sistema calcula la distancia exacta en kilómetros desde la sucursal más cercana hasta las coordenadas de la dirección del cliente usando la API de **OpenRouteService** (con respaldo de fórmula de Haversine) para tarifar el envío.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL / OpenRouteService):**
+  1. **Persistencia Multiplataforma:** El carrito se sincroniza en PostgreSQL por `usuario_id`, de modo que prendas añadidas desde el celular aparecen en la web y viceversa.
+  2. **Validación de Existencias en Vivo:** Verifica disponibilidad real de cada variante al momento de añadir o cambiar cantidades.
+  3. **Cotización de Entrega Inteligente:** Endpoint `POST /quote-delivery` calcula la distancia exacta en km entre las coordenadas GPS de la dirección del cliente y la sucursal más cercana usando la API de **OpenRouteService** (con fallback geodésico Haversine), calculando la tarifa de envío según la distancia.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Mini-Cart y Vista Principal:** Drawer lateral deslizable al añadir productos y vista completa `/cart`.
+  2. **Gestión de Cantidades:** Controles reactivos con recálculo instantáneo de subtotales, descuentos promocionales e impuestos.
+  3. **Selector de Modalidad:** Opciones claras entre *"Retiro en Tienda"* (flete 0 Bs) y *"Envío a Domicilio"* con cotización inmediata de transporte.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **UI Táctil Optimizada:** Lista con gestos swipe-to-delete, botones de incremento y feedback háptico.
+  2. **Gestión de Direcciones con GPS:** Pantalla `addresses_screen.dart` que aprovecha la ubicación del celular para fijar la dirección de entrega en el mapa.
+  3. **Barra Fija Inferior:** Muestra total consolidado y botón de checkout con bloqueo si algún producto se quedó sin stock.
 
 ---
 
@@ -219,11 +294,18 @@
   - Servicio: `backend/app/modules/commerce/service.py`
   - Regla Días Hábiles: `backend/app/modules/commerce/business_days.py`
   - Modelos DB: `Reserva`, `DetalleReserva`, `InventarioSucursal`.
-- **Lógica de Negocio Explicada:**
-  1. El cliente reserva una prenda para probarse o retirar en una tienda física sin pagar por adelantado.
-  2. **Regla de 48 Horas Hábiles:** El sistema calcula la fecha de vencimiento saltando fines de semana y feriados oficiales gracias a `business_days.py`.
-  3. Durante la vigencia, la prenda queda retenida (`stock_reservado`), impidiendo que otro cliente la compre.
-  4. Si el cliente acude a tienda, el cajero puede convertir la reserva directamente en venta POS (CU-11). Si expira, un cron job libera el stock automáticamente.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL / Celery-Scheduler):**
+  1. **Reserva sin Pago Anticipado:** Permite al cliente reservar prendas para probárselas en la tienda física elegida.
+  2. **Algoritmo de 48 Horas Hábiles (`business_days.py`):** Calcula la fecha exacta de expiración considerando únicamente días laborables oficiales (excluyendo sábados, domingos y feriados nacionales).
+  3. **Bloqueo Temporal de Existencias:** Incrementa `stock_reservado` en `InventarioSucursal`, impidiendo que otros clientes compren esa unidad física.
+  4. **Liberación Automática:** Proceso en segundo plano que revisa periódicamente las reservas caducadas y devuelve el stock al inventario general.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Bandeja de Reservas de Tienda:** Panel para cajeros y encargados que lista las reservas asignadas a su sucursal con indicadores de vigencia (Verde: vigente, Amarillo: por vencer, Rojo: vencida).
+  2. **Conversión Rápida a Venta:** Botón *"Cobrar Reserva"* que carga instantáneamente los productos reservados en la terminal POS para su pago y facturación.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Reserva desde Ficha de Producto:** Modal inferior (`reservation_bottom_sheet.dart`) que permite seleccionar tienda de retiro con 1 toque.
+  2. **Mis Reservas:** Pantalla con temporizador regresivo de horas restantes y código de reserva visual (código de barras / QR) para mostrar al cajero en la tienda.
+  3. **Alerta Preventiva Push:** Notificación 12 horas antes del vencimiento recordando al usuario retirar su prenda.
 
 ---
 
@@ -236,12 +318,24 @@
   - Router: `backend/app/modules/commerce/router.py` (`POST /api/v1/sales/pos`, `GET /api/v1/sales/daily`)
   - Servicio: `backend/app/modules/commerce/service.py` (`create_pos_sale`)
   - Facturación: `backend/app/modules/commerce/invoice_service.py`
-  - Modelos DB: `Venta`, `DetalleVenta`, `Factura`, `MovimientoInventario`.
-- **Lógica de Negocio Explicada:**
-  1. Diseñado para la atención en mostrador físico: el cajero escanea códigos de barra o selecciona variantes.
-  2. Soporta modalidades de pago: Efectivo (calcula cambio), QR o Tarjeta de débito/crédito.
-  3. Si proviene de una reserva previa, valida su vigencia y consume la reserva.
-  4. En una sola transacción ACID: descuenta existencias físicas en `InventarioSucursal`, registra `MovimientoInventario` (`SALIDA_VENTA`), emite la factura electrónica con código CUF/hash y genera el comprobante de venta.
+  - Modelos DB: `Venta`, `DetalleVenta`, `Factura`, `MovimientoInventario`, `InventarioSucursal`.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Transacción ACID Crítica:** Ejecuta en una sola transacción atómica:
+     - Verificación y descuento de stock físico en la sucursal activa del cajero.
+     - Liberación de reserva previa si el cliente acudió con un código de reserva.
+     - Registro de auditoría de inventario con tipo `SALIDA_VENTA`.
+     - Creación de registro de `Venta` con método de pago (efectivo, QR, tarjeta).
+     - Emisión de `Factura` electrónica con código CUF/hash y datos fiscales (NIT y Razón Social).
+  2. **Cuadre de Caja Diario:** `GET /sales/daily` genera el arqueo de caja con totales discriminados por tipo de pago para cierre de turno.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Terminal Táctil Rápida:** Diseñada para uso intensivo en mostrador con soporte para lectores de código de barras USB/Bluetooth.
+  2. **Múltiples Métodos de Cobro:**
+     - Efectivo: teclado numérico en pantalla con cálculo automático del cambio.
+     - QR: genera en pantalla el código QR interoperable para escaneo bancario.
+     - Tarjeta: ingreso de referencia del voucher de la terminal POS bancaria.
+  3. **Impresión de Ticket Térmico:** Formateo e impresión directa en impresoras de recibos térmicas de 80mm con código QR de la factura tributaria.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. No aplica para operar la caja; sin embargo, si el cliente registrado asocia su correo en caja, recibe una notificación push instantánea de su compra y comprobante digital en su app.
 
 ---
 
@@ -253,13 +347,22 @@
   - **Web (Angular):** `frontend-web/src/app/features/commerce/checkout/`
 - **Ruta Backend:**
   - Router: `backend/app/modules/commerce/router.py` (`POST /api/v1/checkout/create-intent`, `POST /api/v1/checkout/webhook`, `GET /api/v1/invoices/{id}/pdf`)
-  - Pasarela de Pago: `backend/app/modules/commerce/stripe_checkout_service.py` (Stripe PaymentIntent / Webhooks)
-  - Facturación Electrónica: `backend/app/modules/commerce/invoice_service.py`
+  - Pasarela de Pago: `backend/app/modules/commerce/stripe_checkout_service.py` (Stripe PaymentIntent)
+  - Facturación: `backend/app/modules/commerce/invoice_service.py`
   - Despacho de Correo: `backend/app/modules/commerce/invoice_mailer.py`
-- **Lógica de Negocio Explicada:**
-  1. El cliente confirma su pedido en línea (con opción de retiro en tienda o envío a domicilio).
-  2. Se crea una sesión segura en **Stripe**; al completar el pago, el Webhook oficial de Stripe notifica al backend en segundo plano con firma criptográfica (`stripe_webhook_secret`).
-  3. El backend confirma el pedido, descuenta stock de la sucursal asignada, genera la factura con datos de NIT/Razón Social y despacha el PDF de la factura al correo del cliente mediante `InvoiceMailer`.
+- **⚙️ Lógica Backend (FastAPI / Stripe / PostgreSQL / Brevo):**
+  1. **Creación de PaymentIntent:** Endpoint `/create-intent` calcula en el servidor el monto total exacto (prendas + flete - promociones) y solicita a **Stripe** un intent de pago seguro con clave efímera.
+  2. **Procesamiento Asíncrono de Webhook:** El endpoint `/webhook` valida la firma criptográfica (`stripe_webhook_secret`). Al recibir el evento `payment_intent.succeeded`:
+     - Confirma el pedido y descuenta existencias en `InventarioSucursal`.
+     - Genera la factura electrónica mediante `invoice_service.py`.
+     - Ensambla el documento PDF y lo despacha al correo del cliente mediante `invoice_mailer.py`.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Checkout Paso a Paso:** Formulario con tabs: Dirección de Entrega $\rightarrow$ Datos de Facturación (NIT/Razón Social) $\rightarrow$ Pasarela de Pago.
+  2. **Stripe Elements:** Componente seguro incrustado de Stripe que procesa tarjetas de crédito/débito directamente con los servidores de Stripe sin que datos confidenciales toquen el servidor web (cumplimiento PCI-DSS).
+  3. **Página de Éxito:** Muestra resumen del pedido con botón para descargar la factura fiscal en PDF.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Stripe Mobile SDK:** `checkout_screen.dart` utiliza el SDK oficial para desplegar la hoja de pago nativa (Payment Sheet) con soporte para Apple Pay, Google Pay y tarjetas guardadas.
+  2. **Animación de Éxito:** `checkout_complete_screen.dart` con animación Lottie de confirmación, vibración háptica de satisfacción y botón directo para rastrear el pedido.
 
 ---
 
@@ -268,16 +371,22 @@
 - **Prioridad:** Alta
 - **Ruta Frontend:**
   - **Móvil (Flutter):** `mobile/lib/features/commerce/presentation/orders_screen.dart`, `order_detail_screen.dart`
-  - **Web (Angular):** `frontend-web/src/app/features/admin/commerce-admin.ts` (gestión de envíos y paquetería).
+  - **Web (Angular):** `frontend-web/src/app/features/admin/commerce-admin.ts` (gestión logística).
 - **Ruta Backend:**
   - Router: `backend/app/modules/commerce/router.py` (`GET /api/v1/orders`, `GET /api/v1/orders/{id}`, `PATCH /api/v1/orders/{id}/status`)
   - Servicio: `backend/app/modules/commerce/service.py` (`update_order_status`)
   - Modelos DB: `Pedido`, `DetallePedido`, `SeguimientoPedido`, `Notificacion`.
-- **Lógica de Negocio Explicada:**
-  1. Máquina de estados de pedido con trazabilidad:
-     `PAGADO` ➔ `PREPARANDO` ➔ `EN_CAMINO` ➔ `ENTREGADO` (o `LISTO_PARA_RETIRO`).
-  2. Cada transición registra fecha, hora, responsable y coordenadas de despacho.
-  3. Cada cambio de estado dispara automáticamente una **notificación push FCM** y correo al cliente para que siga el trayecto de su ropa en tiempo real.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL / FCM):**
+  1. **Máquina de Estados Logística:** Controla el ciclo de vida del pedido:
+     `PAGADO` $\rightarrow$ `PREPARANDO` $\rightarrow$ `EN_CAMINO` $\rightarrow$ `ENTREGADO` (o `LISTO_PARA_RETIRO`).
+  2. **Historial Inmutable:** Cada cambio de estado crea un registro en `SeguimientoPedido` guardando timestamp, usuario que efectuó el cambio y observaciones.
+  3. **Disparador de Alertas:** Al cambiar de estado, el backend invoca automáticamente `fcm_sender.py` para notificar al cliente vía Push en su celular.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Panel de Despacho Logístico:** Visualización de pedidos entrantes con filtros por fecha, sucursal y estado.
+  2. **Cambio de Estado con Validación:** Modal para actualizar el estado del paquete, ingresar el número de guía del transportista o marcar como listo para retiro en tienda.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Seguimiento Gráfico en Tiempo Real:** `order_detail_screen.dart` presenta un *Stepper* vertical animado que ilustra las etapas del pedido con fecha y hora de cada avance.
+  2. **Acciones Contextuales:** Si es para retiro en tienda, muestra el mapa de la sucursal y el código QR de retiro; si es envío a domicilio, muestra los datos del transportista.
 
 ---
 
@@ -286,14 +395,23 @@
 - **Prioridad:** Media
 - **Ruta Frontend:**
   - **Web (Angular):** `frontend-web/src/app/features/admin/commerce-admin.ts` (pestaña Devoluciones).
+  - **Móvil (Flutter):** `mobile/lib/features/commerce/presentation/order_detail_screen.dart` (botón de devolución).
 - **Ruta Backend:**
   - Router: `backend/app/modules/commerce/router.py` (`POST /api/v1/returns`, `GET /api/v1/returns`, `PATCH /api/v1/returns/{id}/approve`)
   - Servicio: `backend/app/modules/commerce/service.py` (`process_return`)
   - Modelos DB: `Devolucion`, `DetalleDevolucion`, `NotaCredito`, `MovimientoInventario`.
-- **Lógica de Negocio Explicada:**
-  1. Regla de negocio comercial: el cliente tiene un plazo máximo de **7 días hábiles** desde la entrega para solicitar cambio de talla o devolución.
-  2. Validación de estado de la prenda: si la prenda está intacta, se reingresa a existencias (`ENTRADA_DEVOLUCION`). Si viene dañada de fábrica, se destina a merma/baja técnica.
-  3. Emisión contable: genera una Nota de Crédito vinculada a la factura original para cuadre fiscal.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Plazo Límite de Garantía:** Valida que la solicitud de devolución se realice dentro de los **7 días hábiles** posteriores a la entrega del pedido.
+  2. **Inspección Física y Destino de Stock:**
+     - Prenda en perfecto estado: reingresa al inventario vendible de la sucursal (`ENTRADA_DEVOLUCION`).
+     - Prenda con falla o mancha: se envía a merma/baja técnica con motivo justificado.
+  3. **Nota de Crédito:** Genera una Nota de Crédito tributaria enlazada a la factura original para revertir el saldo contable.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Módulo de Devoluciones:** Búsqueda rápida por número de pedido, cédula del cliente o factura.
+  2. **Evaluación de Solicitudes:** Formulario con checklist para marcar el estado de las prendas devueltas, adjuntar observaciones y autorizar la emisión de la Nota de Crédito con 1 clic.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. En pedidos entregados dentro del margen de 7 días, habilita el botón *"Solicitar Devolución / Cambio"*.
+  2. El cliente selecciona los ítems, el motivo (ej. talla incorrecta, no me gustó el calce) y recibe instrucciones claras con código para presentar en tienda.
 
 ---
 
@@ -302,15 +420,22 @@
 - **Prioridad:** Alta
 - **Ruta Frontend:**
   - **Web (Angular):** `frontend-web/src/app/features/admin/operations-admin.ts` (módulo de Inventario y Existencias).
+  - **Móvil (Flutter):** `mobile/lib/features/catalog/presentation/barcode_scanner_modal.dart`
 - **Ruta Backend:**
   - Router: `backend/app/modules/inventory/router.py` (`GET /api/v1/inventory`, `POST /api/v1/adjustments`, `PATCH /api/v1/minimum-stock`, `GET /api/v1/movements`, `GET /api/v1/lots`)
   - Servicio: `backend/app/modules/inventory/service.py`
   - Repositorio: `backend/app/modules/inventory/repository.py`
   - Modelos DB: `InventarioSucursal`, `MovimientoInventario`, `AjusteInventario`, `Lote`.
-- **Lógica de Negocio Explicada:**
-  1. **Kardex Físico Valorado:** Cada unidad que entra o sale de la tienda queda documentada con su tipo de movimiento (`ENTRADA_COMPRA`, `SALIDA_VENTA`, `TRANSFERENCIA_ORIGEN`, `AJUSTE_MERMA`, etc.).
-  2. **Alertas de Stock Mínimo:** Dispara alertas visuales cuando el stock desciende por debajo del umbral de seguridad fijado para la prenda.
-  3. **Ajustes de Inventario:** Permite registrar recuentos físicos periódicos (cuadres de caja/estantería), asentando pérdidas, robos o diferencias de conteo con justificación obligatoria.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Kardex Físico Valorado:** Registra cada variación de existencias con fecha, responsable, cantidad anterior, cantidad nueva y tipo de movimiento (`ENTRADA_COMPRA`, `SALIDA_VENTA`, `TRANSFERENCIA`, `AJUSTE_MERMA`).
+  2. **Umbrales y Alertas de Stock Mínimo:** Evalúa si `stock_actual <= stock_minimo` y expone listado de ítems críticos para compra inmediata.
+  3. **Ajustes de Inventario:** Permite asentar descuadres de inventario físico (roturas, pérdidas, diferencias de conteo) exigiendo un motivo documentado.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Tabla de Existencias con Semáforo Visual:** Colores dinámicos (verde: óptimo, amarillo: bajo stock mínimo, rojo: agotado).
+  2. **Historial de Kardex:** Vista cronológica de todos los movimientos de una prenda con filtros por sucursal y rango de fechas.
+  3. **Formulario de Ajuste Rápido:** Modal para corregir cantidades físicas tras un recuento de estantería.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Escáner de Stock en Sala de Ventas:** Los auxiliares apuntan con la cámara del celular al código de barras de cualquier prenda colgada y visualizan en segundos el stock disponible en tienda y en el depósito trasero sin usar una PC.
 
 ---
 
@@ -319,13 +444,21 @@
 - **Prioridad:** Media
 - **Ruta Frontend:**
   - **Web (Angular):** `frontend-web/src/app/features/admin/dashboard.ts`, `audit-admin.ts`
+  - **Móvil (Flutter):** `mobile/lib/features/admin/presentation/admin_profile_screen.dart`
 - **Ruta Backend:**
   - Router: `backend/app/modules/commerce/router.py` (`GET /api/v1/dashboard/metrics`), `backend/app/modules/audit/router.py` (`GET /api/v1/audit/logs`)
   - Servicio: `backend/app/modules/commerce/service.py` (`get_dashboard_metrics`), `backend/app/modules/audit/service.py`
-- **Lógica de Negocio Explicada:**
-  1. Genera indicadores clave de rendimiento (KPIs): Total de ingresos diarios/mensuales, ticket promedio, prendas más vendidas, rotación de inventario por sucursal y comparativa entre tiendas.
-  2. Registro inmutable de auditoría (`AuditLog`): monitorea qué usuario hizo qué acción, en qué momento, desde qué IP y sobre qué entidad.
-  3. Exportación de listados a formatos tabulares (Excel/CSV) para contabilidad y gerencia.
+  - Modelos DB: `AuditLog`, `Venta`, `Pedido`, `InventarioSucursal`.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Agregaciones Analíticas de Alto Rendimiento:** Consultas SQL optimizadas para calcular ingresos diarios/mensuales, ticket promedio, prendas más vendidas y rotación de stock por sucursal.
+  2. **Pista de Auditoría Inmutable (`AuditLog`):** Registra cada acción relevante en el sistema (quién, qué tabla/registro, valores previos, valores nuevos, dirección IP y fecha).
+  3. **Exportación de Datos:** Generación de flujos de datos formateados para exportación a CSV/Excel.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Dashboard Gerencial con Gráficos:** Visualización interactiva con Chart.js (gráficos de barras de ventas, gráfico circular de categorías populares y tarjetas de resumen financiero).
+  2. **Buscador de Auditoría:** Filtros por usuario, fecha, tipo de operación (CREATE, UPDATE, DELETE) y entidad.
+  3. **Botón de Exportación:** Descarga directa de reportes contables en archivos CSV o Excel.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. Tarjetas de métricas rápidas (KPIs) en el perfil del administrador: total de ventas de la jornada, pedidos pendientes de despacho y alertas de inventario crítico.
 
 ---
 
@@ -340,32 +473,48 @@
   - Servicio: `backend/app/modules/recommendations/service.py` (`RecommendationService`)
   - Repositorio: `backend/app/modules/recommendations/repository.py`
   - Modelos DB: `PreferenciaCliente`, `HistorialVistas`, `ReglaAsociacion`.
-- **Lógica de Negocio Explicada:**
-  1. Motor híbrido de recomendación:
-     - **Filtrado Basado en Contenido:** Analiza afinidad de categoría, corte, material y paleta de colores de las prendas que el cliente visualiza.
-     - **Filtrado Colaborativo / Co-ocurrencia:** Recomienda prendas que otros clientes compraron frecuentemente juntas (cross-selling, ej. polo + bermuda o jeans + cinturón).
-  2. Ajusta los pesos de afinidad según el historial de compras previas del cliente registrado.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Motor de Afinidad Híbrido:**
+     - **Filtrado Basado en Contenido:** Compara similitud de atributos (categoría, corte, color, género) entre la prenda actual y el catálogo.
+     - **Filtrado Colaborativo / Co-ocurrencia:** Minería de tickets de compra para detectar productos frecuentemente comprados juntos (*Cross-Selling*, ej. camisa + pantalón de vestir).
+  2. **Registro de Comportamiento:** Guarda prendas vistas por usuarios autenticados para afinar las recomendaciones en futuras sesiones.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Panel de Gestión de Recomendaciones:** Permite a los administradores fijar reglas manuales de asociación (ej. promocionar un accesorio específico con una chaqueta nueva).
+  2. **Métricas de Conversión:** Visualiza qué porcentaje de clics en prendas recomendadas terminaron en compra efectiva.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Carrusel *"Completa tu Look"*:** Ubicado al pie de la ficha técnica de la prenda; permite deslizar horizontalmente outfits sugeridos.
+  2. **Interacción Rápida:** Tocar una prenda sugerida permite verla o agregarla directamente al carrito con la talla recomendada por el usuario.
 
 ---
 
-### CU-18: Utilizar probador virtual
+### CU-18: Utilizar probador virtual (Vestimenta Aumentada AR)
 - **Actor Principal:** Cliente
 - **Prioridad:** Media
 - **Ruta Frontend:**
-  - **Móvil (Flutter & Native):**
+  - **Móvil (Flutter & Nativo iOS/Android):**
     - Pantalla Principal: `mobile/lib/features/fitting/presentation/virtual_fitting_screen.dart`
-    - Superposición y Pintor: `mobile/lib/features/fitting/presentation/fitting_overlay_painter.dart`, `garment_ar_overlay.dart`
-    - Motor de Visión iOS: `mobile/ios/Runner/AppDelegate.swift` (Apple Vision Framework / VNDetectHumanBodyPoseRequest)
-    - Motor de Visión Android: Google ML Kit Pose Detection.
+    - Pintor de Silueta: `mobile/lib/features/fitting/presentation/fitting_overlay_painter.dart`
+    - Superposición AR: `mobile/lib/features/fitting/presentation/garment_ar_overlay.dart`
+    - Filtro de Movimiento: `mobile/lib/features/fitting/domain/pose_smoother.dart`
+    - Nativo iOS (Swift): `AppDelegate.swift` con Apple Vision (`VNDetectHumanBodyPoseRequest`)
+    - Nativo Android (Kotlin): Google ML Kit Pose Detection.
+  - **Web (Angular):** `frontend-web/src/app/features/catalog/` (tabla de tallas y medidas).
 - **Ruta Backend:**
-  - Router: `backend/app/modules/catalog/router.py` (proporciona variantes, medidas de la prenda y asset PNG sin fondo de la prenda almacenado en Cloudinary).
-- **Lógica de Negocio Explicada:**
-  1. **Detección de Pose en Tiempo Real:** Reconoce puntos clave anatómicos (hombros, cuello, pecho y caderas) a 30 FPS.
-  2. **Calibración Antropométrica:**
-     - Aplica escala FOV calibrada (168.0 para hombres con base de 47cm en hombros = Talla L; 148.0 para mujeres con base de 36cm = Talla S).
-     - Razón de distancia y silueta estarcido (0.32) para indicar al usuario si debe acercarse o alejarse.
-  3. **Recomendación Inteligente de Talla:** Estima el ancho biacromial en centímetros reales y sugiere la talla idónea (S, M, L, XL).
-  4. **Superposición AR:** Ancla la prenda a la orientación y ángulo del torso del usuario en el espejo con corrección de rotación EXIF de cámara.
+  - Router: `backend/app/modules/catalog/router.py` (entrega `GuiaTallas` con medidas de hombros/pecho y fotos de catálogo).
+  - Cloudinary: Transformación dinámica `e_make_transparent:22,f_png` para devolver la prenda con transparencia alfa sin fondo blanco.
+- **⚙️ Lógica Backend (FastAPI / Cloudinary):**
+  1. **Suministro de Metadatos de Patronaje:** Entrega la tabla de medidas anatómicas en centímetros para cada talla de la prenda.
+  2. **Transformación Transparente al Vuelo:** Cloudinary procesa la foto de estudio y remueve el fondo blanco `#FFFFFF` al vuelo convirtiéndola en PNG transparente para su superposición en la cámara del móvil.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Guía Interactiva de Tallas:** Tabla comparativa donde el usuario puede ingresar sus medidas en centímetros para consultar su talla equivalente.
+  2. **Carga de Prendas Compatibles:** El administrador carga las fotos frontales en alta resolución preparadas para el recorte del probador.
+- **📱 Lógica Frontend Móvil (Flutter & Swift/Kotlin):**
+  1. **Modo Espejo con Cámara Frontal:** Activa la cámara en modo espejo fluido a 60 FPS con silueta estarcido de guía.
+  2. **Validación de Orientación Física:** Sensores de acelerómetro y giroscopio calculan los ángulos de cabeceo (*pitch*) y balanceo (*roll*), exigiendo que el celular esté colocado verticalmente ($80^\circ \le \text{pitch} \le 95^\circ$).
+  3. **Visión Artificial por Hardware:** Apple Vision en iOS y ML Kit en Android detectan en tiempo real los 19 puntos anatómicos (hombros, cuello, torso) y los envían a Flutter vía `MethodChannel`.
+  4. **Filtro de Suavizado EMA (`PoseSmoother`):** Aplica media móvil exponencial ($\alpha = 0.35$) para eliminar vibraciones o saltos en pantalla.
+  5. **Cálculo de Talla Antropométrica:** Estima el ancho biacromial en cm aplicando escala FOV calibrada (168.0 hombres / 148.0 mujeres), calcula la talla ideal (XS a XL) y el porcentaje de calce.
+  6. **Superposición AR Realista (`garment_ar_overlay.dart`):** Descarga la foto transparente de Cloudinary, ancla el cuello exactamente sobre la línea de hombros, escala el ancho al $1.36\times$ del torso y rota según la inclinación corporal.
 
 ---
 
@@ -374,15 +523,21 @@
 - **Prioridad:** Media
 - **Ruta Frontend:**
   - **Web (Angular):** `frontend-web/src/app/features/admin/promotions-admin.ts`, `campaigns-admin.ts`
+  - **Móvil (Flutter):** Banners de inicio y etiquetas de descuento en catálogo.
 - **Ruta Backend:**
   - Router: `backend/app/modules/catalog/router.py` (`/api/v1/promotions`, `/api/v1/campaigns`)
   - Servicio: `backend/app/modules/catalog/service.py` (`create_promotion`, `apply_campaign_discounts`)
   - Repositorio: `backend/app/modules/catalog/repository.py`
   - Modelos DB: `Promocion`, `Campana`, `PromocionProducto`.
-- **Lógica de Negocio Explicada:**
-  1. Configuración de reglas comerciales temporales: Descuento porcentual directo (ej. 20% OFF en temporada de invierno), monto fijo o promociones compuestas tipo 2x1 o liquidación.
-  2. Control de vigencia: rango estricto de fechas (`fecha_inicio`, `fecha_fin`) y límite de presupuesto o cupos.
-  3. Aplicación automática: al consultar el catálogo o añadir al carrito, el motor evalúa si la prenda aplica a la campaña activa y descuenta el precio en tiempo real.
+- **⚙️ Lógica Backend (FastAPI / PostgreSQL):**
+  1. **Reglas Comerciales Temporales:** Define promociones con tipo de descuento (porcentaje, monto fijo, 2x1) asociadas a una campaña con rango estricto de fechas (`fecha_inicio`, `fecha_fin`).
+  2. **Motor de Precios Dinámico:** Al listar productos o añadir al carrito, el backend evalúa si la prenda aplica a la campaña activa y descuenta el precio en tiempo real sin alterar el precio de lista original en la base de datos.
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Creador Visual de Campañas:** Formulario con selector de fechas de vigencia, carga de banners publicitarios y selección de prendas o categorías enteras en oferta.
+  2. **Conmutador de Estado:** Permite pausar, activar o dar por concluida una campaña anticipadamente.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Carrusel Promocional:** Despliegue de banners de campañas activas en la pantalla de inicio con navegación directa a la categoría en promoción.
+  2. **Badges de Oferta:** Muestra etiquetas rojas de descuento (ej. `-25%`) con el precio original tachado en las tarjetas del catálogo.
 
 ---
 
@@ -392,17 +547,24 @@
 - **Ruta Frontend:**
   - **Móvil (Flutter):**
     - Pantalla: `mobile/lib/features/commerce/presentation/notifications_screen.dart`
-    - Receptor Push: `mobile/lib/core/services/notification_service.dart` (Firebase Messaging & Local Notifications)
+    - Servicio: `mobile/lib/core/services/notification_service.dart` (Firebase Cloud Messaging)
   - **Web (Angular):** `frontend-web/src/app/features/admin/notifications-admin.ts`
 - **Ruta Backend:**
   - Router: `backend/app/modules/commerce/router.py` (`POST /api/v1/fcm/token`, `GET /api/v1/notifications`, `PATCH /api/v1/notifications/{id}/read`, `POST /api/v1/notifications/send`)
   - Emisor Firebase: `backend/app/modules/commerce/fcm_sender.py` (`send_fcm_notification`)
   - Servicio: `backend/app/modules/commerce/service.py`
   - Modelos DB: `Notificacion`, `DispositivoFCM`, `Usuario`.
-- **Lógica de Negocio Explicada:**
-  1. **Registro del Dispositivo:** Al iniciar sesión en el teléfono, la app envía su token FCM al backend (`POST /fcm/token`).
-  2. **Disparadores Automatizados:** Eventos de negocio (pedido despachado, reserva por vencer, nueva campaña de temporada) generan un registro en la tabla `Notificacion`.
-  3. **Despacho Multicanal:** El servicio invoca `fcm_sender.py` con credenciales de cuenta de servicio de Firebase para enviar la alerta push directamente a la barra de estado de Android / iOS, guardando el estado (`ENVIADO`, `ENTREGADO`, `LEIDO`).
+- **⚙️ Lógica Backend (FastAPI / Firebase FCM / PostgreSQL):**
+  1. **Registro de Dispositivos:** `POST /fcm/token` guarda el token único del dispositivo móvil asociado al usuario autenticado.
+  2. **Despacho Automático Multicanal:** `fcm_sender.py` utiliza las credenciales de servicio de Google Firebase para enviar notificaciones push a la barra de estado de Android e iOS ante eventos del negocio (pedido despachado, reserva por expirar, oferta relámpago).
+  3. **Persistencia y Lectura:** Cada alerta se guarda en la tabla `Notificacion` con estado (`PENDIENTE`, `ENVIADO`, `LEIDO`).
+- **💻 Lógica Frontend Web (Angular):**
+  1. **Campana de Notificaciones:** Indicador con contador de avisos pendientes para el personal administrativo.
+  2. **Centro de Envíos Masivos (`notifications-admin.ts`):** Formulario para que el administrador redacte y despache notificaciones push a todos los clientes o por segmentos.
+- **📱 Lógica Frontend Móvil (Flutter):**
+  1. **Recepción en 3 Estados:** `notification_service.dart` gestiona notificaciones en primer plano (banner flotante), en segundo plano y cuando la aplicación está totalmente cerrada.
+  2. **Deep Linking:** Al tocar la notificación en el celular, la app se abre y navega directamente a la pantalla relevante (al detalle del pedido en camino o a la ficha de la prenda en descuento).
+  3. **Bandeja de Notificaciones:** Pantalla `notifications_screen.dart` con listado de mensajes recibidos, fecha relativa y opción de marcar como leídos.
 
 ---
 
