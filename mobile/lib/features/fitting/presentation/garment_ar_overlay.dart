@@ -58,17 +58,18 @@ class GarmentArOverlay extends StatelessWidget {
 
     // 2. Ancho proporcional de la prenda:
     // El ancho base de hombros es 32% del ancho de pantalla (coincide con la línea verde HOMBRO IZQ - HOMBRO DER).
-    // Una polera incluye mangas en los costados (~1.36x del ancho biacromial).
+    // Una polera incluye mangas en los costados (~1.38x del ancho biacromial).
     final baseShoulderWidth = screenSize.width * 0.32;
-    final garmentWidth = baseShoulderWidth * 1.36 * pose.scaleMultiplier;
-    final garmentHeight = garmentWidth * 1.24; // Proporción natural de torso y cintura
+    final garmentWidth = baseShoulderWidth * 1.38 * pose.scaleMultiplier;
+    final garmentHeight = garmentWidth * 1.36; // Proporción anatómica completa desde hombro a cintura
 
-    // 3. Punto de anclaje: el centro del cuello/collar de la prenda está al ~8% superior
+    // 3. Punto de anclaje: el escote/collar de la prenda se asienta sobre la base del cuello y la línea de hombros.
+    // Calibrado a 22% de la altura del asset fotográfico para cerrar el espacio vacío del cuello.
     final collarAnchorX = garmentWidth / 2.0;
-    final collarAnchorY = garmentHeight * 0.08;
+    final collarAnchorY = garmentHeight * 0.22;
 
     final leftPosition = neckPixelX - collarAnchorX;
-    // Anclamos el cuello de la prenda exactamente sobre la línea de hombros
+    // Anclamos la prenda exactamente sobre la línea de hombros y el punto de clavícula
     final topPosition = neckPixelY - collarAnchorY;
 
     // Ángulo seguro: limitar inclinaciones corporales a ±25°
