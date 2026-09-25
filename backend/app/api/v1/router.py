@@ -16,6 +16,7 @@ from app.modules.customers.router import router as customers_router
 from app.modules.employees.router import router as employee_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.recommendations.router import router as recommendations_router
+from app.modules.virtual_tryon.router import router as tryon_router
 
 router = APIRouter()
 system_router = APIRouter(tags=["system"])
@@ -27,6 +28,7 @@ router.include_router(commerce_router)
 router.include_router(inventory_router)
 router.include_router(audit_router)
 router.include_router(recommendations_router)
+router.include_router(tryon_router)
 
 
 class HealthResponse(BaseModel):

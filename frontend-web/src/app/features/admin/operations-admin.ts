@@ -2051,8 +2051,8 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
         <p>{{ description() }}</p>
       </div>
       @if (mode() === 'transfers' && canMove()) {
-        <button class="button button--primary" (click)="show.set(!show())">
-          Nueva transferencia
+        <button class="button button--primary" (click)="openNewTransfer()">
+          + Nueva transferencia
         </button>
       }
     </header>
@@ -2501,86 +2501,367 @@ export class InventoryAdmin extends BaseAdmin implements OnInit {
         </table>
       </div>
     } @else {
-      <!-- VISTA PARA TRANSFERENCIAS -->
-      @if (show()) {
-        <section class="admin-editor">
-          <form [formGroup]="transfer" (ngSubmit)="createTransfer()" class="admin-form-grid">
-            <label class="field"
-              ><span>Sucursal origen</span
-              ><select formControlName="id_sucursal_origen">
-                <option value="">Seleccionar sucursal</option>
-                @for (branch of branches(); track branch['id_sucursal']) {
-                  <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
-                }
-              </select></label
-            ><label class="field"
-              ><span>Sucursal destino</span
-              ><select formControlName="id_sucursal_destino">
-                <option value="">Seleccionar sucursal</option>
-                @for (branch of branches(); track branch['id_sucursal']) {
-                  <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
-                }
-              </select></label
-            >
-            <div formArrayName="detalles" class="admin-repeater field--wide">
-              @for (row of transferDetails.controls; track $index) {
-                <div [formGroupName]="$index">
-                  <label class="field"
-                    ><span>Producto y variante</span
-                    ><select formControlName="id_variante">
-                      <option value="">Seleccionar variante</option>
-                      @for (variant of variants(); track variant['id_variante']) {
-                        <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
-                      }
-                    </select></label
-                  ><label class="field"
-                    ><span>Cantidad</span
-                    ><input type="number" min="1" formControlName="cantidad" /></label
-                  ><button
-                    type="button"
-                    class="button button--quiet"
-                    [disabled]="transferDetails.length === 1"
-                    (click)="transferDetails.removeAt($index)"
-                  >
-                    Quitar
-                  </button>
-                </div>
+      <!-- VISTA PARA TRANSFERENCIAS INTERSUCURSAL -->
+      <!-- Métricas Rápidas KPI de Transferencias -->
+      <div class="inventory-kpi-bar">
+        <div class="inventory-kpi-card">
+          <small>Total Transferencias</small>
+          <strong>{{ transferCounts().total }}</strong>
+          <span style="font-size: 0.72rem; color: var(--ink-soft, #64748b);">{{ transferCounts().totalUnits }} u. movidas</span>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Solicitadas / Pendientes</small>
+          <strong class="text-amber">{{ transferCounts().solicitadas }}</strong>
+          <span style="font-size: 0.72rem; color: var(--ink-soft, #64748b);">Por aprobar en origen</span>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>En Tránsito 🚚</small>
+          <strong class="text-blue">{{ transferCounts().enTransito }}</strong>
+          <span style="font-size: 0.72rem; color: var(--ink-soft, #64748b);">Despachadas en camino</span>
+        </div>
+        <div class="inventory-kpi-card">
+          <small>Recibidas en Destino</small>
+          <strong class="text-emerald">{{ transferCounts().recibidas }}</strong>
+          <span style="font-size: 0.72rem; color: var(--ink-soft, #64748b);">Stock incorporado</span>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros Reactiva de Transferencias -->
+      <div class="inventory-toolbar">
+        <div class="inventory-toolbar__controls">
+          <label class="field field--branch">
+            <span>Sucursal Origen / Destino</span>
+            <select [value]="branchFilter() ?? ''" (change)="onBranchChange($event)">
+              <option value="">Todas las sucursales</option>
+              @for (branch of branches(); track branch['id_sucursal']) {
+                <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+              }
+            </select>
+          </label>
+
+          <div class="field field--search">
+            <span>Búsqueda en Transferencias</span>
+            <div class="search-input-wrap">
+              <input
+                type="text"
+                [value]="transferSearchTerm()"
+                (input)="onTransferSearchInput($event)"
+                placeholder="Buscar por ID #, sucursal o prenda transferida..."
+              />
+              @if (transferSearchTerm()) {
+                <button
+                  type="button"
+                  class="search-clear-btn"
+                  (click)="clearTransferSearch()"
+                  title="Borrar búsqueda"
+                >
+                  ✕
+                </button>
               }
             </div>
-            <div class="admin-form-actions">
-              <button type="button" class="button button--secondary" (click)="addTransferRow()">
-                Añadir línea
-              </button>
-              <button class="button button--primary" [disabled]="transfer.invalid">
-                Crear transferencia
-              </button>
-            </div>
-          </form>
-        </section>
-      }
-      <div class="admin-card-list">
-        @for (x of items(); track identity(x)) {
-          <article>
-            <header>
-              <div>
-                <span class="eyebrow">#{{ identity(x) }}</span>
-                <h2>{{ primary(x) }}</h2>
-              </div>
-              <span>{{ dateOf(x) | date: 'short' }}</span>
-            </header>
-            <p>{{ summary(x) }}</p>
-            @if (mode() === 'transfers' && canMove()) {
-              <div class="admin-row-actions">
-                @for (s of transferStates(x['estado']); track s) {
-                  <button (click)="changeTransfer(x, s)">{{ s }}</button>
-                }
-              </div>
-            }
-          </article>
-        } @empty {
-          <p>No hay registros.</p>
-        }
+          </div>
+        </div>
+
+        <!-- Pastillas de Selección de Filtro de Transferencias -->
+        <div class="inventory-chips-row">
+          <div class="inventory-chips-group">
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeTransferFilter() === 'ALL'"
+              (click)="setTransferFilter('ALL')"
+            >
+              <span>Todas</span>
+              <span class="chip-badge">{{ transferCounts().total }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeTransferFilter() === 'SOLICITADA'"
+              (click)="setTransferFilter('SOLICITADA')"
+            >
+              <span>⏳ Solicitadas</span>
+              <span class="chip-badge">{{ transferCounts().solicitadas }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeTransferFilter() === 'APROBADA'"
+              (click)="setTransferFilter('APROBADA')"
+            >
+              <span>✅ Aprobadas</span>
+              <span class="chip-badge">{{ transferCounts().aprobadas }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeTransferFilter() === 'EN_TRANSITO'"
+              (click)="setTransferFilter('EN_TRANSITO')"
+            >
+              <span>🚚 En Tránsito</span>
+              <span class="chip-badge">{{ transferCounts().enTransito }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeTransferFilter() === 'RECIBIDA'"
+              (click)="setTransferFilter('RECIBIDA')"
+            >
+              <span>📥 Recibidas</span>
+              <span class="chip-badge">{{ transferCounts().recibidas }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="inventory-chip"
+              [class.is-active]="activeTransferFilter() === 'CANCELADA'"
+              (click)="setTransferFilter('CANCELADA')"
+            >
+              <span>✕ Canceladas</span>
+              <span class="chip-badge">{{ transferCounts().canceladas }}</span>
+            </button>
+          </div>
+
+          @if (hasActiveTransferFilters()) {
+            <button type="button" class="inventory-reset-btn" (click)="resetTransferFilters()">
+              ✕ Restablecer filtros
+            </button>
+          }
+        </div>
       </div>
+
+      <!-- Tabla Logística de Transferencias -->
+      <div class="admin-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID #</th>
+              <th>Fecha Solicitud</th>
+              <th>Ruta (Origen ➔ Destino)</th>
+              <th>Prendas / Variantes</th>
+              <th class="cell-center">Unidades</th>
+              <th>Fecha Recepción</th>
+              <th>Estado</th>
+              @if (canMove()) {
+                <th class="cell-center">Acciones</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of filteredTransfers(); track t['id_transferencia']) {
+              <tr>
+                <td>
+                  <strong>#{{ t['id_transferencia'] }}</strong>
+                </td>
+                <td>
+                  <span class="num-cell">{{ t['fecha_solicitud'] | date: 'dd/MM/yy HH:mm' }}</span>
+                </td>
+                <td>
+                  <div class="transfer-route-cell">
+                    <span class="transfer-badge transfer-badge--origin" [title]="'Origen: ' + branchName(t['id_sucursal_origen'])">
+                      {{ branchName(t['id_sucursal_origen']) }}
+                    </span>
+                    <span class="transfer-route-arrow">➔</span>
+                    <span class="transfer-badge transfer-badge--dest" [title]="'Destino: ' + branchName(t['id_sucursal_destino'])">
+                      {{ branchName(t['id_sucursal_destino']) }}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <div class="transfer-items-cell">
+                    @for (d of t['detalles']; track d['id_variante']) {
+                      @let v = findVariant(d['id_variante']);
+                      <div class="transfer-item-row">
+                        <span class="transfer-item-qty">{{ d['cantidad'] }} u.</span>
+                        <span class="transfer-item-name" [title]="v?.['producto'] || ('Variante #' + d['id_variante'])">
+                          {{ v?.['producto'] || ('Variante #' + d['id_variante']) }}
+                        </span>
+                        @if (v?.['talla']) {
+                          <span class="size-pill">{{ v?.['talla'] }}</span>
+                        }
+                        @if (v?.['color']) {
+                          <div class="color-cell">
+                            <span
+                              class="color-swatch"
+                              [style.backgroundColor]="getColorHex(v)"
+                              [class.color-swatch--light]="isLightColor(getColorHex(v))"
+                            ></span>
+                            <span class="color-name">{{ v?.['color'] }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                </td>
+                <td class="cell-center">
+                  <strong>{{ transferTotalUnits(t) }} u.</strong>
+                  @if (t['detalles']?.length > 1) {
+                    <small class="sku-tag">{{ t['detalles']?.length }} líneas</small>
+                  }
+                </td>
+                <td>
+                  @if (t['fecha_recepcion']) {
+                    <span class="num-cell">{{ t['fecha_recepcion'] | date: 'dd/MM/yy HH:mm' }}</span>
+                  } @else if (t['estado'] === 'EN_TRANSITO') {
+                    <span class="text-blue" style="font-weight: 700;">🚚 En camino</span>
+                  } @else if (t['estado'] === 'CANCELADA') {
+                    <span class="text-muted">—</span>
+                  } @else {
+                    <span class="text-muted">Pendiente de envío</span>
+                  }
+                </td>
+                <td>
+                  <span
+                    class="status-chip"
+                    [class]="'status-chip--transfer-' + (t['estado'] | lowercase)"
+                  >
+                    {{ transferStateLabel(t['estado']) }}
+                  </span>
+                </td>
+                @if (canMove()) {
+                  <td class="cell-center">
+                    @if (transferStates(t['estado']).length) {
+                      <div class="transfer-actions-cell">
+                        @for (s of transferStates(t['estado']); track s) {
+                          <button
+                            type="button"
+                            [class]="transferActionClass(s)"
+                            (click)="changeTransfer(t, s)"
+                          >
+                            {{ transferActionLabel(s) }}
+                          </button>
+                        }
+                      </div>
+                    } @else {
+                      <span class="text-muted">—</span>
+                    }
+                  </td>
+                }
+              </tr>
+            } @empty {
+              <tr>
+                <td [attr.colspan]="canMove() ? 8 : 7" class="empty-state-cell">
+                  <p>No se encontraron transferencias con los filtros aplicados.</p>
+                  @if (hasActiveTransferFilters()) {
+                    <button
+                      type="button"
+                      class="button button--secondary button--compact"
+                      (click)="resetTransferFilters()"
+                    >
+                      Restablecer filtros
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- MODAL CENTRADO: NUEVA TRANSFERENCIA -->
+      @if (show()) {
+        <div class="admin-modal-backdrop" (click)="show.set(false)">
+          <div class="admin-modal-card admin-modal-card--lg" (click)="$event.stopPropagation()">
+            <header class="admin-modal-header">
+              <div>
+                <h2>Nueva Transferencia entre Sucursales</h2>
+                <p>Solicita el traslado logístico de prendas entre sucursales.</p>
+              </div>
+              <button type="button" class="admin-modal-close" (click)="show.set(false)">✕</button>
+            </header>
+
+            <form [formGroup]="transfer" (ngSubmit)="createTransfer()" class="transfer-modal-form">
+              <div class="transfer-branches-grid">
+                <label class="field">
+                  <span>Sucursal Origen (Salida)</span>
+                  <select formControlName="id_sucursal_origen">
+                    <option value="">Seleccionar sucursal origen</option>
+                    @for (branch of branches(); track branch['id_sucursal']) {
+                      <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+                    }
+                  </select>
+                </label>
+
+                <div class="transfer-direction-indicator">➔</div>
+
+                <label class="field">
+                  <span>Sucursal Destino (Entrada)</span>
+                  <select formControlName="id_sucursal_destino">
+                    <option value="">Seleccionar sucursal destino</option>
+                    @for (branch of branches(); track branch['id_sucursal']) {
+                      <option [value]="branch['id_sucursal']">{{ branch['nombre'] }}</option>
+                    }
+                  </select>
+                </label>
+              </div>
+
+              @if (transfer.controls.id_sucursal_origen.value && transfer.controls.id_sucursal_origen.value === transfer.controls.id_sucursal_destino.value) {
+                <div class="notice notice--error" style="margin: 0;">
+                  La sucursal de origen y destino deben ser distintas.
+                </div>
+              }
+
+              <!-- Selector de Prendas -->
+              <div class="transfer-items-builder">
+                <div class="transfer-items-builder-header">
+                  <h3>Prendas a transferir</h3>
+                  <button type="button" class="button button--secondary button--compact" (click)="addTransferRow()">
+                    + Añadir otra prenda
+                  </button>
+                </div>
+
+                <div formArrayName="detalles" class="transfer-lines-list">
+                  @for (row of transferDetails.controls; track $index) {
+                    <div [formGroupName]="$index" class="transfer-line-row">
+                      <label class="field">
+                        <span>Prenda / Variante</span>
+                        <select formControlName="id_variante">
+                          <option value="">Seleccionar prenda, talla y color...</option>
+                          @for (variant of variants(); track variant['id_variante']) {
+                            <option [value]="variant['id_variante']">{{ variantLabel(variant) }}</option>
+                          }
+                        </select>
+                      </label>
+
+                      <label class="field">
+                        <span>Cantidad</span>
+                        <input type="number" min="1" formControlName="cantidad" placeholder="1" />
+                      </label>
+
+                      <button
+                        type="button"
+                        class="line-remove-btn"
+                        [disabled]="transferDetails.length === 1"
+                        (click)="transferDetails.removeAt($index)"
+                        title="Quitar línea"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <footer class="admin-modal-footer">
+                <button type="button" class="admin-modal-btn admin-modal-btn--secondary" (click)="show.set(false)">
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  class="admin-modal-btn admin-modal-btn--primary"
+                  [disabled]="transfer.invalid || transfer.controls.id_sucursal_origen.value === transfer.controls.id_sucursal_destino.value"
+                >
+                  Crear y Solicitar Transferencia
+                </button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      }
     }
   </div>`,
 })
@@ -2602,6 +2883,11 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
     'ALL' | 'VENTAS' | 'ENTRADAS' | 'TRANSFERENCIAS' | 'AJUSTES' | 'RESERVAS'
   >('ALL');
   movementSearchTerm = signal<string>('');
+
+  activeTransferFilter = signal<
+    'ALL' | 'SOLICITADA' | 'APROBADA' | 'EN_TRANSITO' | 'RECIBIDA' | 'CANCELADA'
+  >('ALL');
+  transferSearchTerm = signal<string>('');
 
   transfer = this.fb.group({
     id_sucursal_origen: [null as number | null, Validators.required],
@@ -2774,6 +3060,107 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
     });
   });
 
+  transferCounts = computed(() => {
+    if (this.mode() !== 'transfers') {
+      return {
+        total: 0,
+        solicitadas: 0,
+        aprobadas: 0,
+        enTransito: 0,
+        recibidas: 0,
+        canceladas: 0,
+        totalUnits: 0,
+      };
+    }
+    const list = this.items();
+    let solicitadas = 0;
+    let aprobadas = 0;
+    let enTransito = 0;
+    let recibidas = 0;
+    let canceladas = 0;
+    let totalUnits = 0;
+
+    for (const t of list) {
+      const state = String(t['estado'] || '').toUpperCase();
+      if (state === 'SOLICITADA') solicitadas++;
+      else if (state === 'APROBADA') aprobadas++;
+      else if (state === 'EN_TRANSITO') enTransito++;
+      else if (state === 'RECIBIDA') recibidas++;
+      else if (state === 'CANCELADA') canceladas++;
+
+      totalUnits += this.transferTotalUnits(t);
+    }
+    return {
+      total: list.length,
+      solicitadas,
+      aprobadas,
+      enTransito,
+      recibidas,
+      canceladas,
+      totalUnits,
+    };
+  });
+
+  hasActiveTransferFilters = computed(() => {
+    return (
+      this.branchFilter() !== null ||
+      this.activeTransferFilter() !== 'ALL' ||
+      this.transferSearchTerm().trim().length > 0
+    );
+  });
+
+  filteredTransfers = computed(() => {
+    if (this.mode() !== 'transfers') return this.items();
+    const list = this.items();
+    const filter = this.activeTransferFilter();
+    const q = this.transferSearchTerm().trim().toLowerCase();
+    const branch = this.branchFilter();
+
+    return list.filter((t) => {
+      const state = String(t['estado'] || '').toUpperCase();
+      if (filter !== 'ALL' && state !== filter) return false;
+
+      const origId = Number(t['id_sucursal_origen']);
+      const destId = Number(t['id_sucursal_destino']);
+      if (branch !== null && origId !== branch && destId !== branch) {
+        return false;
+      }
+
+      if (q) {
+        const id = String(t['id_transferencia'] ?? '');
+        const origName = this.branchName(origId).toLowerCase();
+        const destName = this.branchName(destId).toLowerCase();
+
+        let matchesVariant = false;
+        const details =
+          (t['detalles'] as Array<{ id_variante: number; cantidad: number }>) || [];
+        for (const d of details) {
+          const v = this.findVariant(d.id_variante);
+          if (v) {
+            const prod = String(v['producto'] ?? '').toLowerCase();
+            const sku = String(v['sku'] ?? '').toLowerCase();
+            const talla = String(v['talla'] ?? '').toLowerCase();
+            const col = String(v['color'] ?? '').toLowerCase();
+            if (prod.includes(q) || sku.includes(q) || talla.includes(q) || col.includes(q)) {
+              matchesVariant = true;
+              break;
+            }
+          }
+        }
+
+        if (
+          !id.includes(q) &&
+          !origName.includes(q) &&
+          !destName.includes(q) &&
+          !matchesVariant
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  });
+
   ngOnInit() {
     this.route.data.subscribe((d) => {
       this.mode.set(d['mode']);
@@ -2797,7 +3184,7 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
       ? 'Origen histórico, costos y disponibilidad por lote.'
       : this.mode() === 'movements'
         ? 'Kardex inmutable de auditoría: entradas, salidas y asignaciones FIFO.'
-        : 'Flujo entre sucursales sin exponer controles internos FIFO.';
+        : 'Gestión logística y traspaso de stock entre sucursales.';
   }
 
   path() {
@@ -2953,6 +3340,81 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
     return 'Directo';
   }
 
+  openNewTransfer() {
+    this.transfer.reset();
+    while (this.transferDetails.length > 0) {
+      this.transferDetails.removeAt(0);
+    }
+    this.addTransferRow();
+    this.show.set(true);
+  }
+
+  findVariant(id: number): Entity | undefined {
+    return this.variants().find((v) => v['id_variante'] === id);
+  }
+
+  transferTotalUnits(transfer: Entity): number {
+    const details = (transfer['detalles'] as Array<{ cantidad: number }>) || [];
+    return details.reduce((acc, d) => acc + (Number(d.cantidad) || 0), 0);
+  }
+
+  transferStateLabel(state: string): string {
+    const map: Record<string, string> = {
+      SOLICITADA: 'Solicitada',
+      APROBADA: 'Aprobada',
+      EN_TRANSITO: 'En Tránsito 🚚',
+      RECIBIDA: 'Recibida ✓',
+      CANCELADA: 'Cancelada ✕',
+    };
+    return map[state] || state;
+  }
+
+  transferActionLabel(action: string): string {
+    const map: Record<string, string> = {
+      APROBADA: 'Aprobar ✓',
+      EN_TRANSITO: 'Despachar ➔',
+      RECIBIDA: 'Confirmar Recepción ✓',
+      CANCELADA: 'Cancelar ✕',
+    };
+    return map[action] || action;
+  }
+
+  transferActionClass(action: string): string {
+    const map: Record<string, string> = {
+      APROBADA: 'transfer-btn transfer-btn--approve',
+      EN_TRANSITO: 'transfer-btn transfer-btn--transit',
+      RECIBIDA: 'transfer-btn transfer-btn--receive',
+      CANCELADA: 'transfer-btn transfer-btn--cancel',
+    };
+    return map[action] || 'button button--compact';
+  }
+
+  onTransferSearchInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.transferSearchTerm.set(target.value);
+  }
+
+  clearTransferSearch() {
+    this.transferSearchTerm.set('');
+  }
+
+  setTransferFilter(
+    filter: 'ALL' | 'SOLICITADA' | 'APROBADA' | 'EN_TRANSITO' | 'RECIBIDA' | 'CANCELADA',
+  ) {
+    if (this.activeTransferFilter() === filter && filter !== 'ALL') {
+      this.activeTransferFilter.set('ALL');
+    } else {
+      this.activeTransferFilter.set(filter);
+    }
+  }
+
+  resetTransferFilters() {
+    this.branchFilter.set(null);
+    this.activeTransferFilter.set('ALL');
+    this.transferSearchTerm.set('');
+    this.load();
+  }
+
   lotPercentage(lot: Entity): number {
     const init = Number(lot['cantidad_inicial']) || 0;
     const disp = Number(lot['cantidad_disponible']) || 0;
@@ -2974,7 +3436,8 @@ export class TraceAdmin extends BaseAdmin implements OnInit {
     return 'INTACTO';
   }
 
-  getColorHex(item: Entity): string {
+  getColorHex(item: Entity | undefined | null): string {
+    if (!item) return '#94a3b8';
     if (item['codigo_hex']) return item['codigo_hex'];
     const colorName = String(item['color'] ?? '')
       .trim()

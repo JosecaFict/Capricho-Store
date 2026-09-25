@@ -125,6 +125,50 @@ class CloudinaryStorage:
             alto_px=payload.get("height"),
         )
 
+    async def upload_tryon_photo(
+        self,
+        *,
+        content: bytes,
+        filename: str,
+        content_type: str,
+    ) -> CloudinaryUpload:
+        timestamp = int(time.time())
+        params: dict[str, str | int] = {
+            "folder": "capricho-store/tryon-temp",
+            "timestamp": timestamp,
+            "unique_filename": "true",
+            "use_filename": "true",
+        }
+        data = {
+            **params,
+            "api_key": self.api_key,
+            "signature": self._signature(params),
+        }
+        url = f"https://api.cloudinary.com/v1_1/{self.cloud_name}/image/upload"
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    url,
+                    data=data,
+                    files={"file": (filename, content, content_type)},
+                )
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise CloudinaryError("Cloudinary no pudo almacenar la foto de prueba") from exc
+
+        secure_url = payload.get("secure_url")
+        public_id = payload.get("public_id")
+        if not isinstance(secure_url, str) or not isinstance(public_id, str):
+            raise CloudinaryError("Cloudinary devolvió una respuesta incompleta")
+        return CloudinaryUpload(
+            public_id=public_id,
+            secure_url=secure_url,
+            formato=payload.get("format"),
+            ancho_px=payload.get("width"),
+            alto_px=payload.get("height"),
+        )
+
     async def destroy(self, public_id: str) -> None:
         timestamp = int(time.time())
         params: dict[str, str | int] = {"public_id": public_id, "timestamp": timestamp}

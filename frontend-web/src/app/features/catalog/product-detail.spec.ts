@@ -189,4 +189,47 @@ describe('ProductDetail', () => {
     expect(fixture.nativeElement.textContent).toContain('46 cm');
     expect(fixture.nativeElement.textContent).not.toContain('44 cm');
   });
+
+  it('renders virtual try-on banner when permite_vestidor is true and opens modal', () => {
+    const vtonProduct = product(5);
+    vtonProduct.permite_vestidor = true;
+    const catalog = {
+      branches: vi.fn(() => of([])),
+      product: vi.fn(() => of(vtonProduct)),
+      images: vi.fn(() => of([])),
+      measurements: vi.fn(() => of([])),
+    };
+    TestBed.configureTestingModule({
+      imports: [ProductDetail],
+      providers: [
+        provideRouter([]),
+        { provide: CatalogService, useValue: catalog },
+        { provide: CommerceService, useValue: { addCartItem: vi.fn(() => of({})) } },
+        { provide: AuthService, useValue: { currentUser: signal(null) } },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: { get: () => '1' } } },
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ProductDetail);
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector('.virtual-tryon-banner');
+    expect(banner).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('¿Cómo me vería con esta prenda?');
+
+    const button = fixture.nativeElement.querySelector('#btn-open-virtual-tryon') as HTMLButtonElement;
+    expect(button).not.toBeNull();
+
+    button.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showTryOnModal()).toBe(true);
+    const modal = fixture.nativeElement.querySelector('.vton-modal');
+    expect(modal).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Probador Virtual Inteligente');
+  });
 });

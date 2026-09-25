@@ -1,6 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, OnDestroy } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, finalize, forkJoin, of } from 'rxjs';
+import { catchError, finalize, forkJoin, interval, of, Subscription } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { Branch, Product, ProductImage, ProductMeasurement } from '../../core/models/catalog.model';
 import { RecommendedProduct } from '../../core/models/recommendation.model';
@@ -8,6 +8,7 @@ import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
 import { RecommendationService } from '../../core/services/recommendation.service';
+import { TryOnService } from '../../core/services/try-on.service';
 import { StatusPanel } from '../../shared/components/status-panel/status-panel';
 import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
 
@@ -211,10 +212,21 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
               </div>
             </dl>
             @if (item.permite_vestidor) {
-              <p class="feature-note">
-                Este producto está marcado como compatible con vestidor. La función visual todavía
-                no forma parte de esta etapa.
-              </p>
+              <div class="virtual-tryon-banner" role="region" aria-label="Vestidor virtual con IA">
+                <div class="virtual-tryon-banner__content">
+                  <span class="vton-badge"><span class="vton-sparkle">✨</span> Probador con IA</span>
+                  <strong>¿Cómo me vería con esta prenda?</strong>
+                  <p>Sube tu foto y pruébate los distintos colores antes de agregarlo al carrito.</p>
+                </div>
+                <button
+                  type="button"
+                  class="button button--vton"
+                  (click)="openTryOnModal(item)"
+                  id="btn-open-virtual-tryon"
+                >
+                  <span>✨</span> Probar en mi foto
+                </button>
+              </div>
             }
             <div class="product-purchase">
               @if (actionMessage()) {
@@ -337,16 +349,252 @@ import { BolivianosPipe } from '../../shared/pipes/bolivianos.pipe';
           </section>
         }
       }
+
+      <!-- MODAL INTERACTIVO DE VESTIDOR VIRTUAL -->
+      @if (showTryOnModal()) {
+        <div class="vton-overlay" (click)="onOverlayClick($event)" role="dialog" aria-modal="true" aria-labelledby="vton-title">
+          <div class="vton-modal" (click)="$event.stopPropagation()">
+            <header class="vton-modal__header">
+              <div>
+                <span class="vton-badge"><span class="vton-sparkle">✨</span> Probador Virtual Inteligente</span>
+                <h2 id="vton-title">{{ product()?.nombre }}</h2>
+                <p class="vton-modal__meta">
+                  Talla: <strong>{{ selectedSize() || 'M' }}</strong> · Color: <strong>{{ tryOnActiveColorName() }}</strong>
+                </p>
+              </div>
+              <button type="button" class="vton-close-btn" (click)="closeTryOnModal()" aria-label="Cerrar vestidor">✕</button>
+            </header>
+
+            <div class="vton-modal__body">
+              <!-- ESTADO 1: SUBIDA DE FOTO -->
+              @if (tryOnState() === 'upload') {
+                <div class="vton-upload-state">
+                  <div class="vton-guide-box">
+                    <h4>📸 Consejos para una prueba perfecta:</h4>
+                    <ul>
+                      <li>Tómate una foto o selfie de frente, de la cintura hacia arriba.</li>
+                      <li>Utiliza buena iluminación para que la IA detecte mejor tu silueta.</li>
+                      <li>Evita que otros objetos o prendas holgadas tapen tu torso.</li>
+                    </ul>
+                  </div>
+
+                  <div
+                    class="vton-dropzone"
+                    [class.has-file]="!!tryOnPhotoPreview()"
+                    (click)="fileInput.click()"
+                    (dragover)="onDragOver($event)"
+                    (drop)="onFileDrop($event)"
+                  >
+                    <input
+                      #fileInput
+                      type="file"
+                      accept="image/png, image/jpeg, image/webp"
+                      style="display: none;"
+                      (change)="onTryOnFileSelected($event)"
+                    />
+                    @if (tryOnPhotoPreview()) {
+                      <div class="vton-preview-wrap">
+                        <img [src]="tryOnPhotoPreview()" alt="Tu foto para prueba" />
+                        <span class="vton-change-badge">Haz clic para cambiar foto</span>
+                      </div>
+                    } @else {
+                      <div class="vton-dropzone-prompt">
+                        <span class="vton-upload-icon">📸</span>
+                        <strong>Selecciona o arrastra una foto tuya</strong>
+                        <p>Formatos soportados: JPG, PNG, WEBP (hasta 5MB)</p>
+                      </div>
+                    }
+                  </div>
+
+                  @if (tryOnErrorMessage()) {
+                    <p class="vton-error">{{ tryOnErrorMessage() }}</p>
+                  }
+
+                  <div class="vton-upload-actions">
+                    <button
+                      type="button"
+                      class="button button--vton button--full"
+                      [disabled]="!tryOnSelectedFile()"
+                      (click)="startTryOnGeneration()"
+                    >
+                      <span>✨</span> Iniciar Escáner y Prueba con IA
+                    </button>
+                  </div>
+                </div>
+              }
+
+              <!-- ESTADO 2: PROCESAMIENTO Y ESCÁNER ANIMADO -->
+              @if (tryOnState() === 'processing') {
+                <div class="vton-processing-state">
+                  <div class="vton-scanner-card">
+                    <img [src]="tryOnPhotoPreview()" alt="Escaneando silueta" />
+                    <div class="vton-laser-line"></div>
+                  </div>
+
+                  <div class="vton-progress-section">
+                    <div class="vton-progress-meta">
+                      <strong>{{ tryOnProgress() }}%</strong>
+                      <span>Aproximadamente {{ tryOnEta() }} segundos restantes</span>
+                    </div>
+                    <div class="vton-progress-track">
+                      <div class="vton-progress-bar" [style.width.%]="tryOnProgress()"></div>
+                    </div>
+                    <p class="vton-step-message">{{ tryOnStepMessage() }}</p>
+
+                    <ul class="vton-step-checklist">
+                      <li [class.done]="tryOnProgress() >= 25">
+                        <span class="dot">✓</span> 1. Silueta y postura detectada
+                      </li>
+                      <li [class.done]="tryOnProgress() >= 60">
+                        <span class="dot">✓</span> 2. Dimensiones y proporciones de prenda ajustadas
+                      </li>
+                      <li [class.done]="tryOnProgress() >= 95">
+                        <span class="dot">✓</span> 3. Renderizado de caída de tela, pliegues y sombras
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div class="vton-processing-actions">
+                    <button type="button" class="button button--secondary" (click)="cancelTryOn()">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              }
+
+              <!-- ESTADO 3: RESULTADO INTERACTIVO Y SELECTOR DE COLORES -->
+              @if (tryOnState() === 'completed') {
+                <div class="vton-result-state">
+                  <div class="vton-result-image-panel">
+                    <div class="vton-result-view">
+                      <img
+                        [src]="tryOnShowBefore() ? tryOnPhotoPreview() : (tryOnResultImage() || activeImage())"
+                        [alt]="tryOnShowBefore() ? 'Tu foto original' : 'Prenda puesta con IA'"
+                      />
+                      <span class="vton-ai-tag">
+                        {{ tryOnShowBefore() ? 'Tu foto original' : '✨ Prenda Ajustada con IA' }}
+                      </span>
+                    </div>
+
+                    <div class="vton-toggle-container">
+                      <button
+                        type="button"
+                        class="vton-toggle-btn"
+                        [class.active]="tryOnShowBefore()"
+                        (click)="tryOnShowBefore.set(true)"
+                      >
+                        Antes
+                      </button>
+                      <button
+                        type="button"
+                        class="vton-toggle-btn"
+                        [class.active]="!tryOnShowBefore()"
+                        (click)="tryOnShowBefore.set(false)"
+                      >
+                        Después (Look IA)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="vton-result-controls-panel">
+                    <div class="vton-product-brief">
+                      <span class="vton-category">{{ product()?.categoria }}</span>
+                      <h3>{{ product()?.nombre }}</h3>
+                      <p class="vton-selected-size">Talla: <strong>{{ selectedSize() || 'M' }}</strong></p>
+                    </div>
+
+                    <!-- SELECTOR DE COLORES EN CALIENTE -->
+                    @if (product(); as currentProduct) {
+                      @if (availableColors(currentProduct).length > 0) {
+                        <div class="vton-color-section">
+                          <label class="vton-label">
+                            Color actual: <strong>{{ tryOnActiveColorName() }}</strong>
+                          </label>
+                          <div class="vton-color-swatches">
+                            @for (color of availableColors(currentProduct); track color.id_color) {
+                              <button
+                                type="button"
+                                class="vton-color-chip"
+                                [class.active]="tryOnActiveColorId() === color.id_color"
+                                [class.is-cached]="hasCachedColor(color.id_color)"
+                                [title]="color.color + (hasCachedColor(color.id_color) ? ' (Generado ✓)' : '')"
+                                (click)="switchTryOnColor(color.id_color, color.color)"
+                              >
+                                <i [style.background]="color.codigo_hex || '#d8dadd'"></i>
+                                <span>{{ color.color }}</span>
+                                @if (hasCachedColor(color.id_color)) {
+                                  <small class="cached-badge">✓</small>
+                                }
+                              </button>
+                            }
+                          </div>
+                          <small class="vton-hint">
+                            Toca otro color para probarlo con tu misma foto sin volver a subirla.
+                          </small>
+                        </div>
+                      }
+                    }
+
+                    <div class="vton-user-photo-row">
+                      <div class="vton-thumb-crop">
+                        <img [src]="tryOnPhotoPreview()" alt="Tu foto base" />
+                      </div>
+                      <div>
+                        <span>Tu foto de referencia</span>
+                        <button type="button" class="vton-link-btn" (click)="resetToUpload()">Cambiar foto</button>
+                      </div>
+                    </div>
+
+                    <div class="vton-cta-group">
+                      @if (product(); as currentProduct) {
+                        <button
+                          type="button"
+                          class="button button--primary button--full"
+                          (click)="applyAndAddToCart(currentProduct)"
+                        >
+                          🛒 Añadir al carrito (Talla {{ selectedSize() || 'M' }} · {{ tryOnActiveColorName() }})
+                        </button>
+                      }
+                      <button
+                        type="button"
+                        class="button button--secondary button--full"
+                        (click)="downloadResultImage()"
+                      >
+                        📥 Descargar imagen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              <!-- ESTADO 4: ERROR / FALLO -->
+              @if (tryOnState() === 'failed') {
+                <div class="vton-failed-state">
+                  <span class="vton-failed-icon">⚠️</span>
+                  <h3>No pudimos completar la prueba</h3>
+                  <p>{{ tryOnErrorMessage() || 'Ocurrió un error inesperado al procesar la imagen.' }}</p>
+                  <button type="button" class="button button--primary" (click)="resetToUpload()">
+                    Intentar de nuevo
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
     </section>
   `,
 })
 /** [CU-04 / CU-18] Detalle de Prenda y Probador Virtual */
-export class ProductDetail {
+export class ProductDetail implements OnDestroy {
   private readonly catalog = inject(CatalogService);
   private readonly errors = inject(ApiErrorService);
   private readonly commerce = inject(CommerceService);
   private readonly recService = inject(RecommendationService, { optional: true });
   private readonly route = inject(ActivatedRoute);
+  private readonly tryOn = inject(TryOnService);
+  private tryOnPollingSub?: Subscription;
+
   readonly auth = inject(AuthService);
   readonly product = signal<Product | null>(null);
   readonly similarProducts = signal<RecommendedProduct[]>([]);
@@ -354,6 +602,22 @@ export class ProductDetail {
   readonly selectedColorId = signal<number | null>(null);
   readonly selectedSize = signal<string | null>(null);
   readonly measurements = signal<ProductMeasurement[]>([]);
+
+  // Virtual Try-On signals
+  readonly showTryOnModal = signal(false);
+  readonly tryOnState = signal<'upload' | 'processing' | 'completed' | 'failed'>('upload');
+  readonly tryOnProgress = signal(0);
+  readonly tryOnEta = signal(15);
+  readonly tryOnStepMessage = signal('Iniciando escáner...');
+  readonly tryOnSelectedFile = signal<File | null>(null);
+  readonly tryOnPhotoPreview = signal<string | null>(null);
+  readonly tryOnResultImage = signal<string | null>(null);
+  readonly tryOnTaskId = signal<string | null>(null);
+  readonly tryOnActiveColorId = signal<number | null>(null);
+  readonly tryOnActiveColorName = signal<string>('Color actual');
+  readonly tryOnShowBefore = signal(false);
+  readonly tryOnErrorMessage = signal<string | null>(null);
+  readonly tryOnColorCache = signal<Record<number, string>>({});
   readonly selectedMeasurement = computed(() => {
     const size = this.selectedSize();
     return this.measurements().find((measurement) => measurement.talla === size) ?? null;
@@ -683,5 +947,182 @@ export class ProductDetail {
       next: (items) => this.similarProducts.set(items),
       error: () => {},
     });
+  }
+
+  // ==========================================
+  // VIRTUAL TRY-ON (VESTIDOR CON IA) METHODS
+  // ==========================================
+
+  openTryOnModal(item: Product): void {
+    this.showTryOnModal.set(true);
+    const activeColorId = this.selectedColorId() ?? (item.variantes[0]?.id_color ?? null);
+    const available = this.availableColors(item);
+    const colorObj = available.find((c) => c.id_color === activeColorId);
+    this.tryOnActiveColorId.set(activeColorId);
+    this.tryOnActiveColorName.set(colorObj?.color ?? 'Color oficial');
+
+    if (activeColorId && this.tryOnColorCache()[activeColorId]) {
+      this.tryOnResultImage.set(this.tryOnColorCache()[activeColorId]);
+      this.tryOnState.set('completed');
+    } else if (!this.tryOnSelectedFile()) {
+      this.tryOnState.set('upload');
+    }
+  }
+
+  closeTryOnModal(): void {
+    this.stopTryOnPolling();
+    this.showTryOnModal.set(false);
+  }
+
+  onOverlayClick(event: MouseEvent): void {
+    this.closeTryOnModal();
+  }
+
+  onTryOnFileSelected(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    if (target.files && target.files.length > 0) {
+      this.handleTryOnFile(target.files[0]);
+    }
+  }
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+  }
+
+  onFileDrop(event: DragEvent): void {
+    event.preventDefault();
+    if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
+      this.handleTryOnFile(event.dataTransfer.files[0]);
+    }
+  }
+
+  private handleTryOnFile(file: File): void {
+    if (!file.type.startsWith('image/')) {
+      this.tryOnErrorMessage.set('Por favor sube un archivo de imagen (JPG, PNG o WEBP).');
+      return;
+    }
+    this.tryOnErrorMessage.set(null);
+    this.tryOnSelectedFile.set(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      this.tryOnPhotoPreview.set(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  startTryOnGeneration(): void {
+    const file = this.tryOnSelectedFile();
+    const prod = this.product();
+    if (!file || !prod) return;
+
+    this.stopTryOnPolling();
+    this.tryOnState.set('processing');
+    this.tryOnProgress.set(10);
+    this.tryOnEta.set(15);
+    this.tryOnStepMessage.set('Iniciando detección de silueta...');
+    this.tryOnErrorMessage.set(null);
+
+    const colorId = this.tryOnActiveColorId();
+    const colorName = this.tryOnActiveColorName();
+
+    this.tryOn.createTask(file, prod.id_producto, colorId, colorName).subscribe({
+      next: (res) => {
+        this.tryOnTaskId.set(res.task_id);
+        this.startTryOnPolling(res.task_id);
+      },
+      error: (err) => {
+        this.tryOnState.set('failed');
+        this.tryOnErrorMessage.set(
+          this.errors.message(err, 'No se pudo iniciar la prueba con IA.'),
+        );
+      },
+    });
+  }
+
+  private startTryOnPolling(taskId: string): void {
+    this.tryOnPollingSub = interval(2000).subscribe(() => {
+      this.tryOn.getTaskStatus(taskId).subscribe({
+        next: (status) => {
+          if (status.status === 'completed') {
+            this.tryOnProgress.set(100);
+            this.tryOnEta.set(0);
+            this.tryOnStepMessage.set(status.step_message);
+            const resultUrl = status.result_image_url || this.activeImage();
+            this.tryOnResultImage.set(resultUrl);
+
+            const activeColorId = this.tryOnActiveColorId();
+            if (activeColorId) {
+              const currentCache = { ...this.tryOnColorCache(), [activeColorId]: resultUrl };
+              this.tryOnColorCache.set(currentCache);
+            }
+            this.tryOnState.set('completed');
+            this.stopTryOnPolling();
+          } else if (status.status === 'failed') {
+            this.tryOnState.set('failed');
+            this.tryOnErrorMessage.set(status.error || 'Ocurrió un error al procesar tu look.');
+            this.stopTryOnPolling();
+          } else {
+            this.tryOnProgress.set(status.progress);
+            this.tryOnEta.set(status.eta_seconds);
+            this.tryOnStepMessage.set(status.step_message);
+          }
+        },
+        error: () => {
+          // Retry on next tick
+        },
+      });
+    });
+  }
+
+  private stopTryOnPolling(): void {
+    if (this.tryOnPollingSub) {
+      this.tryOnPollingSub.unsubscribe();
+      this.tryOnPollingSub = undefined;
+    }
+  }
+
+  cancelTryOn(): void {
+    this.stopTryOnPolling();
+    this.tryOnState.set('upload');
+  }
+
+  hasCachedColor(colorId: number): boolean {
+    return !!this.tryOnColorCache()[colorId];
+  }
+
+  switchTryOnColor(colorId: number, colorName: string): void {
+    this.tryOnActiveColorId.set(colorId);
+    this.tryOnActiveColorName.set(colorName);
+
+    if (this.hasCachedColor(colorId)) {
+      this.tryOnResultImage.set(this.tryOnColorCache()[colorId]);
+      this.tryOnShowBefore.set(false);
+    } else if (this.tryOnSelectedFile()) {
+      this.startTryOnGeneration();
+    }
+  }
+
+  resetToUpload(): void {
+    this.stopTryOnPolling();
+    this.tryOnState.set('upload');
+    this.tryOnShowBefore.set(false);
+  }
+
+  applyAndAddToCart(item: Product): void {
+    const colorId = this.tryOnActiveColorId();
+    if (colorId) {
+      this.selectColor(colorId);
+    }
+    this.closeTryOnModal();
+    this.addToCart(item);
+  }
+
+  downloadResultImage(): void {
+    const url = this.tryOnResultImage() || this.activeImage();
+    window.open(url, '_blank');
+  }
+
+  ngOnDestroy(): void {
+    this.stopTryOnPolling();
   }
 }

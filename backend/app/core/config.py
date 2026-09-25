@@ -76,6 +76,8 @@ class Settings(BaseSettings):
         default=None, alias="OPENROUTESERVICE_API_KEY"
     )
     ors_api_key: str | None = Field(default=None, alias="ORS_API_KEY")
+    piapi_api_key: str | None = Field(default=None, alias="PIAPI_API_KEY")
+    piapi_model: str = Field(default="kling", alias="PIAPI_MODEL")
     database_schema: Literal["capricho"] = "capricho"
 
     @property
