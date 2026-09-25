@@ -163,28 +163,38 @@ class VirtualTryOnService:
     async def _dispatch_piapi_task(self, *, human_image: str, cloth_image: str) -> str:
         url = "https://api.piapi.ai/api/v1/task"
         headers = {
-            "x-api-key": self.settings.piapi_api_key or "",
+            "x-api-key": (self.settings.piapi_api_key or "").strip(),
             "Content-Type": "application/json",
         }
+        model = (self.settings.piapi_model or "kling").strip()
         payload = {
-            "model": self.settings.piapi_model or "kling",
-            "task_type": "virtual-try-on",
+            "model": model,
+            "task_type": "ai_try_on",
             "input": {
-                "human_image": human_image,
-                "cloth_image": cloth_image,
-                "category": "upper_body",
+                "model_input": human_image,
+                "upper_input": cloth_image,
+                "batch_size": 1,
             },
         }
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=20.0) as client:
                 res = await client.post(url, headers=headers, json=payload)
-                res.raise_for_status()
+                if res.is_error:
+                    error_detail = res.text
+                    try:
+                        err_json = res.json()
+                        error_detail = err_json.get("message") or err_json.get("error") or res.text
+                    except Exception:
+                        pass
+                    raise TryOnError(f"Error al comunicar con el motor de IA ({res.status_code}): {error_detail}")
                 data = res.json()
                 data_obj = data.get("data") or {}
                 external_task_id = data_obj.get("task_id")
                 if not external_task_id:
                     raise TryOnError("PiAPI no devolvió un identificador de tarea válido")
                 return str(external_task_id)
+        except TryOnError:
+            raise
         except Exception as exc:
             raise TryOnError(f"Error al comunicar con el motor de IA: {exc}") from exc
 
@@ -263,7 +273,7 @@ class VirtualTryOnService:
 
     async def _poll_piapi_status(self, task: LocalTryOnTask) -> TryOnTaskStatusResponse:
         url = f"https://api.piapi.ai/api/v1/task/{task.external_task_id}"
-        headers = {"x-api-key": self.settings.piapi_api_key or ""}
+        headers = {"x-api-key": (self.settings.piapi_api_key or "").strip()}
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.get(url, headers=headers)
@@ -272,10 +282,29 @@ class VirtualTryOnService:
                 data_obj = data.get("data") or {}
                 remote_status = data_obj.get("status", "processing").lower()
 
-                if remote_status in ("completed", "success"):
+                if remote_status in ("completed", "success", "succeeded"):
                     task.status = "completed"
                     output = data_obj.get("output") or {}
-                    result_url = output.get("image_url") or output.get("image") or task.garment_image_url
+                    works = output.get("works") or []
+                    result_url = None
+                    if isinstance(works, list) and len(works) > 0 and isinstance(works[0], dict):
+                        first_work = works[0]
+                        img_node = first_work.get("image")
+                        if isinstance(img_node, dict):
+                            result_url = img_node.get("resource")
+                        elif isinstance(img_node, str):
+                            result_url = img_node
+                        if not result_url:
+                            result_url = first_work.get("resource") or first_work.get("url")
+
+                    if not result_url:
+                        result_url = (
+                            output.get("image_url")
+                            or output.get("image")
+                            or output.get("resource")
+                            or task.garment_image_url
+                        )
+
                     task.result_image_url = result_url
                     return TryOnTaskStatusResponse(
                         task_id=task.task_id,

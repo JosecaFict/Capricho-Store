@@ -154,3 +154,78 @@ async def test_virtual_tryon_endpoints_flow():
             assert "step_message" in status_payload
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_piapi_dispatch_payload_and_polling():
+    from unittest.mock import patch
+    from app.core.config import Settings
+    from app.modules.virtual_tryon.service import LocalTryOnTask
+
+    test_settings = Settings(
+        DATABASE_URL="postgresql+asyncpg://user:pass@localhost/db",
+        piapi_api_key="test-api-key",
+        piapi_model="kling",
+    )
+    service = VirtualTryOnService(settings=test_settings)
+
+    # Test dispatch
+    mock_post_resp = MagicMock()
+    mock_post_resp.is_error = False
+    mock_post_resp.json.return_value = {
+        "code": 200,
+        "data": {"task_id": "ext-task-123", "status": "pending"},
+        "message": "success",
+    }
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_post_resp
+        task_id = await service._dispatch_piapi_task(
+            human_image="https://cdn.example.com/human.jpg",
+            cloth_image="https://cdn.example.com/shirt.jpg",
+        )
+        assert task_id == "ext-task-123"
+        call_kwargs = mock_post.call_args.kwargs
+        assert call_kwargs["json"]["task_type"] == "ai_try_on"
+        assert call_kwargs["json"]["model"] == "kling"
+        assert call_kwargs["json"]["input"]["model_input"] == "https://cdn.example.com/human.jpg"
+        assert call_kwargs["json"]["input"]["upper_input"] == "https://cdn.example.com/shirt.jpg"
+        assert call_kwargs["headers"]["x-api-key"] == "test-api-key"
+
+    # Test polling with works array output
+    mock_get_resp = MagicMock()
+    mock_get_resp.raise_for_status = MagicMock()
+    mock_get_resp.json.return_value = {
+        "code": 200,
+        "data": {
+            "task_id": "ext-task-123",
+            "status": "completed",
+            "output": {
+                "works": [
+                    {
+                        "image": {
+                            "resource": "https://piapi-cdn.example.com/ai_result.jpg"
+                        }
+                    }
+                ]
+            },
+        },
+    }
+
+    local_task = LocalTryOnTask(
+        task_id="local-1",
+        product_id=1,
+        color_id=1,
+        color_name="Azul",
+        human_image_url="https://cdn.example.com/human.jpg",
+        garment_image_url="https://cdn.example.com/shirt.jpg",
+        external_task_id="ext-task-123",
+        is_live=True,
+    )
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_get_resp
+        res = await service._poll_piapi_status(local_task)
+        assert res.status == "completed"
+        assert res.progress == 100
+        assert res.result_image_url == "https://piapi-cdn.example.com/ai_result.jpg"
