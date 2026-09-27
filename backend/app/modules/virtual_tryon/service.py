@@ -1,13 +1,16 @@
+import asyncio
 import base64
-from datetime import date
 import json
+import os
+import tempfile
 import time
-from typing import Any, Protocol
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import date
+from typing import Any, Protocol
 
-from fastapi import HTTPException
 import httpx
+from fastapi import HTTPException
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +23,27 @@ from app.modules.virtual_tryon.schemas import (
     TryOnTaskCreateResponse,
     TryOnTaskStatusResponse,
 )
+
+
+def _safe_unlink(filepath: str | None) -> None:
+    if filepath and os.path.exists(filepath):
+        try:
+            os.unlink(filepath)
+        except Exception:
+            pass
+
+
+def _read_and_cleanup_file(filepath: str | None) -> bytes | None:
+    if not filepath or not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, "rb") as f:
+            return f.read()
+    finally:
+        try:
+            os.unlink(filepath)
+        except Exception:
+            pass
 
 
 class TryOnError(HTTPException):
@@ -41,6 +65,7 @@ class LocalTryOnTask:
     user_photo_public_id: str | None = None
     created_at: float = field(default_factory=time.time)
     external_task_id: str | None = None
+    provider: str = "piapi"
     is_live: bool = False
     result_image_url: str | None = None
     status: str = "processing"
@@ -51,6 +76,8 @@ class LocalTryOnTask:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "LocalTryOnTask":
+        if "provider" not in data:
+            data["provider"] = "piapi"
         return cls(**data)
 
 
@@ -144,6 +171,9 @@ class MemoryTryOnStore:
 
 
 class VirtualTryOnService:
+    _hf_client: Any = None
+    _hf_jobs: dict[str, Any] = {}
+
     def __init__(
         self,
         settings: Settings | None = None,
@@ -152,12 +182,12 @@ class VirtualTryOnService:
         self.settings = settings or get_settings()
         self.store = store or MemoryTryOnStore()
 
-    async def _resolve_garment_image(
+    async def _resolve_garment_info(
         self,
         session: AsyncSession,
         product_id: int,
         color_id: int | None,
-    ) -> str:
+    ) -> tuple[str, str]:
         product_stmt = select(Producto).where(Producto.id_producto == product_id)
         res = await session.execute(product_stmt)
         product = res.scalar_one_or_none()
@@ -177,12 +207,23 @@ class VirtualTryOnService:
         if not images:
             raise TryOnError("El producto no cuenta con imágenes publicadas para la prueba", status_code=400)
 
+        garment_url = images[0].secure_url
         if color_id is not None:
             color_images = [img for img in images if img.id_color == color_id]
             if color_images:
-                return color_images[0].secure_url
+                garment_url = color_images[0].secure_url
 
-        return images[0].secure_url
+        garment_des = product.nombre or "upper body clothing"
+        return garment_url, garment_des
+
+    async def _resolve_garment_image(
+        self,
+        session: AsyncSession,
+        product_id: int,
+        color_id: int | None,
+    ) -> str:
+        url, _ = await self._resolve_garment_info(session, product_id, color_id)
+        return url
 
     async def get_user_quota(self, user_id: int) -> TryOnQuotaResponse:
         daily_limit = self.settings.tryon_daily_limit_per_user
@@ -235,7 +276,7 @@ class VirtualTryOnService:
                 status_code=400,
             )
 
-        garment_image_url = await self._resolve_garment_image(session, product_id, color_id)
+        garment_image_url, garment_des = await self._resolve_garment_info(session, product_id, color_id)
 
         # 4. Upload customer photo to Cloudinary temporary folder
         user_photo_url: str
@@ -257,9 +298,32 @@ class VirtualTryOnService:
             user_photo_url = f"data:{content_type or 'image/jpeg'};base64,{encoded}"
 
         task_id = str(uuid.uuid4())
+        provider_config = (self.settings.tryon_provider or "piapi").lower().strip()
+        has_hf_token = bool(self.settings.hf_token and self.settings.hf_token.strip())
         has_piapi_key = bool(self.settings.piapi_api_key and self.settings.piapi_api_key.strip())
 
-        if has_piapi_key and user_photo_url.startswith("http"):
+        if provider_config == "huggingface" and has_hf_token:
+            await self._dispatch_hf_task(
+                human_image=user_photo_url,
+                garment_image=garment_image_url,
+                garment_des=garment_des,
+                task_id=task_id,
+            )
+            local_task = LocalTryOnTask(
+                task_id=task_id,
+                user_id=user_id,
+                product_id=product_id,
+                color_id=color_id,
+                color_name=color_name,
+                human_image_url=user_photo_url,
+                garment_image_url=garment_image_url,
+                user_photo_public_id=user_photo_public_id,
+                external_task_id=task_id,
+                provider="huggingface",
+                is_live=True,
+                status="processing",
+            )
+        elif has_piapi_key and user_photo_url.startswith("http"):
             external_id = await self._dispatch_piapi_task(
                 human_image=user_photo_url,
                 cloth_image=garment_image_url,
@@ -274,6 +338,7 @@ class VirtualTryOnService:
                 garment_image_url=garment_image_url,
                 user_photo_public_id=user_photo_public_id,
                 external_task_id=external_id,
+                provider="piapi",
                 is_live=True,
                 status="processing",
             )
@@ -287,6 +352,7 @@ class VirtualTryOnService:
                 human_image_url=user_photo_url,
                 garment_image_url=garment_image_url,
                 user_photo_public_id=user_photo_public_id,
+                provider="simulation",
                 is_live=False,
                 status="processing",
             )
@@ -357,6 +423,11 @@ class VirtualTryOnService:
 
         if user_id is not None and task.user_id is not None and task.user_id != user_id:
             raise TryOnError("No tienes permiso para consultar esta prueba virtual", status_code=403)
+
+        if task.is_live and task.provider == "huggingface" and task.status != "completed":
+            resp = await self._poll_hf_status(task, storage=storage)
+            await self.store.save_task(task)
+            return resp
 
         if task.is_live and task.external_task_id and task.status != "completed":
             resp = await self._poll_piapi_status(task)
@@ -539,3 +610,263 @@ class VirtualTryOnService:
                 color_name=task.color_name,
                 is_live=True,
             )
+
+    async def _dispatch_hf_task(
+        self,
+        *,
+        human_image: str,
+        garment_image: str,
+        garment_des: str,
+        task_id: str,
+    ) -> str:
+        temp_human_file: str | None = None
+        if human_image.startswith("data:"):
+            header, encoded = human_image.split(",", 1)
+            raw = base64.b64decode(encoded)
+            suffix = ".png" if "png" in header else ".jpg"
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+                f.write(raw)
+                temp_human_file = f.name
+            human_ref = temp_human_file
+        else:
+            human_ref = human_image
+
+        space = (self.settings.hf_space or "yisol/IDM-VTON").strip()
+        hf_token = (self.settings.hf_token or "").strip() or None
+
+        def _submit_job() -> Any:
+            from gradio_client import Client, handle_file
+
+            if VirtualTryOnService._hf_client is None:
+                VirtualTryOnService._hf_client = Client(
+                    space,
+                    hf_token=hf_token,
+                )
+            client = VirtualTryOnService._hf_client
+            job = client.submit(
+                dict={"background": handle_file(human_ref), "layers": [], "composite": None},
+                garm_img=handle_file(garment_image),
+                garment_des=garment_des or "clothing",
+                is_checked=True,
+                is_checked_crop=False,
+                denoise_steps=30,
+                seed=42,
+                api_name="/tryon",
+            )
+            return job
+
+        try:
+            job = await asyncio.to_thread(_submit_job)
+            VirtualTryOnService._hf_jobs[task_id] = job
+            return task_id
+        except Exception as exc:
+            raise TryOnError(f"Error al iniciar prueba virtual con Hugging Face: {exc}") from exc
+        finally:
+            if temp_human_file:
+                await asyncio.to_thread(_safe_unlink, temp_human_file)
+
+    async def _poll_hf_status(
+        self,
+        task: LocalTryOnTask,
+        storage: CloudinaryStorage | None = None,
+    ) -> TryOnTaskStatusResponse:
+        job = VirtualTryOnService._hf_jobs.get(task.task_id)
+        elapsed = time.time() - task.created_at
+
+        if job is None:
+            if task.status == "completed":
+                return TryOnTaskStatusResponse(
+                    task_id=task.task_id,
+                    status="completed",
+                    progress=100,
+                    eta_seconds=0,
+                    step_message="¡Ajuste completado con IDM-VTON!",
+                    result_image_url=task.result_image_url,
+                    original_photo_url=task.human_image_url,
+                    garment_image_url=task.garment_image_url,
+                    product_id=task.product_id,
+                    color_id=task.color_id,
+                    color_name=task.color_name,
+                    is_live=True,
+                )
+            elif task.status == "failed":
+                return TryOnTaskStatusResponse(
+                    task_id=task.task_id,
+                    status="failed",
+                    progress=0,
+                    eta_seconds=0,
+                    step_message="No se pudo completar la prueba con IA",
+                    error=task.error,
+                    original_photo_url=task.human_image_url,
+                    garment_image_url=task.garment_image_url,
+                    product_id=task.product_id,
+                    color_id=task.color_id,
+                    color_name=task.color_name,
+                    is_live=True,
+                )
+            else:
+                if elapsed > 120.0:
+                    task.status = "failed"
+                    task.error = "Tiempo de espera agotado al conectar con Hugging Face"
+                    return TryOnTaskStatusResponse(
+                        task_id=task.task_id,
+                        status="failed",
+                        progress=0,
+                        eta_seconds=0,
+                        step_message="Tiempo de espera agotado",
+                        error=task.error,
+                        original_photo_url=task.human_image_url,
+                        garment_image_url=task.garment_image_url,
+                        product_id=task.product_id,
+                        color_id=task.color_id,
+                        color_name=task.color_name,
+                        is_live=True,
+                    )
+                progress = min(92, max(15, int((elapsed / 25.0) * 100)))
+                return TryOnTaskStatusResponse(
+                    task_id=task.task_id,
+                    status="processing",
+                    progress=progress,
+                    eta_seconds=max(3, int(25.0 - elapsed)),
+                    step_message="Procesando prueba virtual con IDM-VTON...",
+                    original_photo_url=task.human_image_url,
+                    garment_image_url=task.garment_image_url,
+                    product_id=task.product_id,
+                    color_id=task.color_id,
+                    color_name=task.color_name,
+                    is_live=True,
+                )
+
+        if job.done():
+            VirtualTryOnService._hf_jobs.pop(task.task_id, None)
+            exc = job.exception()
+            if exc:
+                task.status = "failed"
+                task.error = f"Error en IDM-VTON: {exc}"
+                if task.user_photo_public_id and storage:
+                    try:
+                        await storage.destroy(task.user_photo_public_id)
+                        task.user_photo_public_id = None
+                    except Exception:
+                        pass
+                return TryOnTaskStatusResponse(
+                    task_id=task.task_id,
+                    status="failed",
+                    progress=0,
+                    eta_seconds=0,
+                    step_message="No se pudo completar la prueba con IA",
+                    error=task.error,
+                    original_photo_url=task.human_image_url,
+                    garment_image_url=task.garment_image_url,
+                    product_id=task.product_id,
+                    color_id=task.color_id,
+                    color_name=task.color_name,
+                    is_live=True,
+                )
+
+            try:
+                result_tuple = job.result()
+                output_path = (
+                    result_tuple[0]
+                    if isinstance(result_tuple, (tuple, list))
+                    else str(result_tuple)
+                )
+                img_bytes = await asyncio.to_thread(_read_and_cleanup_file, output_path)
+                result_url = None
+
+                if img_bytes:
+                    if storage is not None:
+                        upload = await storage.upload_tryon_photo(
+                            content=img_bytes,
+                            filename=f"tryon_hf_{task.task_id}.png",
+                            content_type="image/png",
+                        )
+                        result_url = upload.secure_url
+                    else:
+                        b64 = base64.b64encode(img_bytes).decode("utf-8")
+                        result_url = f"data:image/png;base64,{b64}"
+
+                task.result_image_url = result_url or task.garment_image_url
+                task.status = "completed"
+            except Exception as e:
+                task.status = "failed"
+                task.error = f"Error al procesar el resultado de la imagen: {e}"
+
+            if task.user_photo_public_id and storage:
+                try:
+                    await storage.destroy(task.user_photo_public_id)
+                    task.user_photo_public_id = None
+                except Exception:
+                    pass
+
+            if task.status == "completed":
+                return TryOnTaskStatusResponse(
+                    task_id=task.task_id,
+                    status="completed",
+                    progress=100,
+                    eta_seconds=0,
+                    step_message="¡Ajuste completado con IDM-VTON! Mira cómo te queda.",
+                    result_image_url=task.result_image_url,
+                    original_photo_url=task.human_image_url,
+                    garment_image_url=task.garment_image_url,
+                    product_id=task.product_id,
+                    color_id=task.color_id,
+                    color_name=task.color_name,
+                    is_live=True,
+                )
+            else:
+                return TryOnTaskStatusResponse(
+                    task_id=task.task_id,
+                    status="failed",
+                    progress=0,
+                    eta_seconds=0,
+                    step_message="Error al procesar el resultado",
+                    error=task.error,
+                    original_photo_url=task.human_image_url,
+                    garment_image_url=task.garment_image_url,
+                    product_id=task.product_id,
+                    color_id=task.color_id,
+                    color_name=task.color_name,
+                    is_live=True,
+                )
+
+        try:
+            status_obj = job.status()
+            rank = getattr(status_obj, "rank", None)
+            queue_size = getattr(status_obj, "queue_size", None)
+            eta_val = getattr(status_obj, "eta", None)
+        except Exception:
+            rank = None
+            queue_size = None
+            eta_val = None
+
+        if rank is not None and rank > 0:
+            step_msg = f"En cola de espera de Hugging Face (turno {rank} de {queue_size or '?'})..."
+            progress = min(25, max(5, int((elapsed / 30.0) * 25)))
+            eta_sec = int(eta_val) if eta_val and eta_val > 0 else max(10, int(30 - elapsed))
+        elif elapsed < 8.0:
+            step_msg = "Detectando silueta y segmentando prenda con IDM-VTON..."
+            progress = max(15, min(45, int((elapsed / 8.0) * 45)))
+            eta_sec = max(5, int(22 - elapsed))
+        elif elapsed < 16.0:
+            step_msg = "Alineando prenda con cuerpo y calculando caída de tela..."
+            progress = max(45, min(75, 45 + int(((elapsed - 8.0) / 8.0) * 30)))
+            eta_sec = max(4, int(22 - elapsed))
+        else:
+            step_msg = "Generando textura fotorrealista y detalles finales..."
+            progress = max(75, min(95, 75 + int(((elapsed - 16.0) / 10.0) * 20)))
+            eta_sec = max(2, int(26 - elapsed))
+
+        return TryOnTaskStatusResponse(
+            task_id=task.task_id,
+            status="processing",
+            progress=progress,
+            eta_seconds=eta_sec,
+            step_message=step_msg,
+            original_photo_url=task.human_image_url,
+            garment_image_url=task.garment_image_url,
+            product_id=task.product_id,
+            color_id=task.color_id,
+            color_name=task.color_name,
+            is_live=True,
+        )

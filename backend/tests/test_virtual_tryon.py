@@ -12,7 +12,6 @@ from app.modules.catalog.models import ImagenProducto, Producto
 from app.modules.virtual_tryon.dependencies import (
     get_optional_cloudinary_storage,
     get_tryon_store,
-    get_virtual_tryon_service,
 )
 from app.modules.virtual_tryon.service import (
     LocalTryOnTask,
@@ -331,3 +330,75 @@ async def test_piapi_dispatch_payload_and_polling():
         assert res.status == "completed"
         assert res.progress == 100
         assert res.result_image_url == "https://piapi-cdn.example.com/ai_result.jpg"
+
+
+@pytest.mark.asyncio
+async def test_huggingface_dispatch_and_polling(tmp_path):
+    test_settings = Settings(
+        DATABASE_URL="postgresql+asyncpg://user:pass@localhost/db",
+        HF_TOKEN="hf_dummy_token_123",
+        TRYON_PROVIDER="huggingface",
+    )
+    service = VirtualTryOnService(settings=test_settings)
+
+    mock_session = AsyncMock()
+    mock_product = MagicMock(spec=Producto)
+    mock_product.id_producto = 5
+    mock_product.nombre = "Camisa Lino Blanca"
+    mock_product.permite_vestidor = True
+
+    mock_image = MagicMock(spec=ImagenProducto)
+    mock_image.id_producto = 5
+    mock_image.id_color = None
+    mock_image.secure_url = "https://cdn.example.com/camisa.jpg"
+
+    mock_product_res = MagicMock()
+    mock_product_res.scalar_one_or_none.return_value = mock_product
+    mock_image_res = MagicMock()
+    mock_image_res.scalars.return_value.all.return_value = [mock_image]
+    mock_session.execute.side_effect = [mock_product_res, mock_image_res]
+
+    with patch.object(service, "_dispatch_hf_task", new_callable=AsyncMock) as mock_dispatch:
+        mock_dispatch.return_value = "hf-task-id"
+        res = await service.create_task(
+            session=mock_session,
+            user_id=10,
+            product_id=5,
+            color_id=None,
+            color_name=None,
+            photo_bytes=VALID_JPEG_BYTES,
+            filename="foto.jpg",
+            content_type="image/jpeg",
+            storage=None,
+        )
+        assert res.task_id is not None
+        mock_dispatch.assert_called_once()
+        task = await service.store.get_task(res.task_id)
+        assert task is not None
+        assert task.provider == "huggingface"
+        assert task.is_live is True
+
+    # Now test polling when job finishes
+    dummy_out = tmp_path / "out.png"
+    dummy_out.write_bytes(b"dummy_png_bytes")
+
+    mock_job = MagicMock()
+    mock_job.done.return_value = True
+    mock_job.exception.return_value = None
+    mock_job.result.return_value = (str(dummy_out), str(dummy_out))
+
+    VirtualTryOnService._hf_jobs[task.task_id] = mock_job
+
+    mock_storage = AsyncMock()
+    mock_upload = MagicMock()
+    mock_upload.secure_url = "https://res.cloudinary.com/uploaded_tryon.png"
+    mock_storage.upload_tryon_photo = AsyncMock(return_value=mock_upload)
+    mock_storage.destroy = AsyncMock()
+
+    status_resp = await service.get_task_status(task.task_id, user_id=10, storage=mock_storage)
+    assert status_resp.status == "completed"
+    assert status_resp.progress == 100
+    assert status_resp.result_image_url == "https://res.cloudinary.com/uploaded_tryon.png"
+    assert "IDM-VTON" in status_resp.step_message
+    mock_storage.upload_tryon_photo.assert_called_once()
+
