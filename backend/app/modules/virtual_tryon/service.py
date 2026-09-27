@@ -912,15 +912,19 @@ class VirtualTryOnService:
         garment_image: str,
         garment_des: str,
     ) -> str:
-        model = (self.settings.replicate_model or "cuuupid/idm-vton").strip()
-        url = f"https://api.replicate.com/v1/models/{model}/predictions"
+        url = "https://api.replicate.com/v1/predictions"
         token = (self.settings.replicate_api_token or "").strip()
+        version = (
+            self.settings.replicate_model_version
+            or "0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985"
+        ).strip()
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Prefer": "respond-async",
         }
         payload = {
+            "version": version,
             "input": {
                 "human_img": human_image,
                 "garm_img": garment_image,
@@ -928,7 +932,7 @@ class VirtualTryOnService:
                 "category": "upper_body",
                 "crop": False,
                 "steps": 30,
-            }
+            },
         }
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:

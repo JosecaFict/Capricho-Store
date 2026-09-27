@@ -429,6 +429,10 @@ async def test_replicate_dispatch_and_polling():
         assert ext_id == "pred_rep_123"
         call_kwargs = mock_post.call_args.kwargs
         assert call_kwargs["headers"]["Authorization"] == "Bearer r8_test_token_123"
+        assert (
+            call_kwargs["json"]["version"]
+            == "0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985"
+        )
         assert call_kwargs["json"]["input"]["category"] == "upper_body"
         assert call_kwargs["json"]["input"]["human_img"] == "https://cdn.example.com/human.jpg"
 
