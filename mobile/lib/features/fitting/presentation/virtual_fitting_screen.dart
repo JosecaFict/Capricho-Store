@@ -2,13 +2,16 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:camera/camera.dart';
 import 'package:capricho_store/core/theme/app_theme.dart';
+import 'package:capricho_store/features/auth/presentation/auth_controller.dart';
 import 'package:capricho_store/features/catalog/domain/catalog_models.dart';
 import 'package:capricho_store/features/commerce/presentation/commerce_controller.dart';
 import 'package:capricho_store/features/fitting/domain/fitting_engine.dart';
 import 'package:capricho_store/features/fitting/domain/fitting_telemetry.dart';
 import 'package:capricho_store/features/fitting/domain/pose_smoother.dart';
+import 'package:capricho_store/features/fitting/presentation/ai_tryon_view.dart';
 import 'package:capricho_store/features/fitting/presentation/fitting_overlay_painter.dart';
 import 'package:capricho_store/features/fitting/presentation/garment_ar_overlay.dart';
+import 'package:capricho_store/features/fitting/presentation/tryon_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,9 +19,10 @@ import 'package:go_router/go_router.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 enum FittingStep {
-  scanning,      // Paso 1: Escaneo activo con la cámara (3s)
+  scanning,      // Paso 1: Escaneo activo con la cámara (3s) y silueta
   diagnosis,     // Paso 2: Tarjeta de diagnóstico y talla calculada
-  activeFitting, // Paso 3: Vestidor interactivo en tiempo real
+  aiTryOn,       // Pasos 3, 4 y 5: Vestidor con IA Fotorealista (Replicate IDM-VTON)
+  activeFitting, // Modo espejo interactivo AR en tiempo real
 }
 
 /// [CU-18] Pantalla de Probador Virtual con Realidad Aumentada (AR)
@@ -94,6 +98,21 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
     _initAnimation();
     _initSensors();
     _initCamera();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = ref.read(authControllerProvider);
+      if (!auth.isAuthenticated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Inicia sesión para usar el vestidor con IA.'),
+            backgroundColor: AppColors.cobalt,
+          ),
+        );
+        context.go('/login');
+        return;
+      }
+      ref.read(tryOnControllerProvider.notifier).fetchQuota();
+    });
   }
 
   DateTime _lastAngleUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -833,66 +852,67 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
               ),
             ),
 
-          // 4. Barra Superior Flotante
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _glassButton(
-                      icon: Icons.arrow_back_ios_new_rounded,
-                      onTap: () => context.pop(),
-                    ),
-                    if (_currentStep == FittingStep.scanning)
-                      _buildGenderSelector(),
-                    Row(
-                      children: [
-                        // Botón de Re-escanear (visible cuando no está escaneando)
-                        if (_currentStep != FittingStep.scanning) ...[
+          // 4. Barra Superior Flotante (oculta en modo vestidor IA ya que posee su propio header)
+          if (_currentStep != FittingStep.aiTryOn)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _glassButton(
+                        icon: Icons.arrow_back_ios_new_rounded,
+                        onTap: () => context.pop(),
+                      ),
+                      if (_currentStep == FittingStep.scanning)
+                        _buildGenderSelector(),
+                      Row(
+                        children: [
+                          // Botón de Re-escanear (visible cuando no está escaneando)
+                          if (_currentStep != FittingStep.scanning) ...[
+                            _glassButton(
+                              icon: Icons.radar_rounded,
+                              onTap: _startScanSequence,
+                            ),
+                            const SizedBox(width: 8),
+                            _glassButton(
+                              icon: Icons.tune_rounded,
+                              onTap: _showCalibrationSheet,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
                           _glassButton(
-                            icon: Icons.radar_rounded,
-                            onTap: _startScanSequence,
+                            icon: _showGuides
+                                ? Icons.grid_on_rounded
+                                : Icons.grid_off_rounded,
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              setState(() => _showGuides = !_showGuides);
+                            },
                           ),
                           const SizedBox(width: 8),
+                          if (!isFrontCamera) ...[
+                            _glassButton(
+                              icon: _isFlashOn
+                                  ? Icons.flash_on_rounded
+                                  : Icons.flash_off_rounded,
+                              onTap: _toggleFlash,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
                           _glassButton(
-                            icon: Icons.tune_rounded,
-                            onTap: _showCalibrationSheet,
+                            icon: Icons.flip_camera_ios_rounded,
+                            onTap: _toggleCamera,
                           ),
-                          const SizedBox(width: 8),
                         ],
-                        _glassButton(
-                          icon: _showGuides
-                              ? Icons.grid_on_rounded
-                              : Icons.grid_off_rounded,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _showGuides = !_showGuides);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        if (!isFrontCamera) ...[
-                          _glassButton(
-                            icon: _isFlashOn
-                                ? Icons.flash_on_rounded
-                                : Icons.flash_off_rounded,
-                            onTap: _toggleFlash,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        _glassButton(
-                          icon: Icons.flip_camera_ios_rounded,
-                          onTap: _toggleCamera,
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
           // 4.5. HUD de Telemetría iPhone 15 Pro Max (Ángulo 90° + Distancia)
           if (_showGuides && _currentStep == FittingStep.scanning)
@@ -903,11 +923,34 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
           if (_currentStep == FittingStep.scanning)
             _buildScanningOverlay(context),
 
-          // B) TARJETA DE DIAGNÓSTICO (Diagnosis Step)
+          // B) TARJETA DE DIAGNÓSTICO (Diagnosis Step - Paso 2 MediaPipe)
           if (_currentStep == FittingStep.diagnosis)
             _buildDiagnosisSheet(context),
 
-          // C) MODO VESTIDOR EN VIVO (Active Fitting Step)
+          // C) MODO VESTIDOR CON IA (AI Try-On Step - Pasos 3, 4 y 5 Replicate IDM-VTON)
+          if (_currentStep == FittingStep.aiTryOn)
+            Positioned.fill(
+              child: AiTryOnView(
+                product: widget.product,
+                recommendedSize: _activeSize,
+                selectedColor: _activeColor,
+                onColorChanged: (newColor) {
+                  setState(() {
+                    _activeColor = newColor;
+                    _findActiveVariant();
+                  });
+                },
+                onAddToCart: _addToCart,
+                onBackToDiagnosis: () {
+                  setState(() {
+                    _currentStep = FittingStep.diagnosis;
+                  });
+                },
+                cameraController: _cameraController,
+              ),
+            ),
+
+          // D) MODO VESTIDOR EN VIVO (Active Fitting Step - Espejo AR)
           if (_currentStep == FittingStep.activeFitting) ...[
             _buildFittingHeaderBadge(),
             _buildActiveFittingControls(context),
@@ -1725,7 +1768,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
 
               const SizedBox(height: 20),
 
-              // Botón Principal para entrar al vestidor
+              // Botón Principal: Probar con IA Fotorealista (Replicate IDM-VTON)
               FilledButton.icon(
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.cobalt,
@@ -1737,15 +1780,43 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 onPressed: () {
                   HapticFeedback.mediumImpact();
                   setState(() {
-                    _currentStep = FittingStep.activeFitting;
+                    _currentStep = FittingStep.aiTryOn;
                   });
                 },
-                icon: const Icon(Icons.checkroom_rounded, size: 20),
+                icon: const Icon(Icons.auto_awesome, size: 20),
                 label: const Text(
-                  'Probar Prenda en el Espejo',
+                  'Probar Prenda con IA Fotorealista',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Botón Secundario: Modo Espejo AR
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  setState(() {
+                    _currentStep = FittingStep.activeFitting;
+                  });
+                },
+                icon: const Icon(Icons.checkroom_rounded, size: 18),
+                label: const Text(
+                  'Ver Espejo AR en vivo',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -2051,12 +2122,28 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 const SizedBox(height: 14),
               ],
 
-              // Fila de Acción (Captura y Carrito)
+              // Fila de Acción (Captura, Probar con IA y Carrito)
               Row(
                 children: [
                   IconButton.filledTonal(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      setState(() {
+                        _currentStep = FittingStep.aiTryOn;
+                      });
+                    },
+                    icon: const Icon(Icons.auto_awesome, color: Color(0xFF60A5FA), size: 20),
+                    tooltip: 'Probar con IA',
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.cobalt.withValues(alpha: 0.25),
+                      padding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
                     onPressed: _capturePhoto,
                     icon: const Icon(Icons.camera_alt_outlined),
+                    tooltip: 'Capturar foto',
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.12),
                       foregroundColor: Colors.white,

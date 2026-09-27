@@ -80,6 +80,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final location = uri.path;
       if (location == '/splash') return null;
+
+      // [CU-18] Proteger acceso al vestidor virtual con IA: requiere sesión activa
+      if (location == '/vestidor') {
+        final auth = ref.read(authControllerProvider);
+        if (auth.initialized && !auth.isAuthenticated) {
+          return '/login?returnUrl=/vestidor';
+        }
+      }
+
       final isPanelRoute =
           location == '/admin' || location.startsWith('/admin/');
       if (!isPanelRoute) return null;

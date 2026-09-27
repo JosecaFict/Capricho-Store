@@ -511,7 +511,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     List<ProductImage> images,
   ) {
     return InkWell(
-      onTap: () {
+      onTap: () async {
+        if (!await _ensureAuthenticated('usar el vestidor virtual con IA')) return;
+        if (!context.mounted) return;
         HapticFeedback.mediumImpact();
         context.push(
           '/vestidor',
@@ -560,18 +562,24 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Vestidor Virtual con Cámara',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                      letterSpacing: 0.2,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Vestidor Virtual con IA',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      SizedBox(width: 6),
+                      Icon(Icons.bolt_rounded, color: Color(0xFF38BDF8), size: 14),
+                    ],
                   ),
                   SizedBox(height: 2),
                   Text(
-                    'Pruébate esta prenda en vivo y descubre tu talla ideal.',
+                    'Descubre tu talla ideal y pruébate el look fotorrealista.',
                     style: TextStyle(
                       color: Color(0xFFE2E8F0),
                       fontSize: 11.5,
