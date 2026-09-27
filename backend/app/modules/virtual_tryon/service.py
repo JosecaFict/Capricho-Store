@@ -638,10 +638,16 @@ class VirtualTryOnService:
             from gradio_client import Client, handle_file
 
             if VirtualTryOnService._hf_client is None:
-                VirtualTryOnService._hf_client = Client(
-                    space,
-                    hf_token=hf_token,
-                )
+                try:
+                    VirtualTryOnService._hf_client = Client(
+                        space,
+                        token=hf_token,
+                    )
+                except TypeError:
+                    VirtualTryOnService._hf_client = Client(
+                        space,
+                        hf_token=hf_token,
+                    )
             client = VirtualTryOnService._hf_client
             job = client.submit(
                 dict={"background": handle_file(human_ref), "layers": [], "composite": None},
