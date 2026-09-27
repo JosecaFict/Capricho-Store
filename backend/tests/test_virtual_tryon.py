@@ -402,3 +402,73 @@ async def test_huggingface_dispatch_and_polling(tmp_path):
     assert "IDM-VTON" in status_resp.step_message
     mock_storage.upload_tryon_photo.assert_called_once()
 
+
+@pytest.mark.asyncio
+async def test_replicate_dispatch_and_polling():
+    test_settings = Settings(
+        DATABASE_URL="postgresql+asyncpg://user:pass@localhost/db",
+        replicate_api_token="r8_test_token_123",
+        tryon_provider="replicate",
+    )
+    service = VirtualTryOnService(settings=test_settings)
+
+    mock_post_resp = MagicMock()
+    mock_post_resp.is_error = False
+    mock_post_resp.json.return_value = {
+        "id": "pred_rep_123",
+        "status": "starting",
+    }
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_post_resp
+        ext_id = await service._dispatch_replicate_task(
+            human_image="https://cdn.example.com/human.jpg",
+            garment_image="https://cdn.example.com/polo.jpg",
+            garment_des="Polo verde",
+        )
+        assert ext_id == "pred_rep_123"
+        call_kwargs = mock_post.call_args.kwargs
+        assert call_kwargs["headers"]["Authorization"] == "Bearer r8_test_token_123"
+        assert call_kwargs["json"]["input"]["category"] == "upper_body"
+        assert call_kwargs["json"]["input"]["human_img"] == "https://cdn.example.com/human.jpg"
+
+    mock_get_resp = MagicMock()
+    mock_get_resp.raise_for_status = MagicMock()
+    mock_get_resp.json.return_value = {
+        "id": "pred_rep_123",
+        "status": "succeeded",
+        "output": "https://replicate.delivery/pbxt/sample_result.png",
+    }
+
+    mock_img_resp = MagicMock()
+    mock_img_resp.status_code = 200
+    mock_img_resp.content = b"fake_png_data"
+
+    local_task = LocalTryOnTask(
+        task_id="rep-local-1",
+        product_id=1,
+        color_id=1,
+        color_name="Verde",
+        human_image_url="https://cdn.example.com/human.jpg",
+        garment_image_url="https://cdn.example.com/polo.jpg",
+        external_task_id="pred_rep_123",
+        provider="replicate",
+        is_live=True,
+    )
+    await service.store.save_task(local_task)
+
+    mock_storage = AsyncMock()
+    mock_upload = MagicMock()
+    mock_upload.secure_url = "https://res.cloudinary.com/uploaded_rep.png"
+    mock_storage.upload_tryon_photo = AsyncMock(return_value=mock_upload)
+    mock_storage.destroy = AsyncMock()
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = [mock_get_resp, mock_img_resp]
+        res = await service._poll_replicate_status(local_task, storage=mock_storage)
+        assert res.status == "completed"
+        assert res.progress == 100
+        assert res.result_image_url == "https://res.cloudinary.com/uploaded_rep.png"
+        assert "Replicate IDM-VTON" in res.step_message
+
+

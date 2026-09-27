@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     piapi_model: str = Field(default="kling", alias="PIAPI_MODEL")
     hf_token: str | None = Field(default=None, alias="HF_TOKEN")
     hf_space: str = Field(default="yisol/IDM-VTON", alias="HF_SPACE")
+    replicate_api_token: str | None = Field(default=None, alias="REPLICATE_API_TOKEN")
+    replicate_model: str = Field(default="cuuupid/idm-vton", alias="REPLICATE_MODEL")
     tryon_provider: str = Field(default="piapi", alias="TRYON_PROVIDER")
     tryon_daily_limit_per_user: int = Field(
         default=5, alias="TRYON_DAILY_LIMIT_PER_USER", ge=1, le=50

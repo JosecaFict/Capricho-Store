@@ -299,10 +299,33 @@ class VirtualTryOnService:
 
         task_id = str(uuid.uuid4())
         provider_config = (self.settings.tryon_provider or "piapi").lower().strip()
+        has_replicate_token = bool(
+            self.settings.replicate_api_token and self.settings.replicate_api_token.strip()
+        )
         has_hf_token = bool(self.settings.hf_token and self.settings.hf_token.strip())
         has_piapi_key = bool(self.settings.piapi_api_key and self.settings.piapi_api_key.strip())
 
-        if provider_config == "huggingface" and has_hf_token:
+        if provider_config == "replicate" and has_replicate_token and user_photo_url.startswith("http"):
+            external_id = await self._dispatch_replicate_task(
+                human_image=user_photo_url,
+                garment_image=garment_image_url,
+                garment_des=garment_des,
+            )
+            local_task = LocalTryOnTask(
+                task_id=task_id,
+                user_id=user_id,
+                product_id=product_id,
+                color_id=color_id,
+                color_name=color_name,
+                human_image_url=user_photo_url,
+                garment_image_url=garment_image_url,
+                user_photo_public_id=user_photo_public_id,
+                external_task_id=external_id,
+                provider="replicate",
+                is_live=True,
+                status="processing",
+            )
+        elif provider_config == "huggingface" and has_hf_token:
             await self._dispatch_hf_task(
                 human_image=user_photo_url,
                 garment_image=garment_image_url,
@@ -423,6 +446,11 @@ class VirtualTryOnService:
 
         if user_id is not None and task.user_id is not None and task.user_id != user_id:
             raise TryOnError("No tienes permiso para consultar esta prueba virtual", status_code=403)
+
+        if task.is_live and task.provider == "replicate" and task.external_task_id and task.status != "completed":
+            resp = await self._poll_replicate_status(task, storage=storage)
+            await self.store.save_task(task)
+            return resp
 
         if task.is_live and task.provider == "huggingface" and task.status != "completed":
             resp = await self._poll_hf_status(task, storage=storage)
@@ -876,3 +904,183 @@ class VirtualTryOnService:
             color_name=task.color_name,
             is_live=True,
         )
+
+    async def _dispatch_replicate_task(
+        self,
+        *,
+        human_image: str,
+        garment_image: str,
+        garment_des: str,
+    ) -> str:
+        model = (self.settings.replicate_model or "cuuupid/idm-vton").strip()
+        url = f"https://api.replicate.com/v1/models/{model}/predictions"
+        token = (self.settings.replicate_api_token or "").strip()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Prefer": "respond-async",
+        }
+        payload = {
+            "input": {
+                "human_img": human_image,
+                "garm_img": garment_image,
+                "garment_des": garment_des or "clothing",
+                "category": "upper_body",
+                "crop": False,
+                "steps": 30,
+            }
+        }
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.post(url, headers=headers, json=payload)
+                if res.is_error:
+                    error_detail = res.text
+                    try:
+                        err_json = res.json()
+                        error_detail = (
+                            err_json.get("detail")
+                            or err_json.get("title")
+                            or err_json.get("error")
+                            or res.text
+                        )
+                    except Exception:
+                        pass
+                    raise TryOnError(
+                        f"Error al iniciar prueba en Replicate ({res.status_code}): {error_detail}"
+                    )
+                data = res.json()
+                external_id = data.get("id")
+                if not external_id:
+                    raise TryOnError("Replicate no devolvió un identificador de predicción válido")
+                return str(external_id)
+        except TryOnError:
+            raise
+        except Exception as exc:
+            raise TryOnError(f"Error al comunicar con Replicate: {exc}") from exc
+
+    async def _poll_replicate_status(
+        self,
+        task: LocalTryOnTask,
+        storage: CloudinaryStorage | None = None,
+    ) -> TryOnTaskStatusResponse:
+        url = f"https://api.replicate.com/v1/predictions/{task.external_task_id}"
+        token = (self.settings.replicate_api_token or "").strip()
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.get(url, headers=headers)
+                res.raise_for_status()
+                data = res.json()
+                remote_status = (data.get("status") or "processing").lower()
+
+                if remote_status == "succeeded":
+                    task.status = "completed"
+                    raw_output = data.get("output")
+                    out_url = (
+                        raw_output[0]
+                        if isinstance(raw_output, list) and raw_output
+                        else raw_output
+                    )
+
+                    result_url = None
+                    if out_url and isinstance(out_url, str) and storage is not None:
+                        try:
+                            img_resp = await client.get(out_url, timeout=20.0)
+                            if img_resp.status_code == 200:
+                                upload = await storage.upload_tryon_photo(
+                                    content=img_resp.content,
+                                    filename=f"tryon_rep_{task.task_id}.png",
+                                    content_type="image/png",
+                                )
+                                result_url = upload.secure_url
+                        except Exception:
+                            result_url = out_url
+                    elif out_url and isinstance(out_url, str):
+                        result_url = out_url
+
+                    task.result_image_url = result_url or task.garment_image_url
+
+                    if task.user_photo_public_id and storage:
+                        try:
+                            await storage.destroy(task.user_photo_public_id)
+                            task.user_photo_public_id = None
+                        except Exception:
+                            pass
+
+                    return TryOnTaskStatusResponse(
+                        task_id=task.task_id,
+                        status="completed",
+                        progress=100,
+                        eta_seconds=0,
+                        step_message="¡Ajuste completado con Replicate IDM-VTON! Mira cómo te queda.",
+                        result_image_url=task.result_image_url,
+                        original_photo_url=task.human_image_url,
+                        garment_image_url=task.garment_image_url,
+                        product_id=task.product_id,
+                        color_id=task.color_id,
+                        color_name=task.color_name,
+                        is_live=True,
+                    )
+                elif remote_status in ("failed", "canceled"):
+                    task.status = "failed"
+                    task.error = data.get("error") or "Error durante el procesamiento en Replicate"
+                    if task.user_photo_public_id and storage:
+                        try:
+                            await storage.destroy(task.user_photo_public_id)
+                            task.user_photo_public_id = None
+                        except Exception:
+                            pass
+                    return TryOnTaskStatusResponse(
+                        task_id=task.task_id,
+                        status="failed",
+                        progress=0,
+                        eta_seconds=0,
+                        step_message="No se pudo completar la prueba de ropa con Replicate",
+                        error=task.error,
+                        original_photo_url=task.human_image_url,
+                        garment_image_url=task.garment_image_url,
+                        product_id=task.product_id,
+                        color_id=task.color_id,
+                        color_name=task.color_name,
+                        is_live=True,
+                    )
+                else:
+                    elapsed = time.time() - task.created_at
+                    progress = min(92, max(15, int((elapsed / 20.0) * 100)))
+                    eta_sec = max(3, int(20 - elapsed))
+                    if elapsed < 6.0:
+                        msg = "Iniciando GPU dedicada y detectando silueta..."
+                    elif elapsed < 14.0:
+                        msg = "Alineando prenda con IDM-VTON y calculando caída de tela..."
+                    else:
+                        msg = "Generando textura fotorrealista y detalles finales..."
+
+                    return TryOnTaskStatusResponse(
+                        task_id=task.task_id,
+                        status="processing",
+                        progress=progress,
+                        eta_seconds=eta_sec,
+                        step_message=msg,
+                        original_photo_url=task.human_image_url,
+                        garment_image_url=task.garment_image_url,
+                        product_id=task.product_id,
+                        color_id=task.color_id,
+                        color_name=task.color_name,
+                        is_live=True,
+                    )
+        except Exception:
+            elapsed = time.time() - task.created_at
+            return TryOnTaskStatusResponse(
+                task_id=task.task_id,
+                status="processing",
+                progress=min(90, max(20, int((elapsed / 20.0) * 100))),
+                eta_seconds=max(3, int(20 - elapsed)),
+                step_message="Procesando look con Replicate...",
+                original_photo_url=task.human_image_url,
+                garment_image_url=task.garment_image_url,
+                product_id=task.product_id,
+                color_id=task.color_id,
+                color_name=task.color_name,
+                is_live=True,
+            )
+
