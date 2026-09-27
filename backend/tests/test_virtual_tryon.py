@@ -1,16 +1,27 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import Settings
 from app.db.session import get_db_session
 from app.main import app
+from app.modules.auth.dependencies import CurrentPrincipal, get_current_principal
+from app.modules.auth.models import Usuario
 from app.modules.catalog.models import ImagenProducto, Producto
 from app.modules.virtual_tryon.dependencies import (
     get_optional_cloudinary_storage,
+    get_tryon_store,
     get_virtual_tryon_service,
 )
-from app.modules.virtual_tryon.service import TryOnError, VirtualTryOnService
+from app.modules.virtual_tryon.service import (
+    LocalTryOnTask,
+    MemoryTryOnStore,
+    TryOnError,
+    VirtualTryOnService,
+)
+
+VALID_JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"x" * 1024
 
 
 @pytest.mark.asyncio
@@ -24,10 +35,11 @@ async def test_virtual_tryon_service_product_not_found():
     with pytest.raises(TryOnError) as exc_info:
         await service.create_task(
             session=mock_session,
+            user_id=1,
             product_id=9999,
             color_id=None,
             color_name=None,
-            photo_bytes=b"fake-photo",
+            photo_bytes=VALID_JPEG_BYTES,
             filename="foto.jpg",
             content_type="image/jpeg",
             storage=None,
@@ -50,10 +62,11 @@ async def test_virtual_tryon_service_not_allowed_for_tryon():
     with pytest.raises(TryOnError) as exc_info:
         await service.create_task(
             session=mock_session,
+            user_id=1,
             product_id=10,
             color_id=None,
             color_name=None,
-            photo_bytes=b"fake-photo",
+            photo_bytes=VALID_JPEG_BYTES,
             filename="foto.jpg",
             content_type="image/jpeg",
             storage=None,
@@ -63,8 +76,47 @@ async def test_virtual_tryon_service_not_allowed_for_tryon():
 
 
 @pytest.mark.asyncio
-async def test_virtual_tryon_service_success_and_status():
+async def test_virtual_tryon_service_file_validations():
     service = VirtualTryOnService()
+    mock_session = AsyncMock()
+
+    # 1. Invalid format (> 512 bytes, but not an image)
+    with pytest.raises(TryOnError) as exc_info:
+        await service.create_task(
+            session=mock_session,
+            user_id=1,
+            product_id=1,
+            color_id=None,
+            color_name=None,
+            photo_bytes=b"this is plain text not an image" * 25,
+            filename="fake.txt",
+            content_type="text/plain",
+            storage=None,
+        )
+    assert exc_info.value.status_code == 400
+    assert "no compatible" in exc_info.value.detail
+
+    # 2. File too large (> 5MB)
+    oversized = b"\xff\xd8\xff\xe0" + b"x" * (6 * 1024 * 1024)
+    with pytest.raises(TryOnError) as exc_info:
+        await service.create_task(
+            session=mock_session,
+            user_id=1,
+            product_id=1,
+            color_id=None,
+            color_name=None,
+            photo_bytes=oversized,
+            filename="large.jpg",
+            content_type="image/jpeg",
+            storage=None,
+        )
+    assert exc_info.value.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_virtual_tryon_service_quota_limit():
+    store = MemoryTryOnStore()
+    service = VirtualTryOnService(store=store)
     mock_session = AsyncMock()
 
     mock_product = MagicMock(spec=Producto)
@@ -73,42 +125,50 @@ async def test_virtual_tryon_service_success_and_status():
 
     mock_image = MagicMock(spec=ImagenProducto)
     mock_image.id_producto = 1
-    mock_image.id_color = 2
-    mock_image.secure_url = "https://res.cloudinary.com/demo/image/upload/v1/sample.jpg"
+    mock_image.id_color = None
+    mock_image.secure_url = "https://res.cloudinary.com/sample.jpg"
 
-    # Mock product query and image query
     mock_product_result = MagicMock()
     mock_product_result.scalar_one_or_none.return_value = mock_product
-
     mock_image_result = MagicMock()
     mock_image_result.scalars.return_value.all.return_value = [mock_image]
+    mock_session.execute.side_effect = [mock_product_result, mock_image_result] * 6
 
-    mock_session.execute.side_effect = [mock_product_result, mock_image_result]
+    # Perform 5 successful tasks
+    for i in range(5):
+        resp = await service.create_task(
+            session=mock_session,
+            user_id=42,
+            product_id=1,
+            color_id=None,
+            color_name=None,
+            photo_bytes=VALID_JPEG_BYTES,
+            filename="test.jpg",
+            content_type="image/jpeg",
+            storage=None,
+        )
+        assert resp.task_id is not None
+        assert resp.remaining_today == 4 - i
 
-    resp = await service.create_task(
-        session=mock_session,
-        product_id=1,
-        color_id=2,
-        color_name="Azul Marino",
-        photo_bytes=b"test-photo-bytes",
-        filename="test.jpg",
-        content_type="image/jpeg",
-        storage=None,
-    )
-    assert resp.task_id is not None
-    assert resp.status == "processing"
-
-    status_resp = await service.get_task_status(resp.task_id)
-    assert status_resp.task_id == resp.task_id
-    assert status_resp.product_id == 1
-    assert status_resp.color_id == 2
-    assert status_resp.color_name == "Azul Marino"
-    assert status_resp.progress >= 0
-    assert status_resp.step_message is not None
+    # 6th task should exceed quota
+    with pytest.raises(TryOnError) as exc_info:
+        await service.create_task(
+            session=mock_session,
+            user_id=42,
+            product_id=1,
+            color_id=None,
+            color_name=None,
+            photo_bytes=VALID_JPEG_BYTES,
+            filename="test.jpg",
+            content_type="image/jpeg",
+            storage=None,
+        )
+    assert exc_info.value.status_code == 429
+    assert "límite" in exc_info.value.detail
 
 
 @pytest.mark.asyncio
-async def test_virtual_tryon_endpoints_flow():
+async def test_virtual_tryon_endpoints_flow_and_auth():
     mock_session = AsyncMock()
 
     mock_product = MagicMock(spec=Producto)
@@ -122,29 +182,51 @@ async def test_virtual_tryon_endpoints_flow():
 
     mock_product_result = MagicMock()
     mock_product_result.scalar_one_or_none.return_value = mock_product
-
     mock_image_result = MagicMock()
     mock_image_result.scalars.return_value.all.return_value = [mock_image]
-
     mock_session.execute.side_effect = [mock_product_result, mock_image_result]
+
+    dummy_user = MagicMock(spec=Usuario)
+    dummy_user.id_usuario = 10
+    dummy_user.email = "cliente@test.com"
+
+    dummy_principal = CurrentPrincipal(
+        user=dummy_user,
+        roles=frozenset(["CLIENTE"]),
+        permissions=frozenset(["VER_CATALOGO"]),
+        session_id="test-session",
+    )
 
     async def override_db():
         yield mock_session
 
+    test_store = MemoryTryOnStore()
     app.dependency_overrides[get_db_session] = override_db
     app.dependency_overrides[get_optional_cloudinary_storage] = lambda: None
+    app.dependency_overrides[get_current_principal] = lambda: dummy_principal
+    app.dependency_overrides[get_tryon_store] = lambda: test_store
 
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            files = {"file": ("selfie.jpg", b"image-content", "image/jpeg")}
+            # 1. Check quota endpoint
+            quota_res = await client.get("/api/v1/try-on/quota")
+            assert quota_res.status_code == 200
+            quota_data = quota_res.json()
+            assert quota_data["daily_limit"] == 5
+            assert quota_data["remaining_today"] >= 0
+
+            # 2. Create task
+            files = {"file": ("selfie.jpg", VALID_JPEG_BYTES, "image/jpeg")}
             data = {"product_id": "1", "color_id": "1", "color_name": "Negro"}
 
             create_res = await client.post("/api/v1/try-on/tasks", data=data, files=files)
             assert create_res.status_code == 201
             payload = create_res.json()
             assert "task_id" in payload
+            assert payload["remaining_today"] is not None
 
+            # 3. Status check
             task_id = payload["task_id"]
             status_res = await client.get(f"/api/v1/try-on/tasks/{task_id}")
             assert status_res.status_code == 200
@@ -157,11 +239,32 @@ async def test_virtual_tryon_endpoints_flow():
 
 
 @pytest.mark.asyncio
-async def test_piapi_dispatch_payload_and_polling():
-    from unittest.mock import patch
-    from app.core.config import Settings
-    from app.modules.virtual_tryon.service import LocalTryOnTask
+async def test_virtual_tryon_photo_cleanup_in_cloudinary():
+    mock_storage = AsyncMock()
+    mock_storage.destroy = AsyncMock()
 
+    service = VirtualTryOnService()
+    task = LocalTryOnTask(
+        task_id="cleanup-task-1",
+        product_id=1,
+        color_id=1,
+        color_name="Blanco",
+        human_image_url="https://res.cloudinary.com/capricho-store/tryon-temp/sample.jpg",
+        garment_image_url="https://res.cloudinary.com/sample_shirt.jpg",
+        user_id=10,
+        user_photo_public_id="capricho-store/tryon-temp/sample_public_id",
+        created_at=0.0,  # Elapsed > 14s, so status completes
+    )
+    await service.store.save_task(task)
+
+    status_resp = await service.get_task_status("cleanup-task-1", user_id=10, storage=mock_storage)
+    assert status_resp.status == "completed"
+    # Ensure storage.destroy was called with the temporary public_id
+    mock_storage.destroy.assert_called_once_with("capricho-store/tryon-temp/sample_public_id")
+
+
+@pytest.mark.asyncio
+async def test_piapi_dispatch_payload_and_polling():
     test_settings = Settings(
         DATABASE_URL="postgresql+asyncpg://user:pass@localhost/db",
         piapi_api_key="test-api-key",
@@ -169,7 +272,6 @@ async def test_piapi_dispatch_payload_and_polling():
     )
     service = VirtualTryOnService(settings=test_settings)
 
-    # Test dispatch
     mock_post_resp = MagicMock()
     mock_post_resp.is_error = False
     mock_post_resp.json.return_value = {
@@ -192,7 +294,6 @@ async def test_piapi_dispatch_payload_and_polling():
         assert call_kwargs["json"]["input"]["upper_input"] == "https://cdn.example.com/shirt.jpg"
         assert call_kwargs["headers"]["x-api-key"] == "test-api-key"
 
-    # Test polling with works array output
     mock_get_resp = MagicMock()
     mock_get_resp.raise_for_status = MagicMock()
     mock_get_resp.json.return_value = {
@@ -222,6 +323,7 @@ async def test_piapi_dispatch_payload_and_polling():
         external_task_id="ext-task-123",
         is_live=True,
     )
+    await service.store.save_task(local_task)
 
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_get_resp

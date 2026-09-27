@@ -8,6 +8,7 @@ import { Product, ProductMeasurement } from '../../core/models/catalog.model';
 import { ApiErrorService } from '../../core/services/api-error.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { CommerceService } from '../../core/services/commerce.service';
+import { TryOnService } from '../../core/services/try-on.service';
 import { ProductDetail } from './product-detail';
 
 const product = (stock: number): Product => ({
@@ -100,6 +101,7 @@ describe('ProductDetail', () => {
               roles: ['CLIENTE'],
               permisos: [],
             }),
+            isAuthenticated: signal(true),
           },
         },
         { provide: ApiErrorService, useValue: { message: () => 'Error' } },
@@ -165,7 +167,7 @@ describe('ProductDetail', () => {
         provideRouter([]),
         { provide: CatalogService, useValue: catalog },
         { provide: CommerceService, useValue: { addCartItem: vi.fn(() => of({})) } },
-        { provide: AuthService, useValue: { currentUser: signal(null) } },
+        { provide: AuthService, useValue: { currentUser: signal(null), isAuthenticated: signal(false) } },
         { provide: ApiErrorService, useValue: { message: () => 'Error' } },
         {
           provide: ActivatedRoute,
@@ -190,7 +192,7 @@ describe('ProductDetail', () => {
     expect(fixture.nativeElement.textContent).not.toContain('44 cm');
   });
 
-  it('renders virtual try-on banner when permite_vestidor is true and opens modal', () => {
+  it('renders virtual try-on banner when permite_vestidor is true and opens modal with quota', () => {
     const vtonProduct = product(5);
     vtonProduct.permite_vestidor = true;
     const catalog = {
@@ -199,13 +201,31 @@ describe('ProductDetail', () => {
       images: vi.fn(() => of([])),
       measurements: vi.fn(() => of([])),
     };
+    const tryOnService = {
+      getQuota: vi.fn(() => of({ daily_limit: 5, used_today: 0, remaining_today: 5 })),
+      createTask: vi.fn(),
+      getTaskStatus: vi.fn(),
+    };
     TestBed.configureTestingModule({
       imports: [ProductDetail],
       providers: [
         provideRouter([]),
         { provide: CatalogService, useValue: catalog },
         { provide: CommerceService, useValue: { addCartItem: vi.fn(() => of({})) } },
-        { provide: AuthService, useValue: { currentUser: signal(null) } },
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: signal({
+              id_usuario: 1,
+              nombres: 'Ana',
+              apellidos: 'Pérez',
+              roles: ['CLIENTE'],
+              permisos: [],
+            }),
+            isAuthenticated: signal(true),
+          },
+        },
+        { provide: TryOnService, useValue: tryOnService },
         { provide: ApiErrorService, useValue: { message: () => 'Error' } },
         {
           provide: ActivatedRoute,
@@ -231,5 +251,58 @@ describe('ProductDetail', () => {
     const modal = fixture.nativeElement.querySelector('.vton-modal');
     expect(modal).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Probador Virtual Inteligente');
+    expect(tryOnService.getQuota).toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('5 de 5 pruebas hoy');
+  });
+
+  it('renders auth gate inside try-on modal when user is not authenticated', () => {
+    const vtonProduct = product(5);
+    vtonProduct.permite_vestidor = true;
+    const catalog = {
+      branches: vi.fn(() => of([])),
+      product: vi.fn(() => of(vtonProduct)),
+      images: vi.fn(() => of([])),
+      measurements: vi.fn(() => of([])),
+    };
+    TestBed.configureTestingModule({
+      imports: [ProductDetail],
+      providers: [
+        provideRouter([]),
+        { provide: CatalogService, useValue: catalog },
+        { provide: CommerceService, useValue: { addCartItem: vi.fn(() => of({})) } },
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: signal(null),
+            isAuthenticated: signal(false),
+          },
+        },
+        {
+          provide: TryOnService,
+          useValue: {
+            getQuota: vi.fn(() => of({ daily_limit: 5, used_today: 0, remaining_today: 5 })),
+            createTask: vi.fn(),
+            getTaskStatus: vi.fn(),
+          },
+        },
+        { provide: ApiErrorService, useValue: { message: () => 'Error' } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: { get: () => '1' } } },
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ProductDetail);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('#btn-open-virtual-tryon') as HTMLButtonElement;
+    button.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showTryOnModal()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.vton-auth-gate')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Inicia sesión para probarte esta prenda');
+    expect(fixture.nativeElement.textContent).toContain('5 pruebas gratuitas al día');
   });
 });

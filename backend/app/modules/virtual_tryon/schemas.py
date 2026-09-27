@@ -12,6 +12,9 @@ class TryOnTaskCreateResponse(BaseModel):
         default="Tarea de vestidor virtual iniciada",
         description="User-friendly status message",
     )
+    remaining_today: int | None = Field(
+        default=None, description="Remaining try-on attempts for the user today"
+    )
 
 
 class TryOnTaskStatusResponse(BaseModel):
@@ -27,3 +30,13 @@ class TryOnTaskStatusResponse(BaseModel):
     color_id: int | None = None
     color_name: str | None = None
     error: str | None = None
+    is_live: bool = Field(
+        default=False, description="Whether the result is generated with live cloud AI or simulation"
+    )
+
+
+class TryOnQuotaResponse(BaseModel):
+    daily_limit: int = Field(default=5, description="Max allowed virtual try-ons per day")
+    used_today: int = Field(default=0, description="Try-ons already performed today")
+    remaining_today: int = Field(default=5, description="Remaining try-ons for today")
+

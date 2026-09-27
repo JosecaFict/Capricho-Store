@@ -7,6 +7,7 @@ export interface TryOnTaskCreateResponse {
   task_id: string;
   status: string;
   message: string;
+  remaining_today?: number | null;
 }
 
 export interface TryOnTaskStatusResponse {
@@ -22,17 +23,28 @@ export interface TryOnTaskStatusResponse {
   color_id?: number | null;
   color_name?: string | null;
   error?: string | null;
+  is_live?: boolean;
+}
+
+export interface TryOnQuotaResponse {
+  daily_limit: number;
+  used_today: number;
+  remaining_today: number;
 }
 
 @Injectable({ providedIn: 'root' })
 export class TryOnService {
   private readonly http = inject(HttpClient);
 
+  getQuota(): Observable<TryOnQuotaResponse> {
+    return this.http.get<TryOnQuotaResponse>(`${API_BASE_URL}/try-on/quota`);
+  }
+
   createTask(
     file: File,
     productId: number,
     colorId?: number | null,
-    colorName?: string | null
+    colorName?: string | null,
   ): Observable<TryOnTaskCreateResponse> {
     const formData = new FormData();
     formData.append('file', file, file.name);

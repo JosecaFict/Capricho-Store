@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     ors_api_key: str | None = Field(default=None, alias="ORS_API_KEY")
     piapi_api_key: str | None = Field(default=None, alias="PIAPI_API_KEY")
     piapi_model: str = Field(default="kling", alias="PIAPI_MODEL")
+    tryon_daily_limit_per_user: int = Field(
+        default=5, alias="TRYON_DAILY_LIMIT_PER_USER", ge=1, le=50
+    )
+    tryon_max_file_size_mb: int = Field(
+        default=5, alias="TRYON_MAX_FILE_SIZE_MB", ge=1, le=20
+    )
     database_schema: Literal["capricho"] = "capricho"
 
     @property
