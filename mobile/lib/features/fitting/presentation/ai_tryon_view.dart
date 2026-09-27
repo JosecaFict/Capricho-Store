@@ -28,6 +28,8 @@ class AiTryOnView extends ConsumerStatefulWidget {
     required this.onAddToCart,
     required this.onBackToDiagnosis,
     this.cameraController,
+    this.onToggleCamera,
+    this.isFrontCamera = false,
   });
 
   final Product product;
@@ -37,6 +39,8 @@ class AiTryOnView extends ConsumerStatefulWidget {
   final Future<void> Function() onAddToCart;
   final VoidCallback onBackToDiagnosis;
   final CameraController? cameraController;
+  final VoidCallback? onToggleCamera;
+  final bool isFrontCamera;
 
   @override
   ConsumerState<AiTryOnView> createState() => _AiTryOnViewState();
@@ -60,7 +64,10 @@ class _AiTryOnViewState extends ConsumerState<AiTryOnView> {
   // PASO 3: MÉTODOS DE CAPTURA / SELECCIÓN DE FOTO
   // -------------------------------------------------------------
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickImage(
+    ImageSource source, {
+    CameraDevice preferredDevice = CameraDevice.front,
+  }) async {
     HapticFeedback.selectionClick();
     try {
       final picked = await _picker.pickImage(
@@ -68,6 +75,7 @@ class _AiTryOnViewState extends ConsumerState<AiTryOnView> {
         maxWidth: 1024,
         maxHeight: 1024,
         imageQuality: 88,
+        preferredCameraDevice: preferredDevice,
       );
       if (picked != null && mounted) {
         HapticFeedback.mediumImpact();
@@ -600,19 +608,45 @@ class _AiTryOnViewState extends ConsumerState<AiTryOnView> {
           ),
           const SizedBox(height: 20),
 
-          // Botón 1: Tomar foto con la cámara
-          FilledButton.icon(
-            onPressed: _captureFromActiveCamera,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.cobalt,
-              minimumSize: const Size(double.infinity, 46),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            icon: const Icon(Icons.camera_alt_rounded, size: 18),
-            label: const Text(
-              'Tomar foto con la cámara',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
+          // Botón 1: Tomar foto con la cámara (Frontal / Trasera)
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _captureFromActiveCamera,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.cobalt,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: Icon(
+                    widget.isFrontCamera ? Icons.face_rounded : Icons.camera_alt_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    widget.isFrontCamera
+                        ? 'Tomar Selfie (Frontal)'
+                        : 'Tomar Foto (Cámara)',
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              if (widget.onToggleCamera != null) ...[
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    widget.onToggleCamera!();
+                  },
+                  icon: const Icon(Icons.flip_camera_ios_rounded, color: Colors.white, size: 20),
+                  tooltip: 'Voltear a frontal/trasera',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.15),
+                    padding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ],
+            ],
           ),
 
           const SizedBox(height: 10),

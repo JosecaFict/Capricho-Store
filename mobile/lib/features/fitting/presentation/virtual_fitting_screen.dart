@@ -947,6 +947,10 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                   });
                 },
                 cameraController: _cameraController,
+                isFrontCamera: _cameras.isNotEmpty &&
+                    _cameras[_currentCameraIndex].lensDirection ==
+                        CameraLensDirection.front,
+                onToggleCamera: _cameras.length > 1 ? _toggleCamera : null,
               ),
             ),
 
