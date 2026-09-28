@@ -161,6 +161,12 @@ class CloudinaryStorage:
         public_id = payload.get("public_id")
         if not isinstance(secure_url, str) or not isinstance(public_id, str):
             raise CloudinaryError("Cloudinary devolvió una respuesta incompleta")
+
+        # Asegurar transformación física de auto-rotación (a_auto) según metadatos EXIF
+        # para que modelos de IA como Replicate IDM-VTON siempre reciban los píxeles erguidos
+        if "/image/upload/" in secure_url and "/image/upload/a_auto/" not in secure_url:
+            secure_url = secure_url.replace("/image/upload/", "/image/upload/a_auto/")
+
         return CloudinaryUpload(
             public_id=public_id,
             secure_url=secure_url,

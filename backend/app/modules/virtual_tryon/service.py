@@ -297,6 +297,14 @@ class VirtualTryOnService:
             encoded = base64.b64encode(photo_bytes).decode("utf-8")
             user_photo_url = f"data:{content_type or 'image/jpeg'};base64,{encoded}"
 
+        # Asegurar auto-orientación física (a_auto) en Cloudinary para que Replicate IDM-VTON
+        # procese a la persona derecha y erguida, no girada 90° de lado.
+        if "res.cloudinary.com" in user_photo_url and "/image/upload/" in user_photo_url:
+            if "/image/upload/a_auto/" not in user_photo_url:
+                user_photo_url = user_photo_url.replace(
+                    "/image/upload/", "/image/upload/a_auto/"
+                )
+
         task_id = str(uuid.uuid4())
         provider_config = (self.settings.tryon_provider or "piapi").lower().strip()
         has_replicate_token = bool(

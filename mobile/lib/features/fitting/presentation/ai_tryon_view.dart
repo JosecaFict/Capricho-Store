@@ -94,33 +94,13 @@ class _AiTryOnViewState extends ConsumerState<AiTryOnView> {
   }
 
   Future<void> _captureFromActiveCamera() async {
-    if (widget.cameraController == null ||
-        !widget.cameraController!.value.isInitialized) {
-      // Fallback al picker del sistema si el controlador no está listo
-      await _pickImage(ImageSource.camera);
-      return;
-    }
-
-    if (_isTakingLivePhoto) return;
-    setState(() => _isTakingLivePhoto = true);
-    HapticFeedback.selectionClick();
-
-    try {
-      final xfile = await widget.cameraController!.takePicture();
-      if (mounted) {
-        HapticFeedback.heavyImpact();
-        ref.read(tryOnControllerProvider.notifier).setSessionPhoto(xfile.path);
-      }
-    } catch (e) {
-      if (mounted) {
-        // Fallback a image_picker en caso de error
-        await _pickImage(ImageSource.camera);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isTakingLivePhoto = false);
-      }
-    }
+    // Abrir la interfaz completa de la cámara del sistema para permitir encuadre manual,
+    // botón de disparo cuando el usuario decida, y opciones de Repetir / Usar foto.
+    await _pickImage(
+      ImageSource.camera,
+      preferredDevice:
+          widget.isFrontCamera ? CameraDevice.front : CameraDevice.rear,
+    );
   }
 
   // -------------------------------------------------------------
