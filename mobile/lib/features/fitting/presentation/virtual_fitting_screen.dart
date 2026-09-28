@@ -1757,7 +1757,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Tus hombros están en la frontera entre ${_recommendation.recommendedSize} y ${_recommendation.alternativeSize}. En el espejo interactivo podrás probar ambas y comparar su caída.',
+                          'Tus hombros están en la frontera entre ${_recommendation.recommendedSize} y ${_recommendation.alternativeSize}. Podrás probar ambas tallas y comparar su caída.',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -1797,35 +1797,7 @@ class _VirtualFittingScreenState extends ConsumerState<VirtualFittingScreen>
                 ),
               ),
 
-              const SizedBox(height: 10),
-
-              // Botón Secundario: Modo Espejo AR
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  setState(() {
-                    _currentStep = FittingStep.activeFitting;
-                  });
-                },
-                icon: const Icon(Icons.checkroom_rounded, size: 18),
-                label: const Text(
-                  'Ver Espejo AR en vivo',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
 
               // Fila secundaria de calibración o re-escaneo
               Row(
